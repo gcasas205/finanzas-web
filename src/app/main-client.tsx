@@ -7,12 +7,14 @@ import AppShell from "@/components/AppShell";
 
 interface Props {
   initialConfig: AppConfig;
+  envReady?: boolean; // true if env vars have sheet + creds configured
 }
 
-export default function MainClient({ initialConfig }: Props) {
+export default function MainClient({ initialConfig, envReady = false }: Props) {
   const [config, setConfig] = useState(initialConfig);
   const [setupDone, setSetupDone] = useState(
-    Boolean(config.googleSheetId && config.googleCredsPath)
+    // Skip wizard if: env vars are set (Vercel) OR local config has both fields
+    envReady || Boolean(config.googleSheetId && config.googleCredsPath)
   );
 
   if (!setupDone) {
