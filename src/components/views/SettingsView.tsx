@@ -57,10 +57,10 @@ export default function SettingsView({ config, onSaved }: Props) {
   };
 
   return (
-    <div className="p-10 max-w-[900px]">
+    <div className="p-4 sm:p-6 lg:p-10 max-w-[900px]">
       <header className="mb-10">
         <div className="eyebrow mb-2">Ajustes</div>
-        <h1 className="display text-5xl text-paper">
+        <h1 className="display text-3xl sm:text-5xl text-paper">
           Tu <em className="italic text-amber">configuración</em>
         </h1>
       </header>
@@ -102,7 +102,7 @@ export default function SettingsView({ config, onSaved }: Props) {
 
         {/* Financial cycles */}
         <Section title="Ciclos financieros" eyebrow="Tarjeta y sueldo">
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <Field label="Día cierre tarjeta">
               <input type="number" min={1} max={31} value={form.cardCutoffDay}
                 onChange={e => update("cardCutoffDay", parseInt(e.target.value) || 1)}

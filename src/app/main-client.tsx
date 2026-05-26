@@ -1,21 +1,42 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import type { AppConfig } from "@/types";
 import SetupWizard from "@/components/SetupWizard";
 import AppShell from "@/components/AppShell";
 
 interface Props {
   initialConfig: AppConfig;
-  envReady?: boolean; // true if env vars have sheet + creds configured
+  envReady?: boolean;
 }
 
 export default function MainClient({ initialConfig, envReady = false }: Props) {
   const [config, setConfig] = useState(initialConfig);
-  const [setupDone, setSetupDone] = useState(
-    // Skip wizard if: env vars are set (Vercel) OR local config has both fields
-    envReady || Boolean(config.googleSheetId && config.googleCredsPath)
-  );
+  const [checking, setChecking] = useState(!envReady);
+  const [setupDone, setSetupDone] = useState(envReady);
+
+  // Double-check via API if server prop says not ready
+  useEffect(() => {
+    if (envReady) return; // Already ready from server prop
+
+    fetch("/api/health")
+      .then(r => r.json())
+      .then(data => {
+        if (data.envReady) {
+          setSetupDone(true);
+        }
+        setChecking(false);
+      })
+      .catch(() => setChecking(false));
+  }, [envReady]);
+
+  if (checking) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-ink-300 text-sm animate-pulse">Verificando configuración...</div>
+      </div>
+    );
+  }
 
   if (!setupDone) {
     return (

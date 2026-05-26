@@ -70,11 +70,11 @@ export default function Analytics({ config }: Props) {
   if (loading) return <div className="p-10 text-ink-300 italic">Cargando datos...</div>;
 
   return (
-    <div className="p-10 max-w-[1400px]">
+    <div className="p-4 sm:p-6 lg:p-10 max-w-[1400px]">
       <header className="mb-10 flex items-end justify-between">
         <div>
           <div className="eyebrow mb-2">Análisis</div>
-          <h1 className="display text-5xl text-paper">
+          <h1 className="display text-3xl sm:text-5xl text-paper">
             Mirá los <em className="italic text-amber">patrones</em>
           </h1>
         </div>
@@ -131,7 +131,7 @@ function TendenciasTab({ evolution }: { evolution: any[] }) {
   if (!evolution.length) return <Empty />;
 
   return (
-    <div className="grid grid-cols-2 gap-6">
+    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 lg:gap-6">
       <div className="surface p-8">
         <div className="eyebrow mb-1">Flujo mensual</div>
         <h3 className="display text-2xl text-paper mb-6">Ingresos vs Gastos</h3>
@@ -170,7 +170,7 @@ function TendenciasTab({ evolution }: { evolution: any[] }) {
         </ResponsiveContainer>
       </div>
 
-      <div className="surface p-8 col-span-2">
+      <div className="surface p-8 col-span-1 lg:col-span-2">
         <div className="eyebrow mb-1">Tendencia</div>
         <h3 className="display text-2xl text-paper mb-6">Ahorro mensual</h3>
         <ResponsiveContainer width="100%" height={250}>
@@ -206,8 +206,8 @@ function CategoriasTab({ transactions, selectedMonth }: { transactions: Transact
   if (!cats.length) return <Empty />;
 
   return (
-    <div className="grid grid-cols-12 gap-6">
-      <div className="col-span-7 surface p-8">
+    <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 lg:gap-6">
+      <div className="col-span-1 lg:col-span-7 surface p-8">
         <div className="eyebrow mb-1">{formatMes(selectedMonth)}</div>
         <h3 className="display text-2xl text-paper mb-6">Gastos por categoría</h3>
         <ResponsiveContainer width="100%" height={cats.length * 52 + 20}>
@@ -224,7 +224,7 @@ function CategoriasTab({ transactions, selectedMonth }: { transactions: Transact
         </ResponsiveContainer>
       </div>
 
-      <div className="col-span-5 surface p-8">
+      <div className="col-span-1 lg:col-span-5 surface p-8">
         <div className="eyebrow mb-1">Distribución</div>
         <h3 className="display text-2xl text-paper mb-6">Porcentaje</h3>
         <ResponsiveContainer width="100%" height={200}>
@@ -275,7 +275,7 @@ function MercadoPagoTab({ acumulado, tna }: { acumulado: number; tna: number }) 
   return (
     <div>
       {/* KPI row */}
-      <div className="grid grid-cols-4 gap-6 mb-8">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
         {[
           { label: "Capital actual", value: acumulado, color: "#8A8576" },
           { label: "Ganancia 1 mes", value: g1, color: "#6A8970" },
@@ -368,7 +368,7 @@ function ComparativaTab({ transactions, selectedMonth }: { transactions: Transac
   if (!data.length) return <Empty message="Se necesitan al menos 2 meses de datos" />;
 
   return (
-    <div className="grid grid-cols-2 gap-6">
+    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 lg:gap-6">
       <div className="surface p-8">
         <div className="eyebrow mb-1">{formatMes(prevMonth, true)} vs {formatMes(selectedMonth, true)}</div>
         <h3 className="display text-2xl text-paper mb-6">Comparativa mensual</h3>

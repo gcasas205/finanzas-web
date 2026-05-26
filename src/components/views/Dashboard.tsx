@@ -117,12 +117,12 @@ export default function Dashboard({ config }: Props) {
   if (loading) return <SkeletonView />;
 
   return (
-    <div className="p-10 max-w-[1400px]">
+    <div className="p-4 sm:p-6 lg:p-10 max-w-[1400px]">
       {/* Header */}
-      <header className="mb-12 flex items-end justify-between">
+      <header className="mb-6 lg:mb-12 flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
         <div>
           <div className="eyebrow mb-2">{formatMes(selectedMonth)}</div>
-          <h1 className="display text-6xl text-paper leading-none">
+          <h1 className="display text-4xl sm:text-5xl lg:text-6xl text-paper leading-none">
             Tu <em className="italic text-amber">balance</em>
           </h1>
         </div>
@@ -132,7 +132,7 @@ export default function Dashboard({ config }: Props) {
           <select
             value={selectedMonth}
             onChange={(e) => setSelectedMonth(e.target.value)}
-            className="bg-ink-800 border border-ink-500 text-paper px-4 py-2 text-sm focus:border-amber outline-none cursor-pointer hover:border-ink-400 transition-colors"
+            className="bg-ink-800 border border-ink-500 text-paper px-3 py-2 text-sm focus:border-amber outline-none cursor-pointer"
           >
             {months.map(m => (
               <option key={m} value={m}>{formatMes(m)}</option>
@@ -158,7 +158,7 @@ export default function Dashboard({ config }: Props) {
       </motion.div>
 
       {/* KPI Grid - Editorial style */}
-      <div className="grid grid-cols-12 gap-6 mb-12">
+      <div className="grid grid-cols-2 sm:grid-cols-12 gap-3 sm:gap-6 mb-8 lg:mb-12">
         {/* Hero: Ahorro del mes - takes more space */}
         <KPICard
           variant="hero"
@@ -168,7 +168,7 @@ export default function Dashboard({ config }: Props) {
           subtitle={`${tasaAhorro.toFixed(1)}% tasa de ahorro`}
           icon={ahorro >= 0 ? TrendingUp : TrendingDown}
           delay={0}
-          className="col-span-6"
+          className="col-span-2 sm:col-span-6"
         />
         <KPICard
           eyebrow="Ingresos"
@@ -176,7 +176,7 @@ export default function Dashboard({ config }: Props) {
           accent="moss"
           subtitle="Este mes"
           delay={0.1}
-          className="col-span-3"
+          className="col-span-1 sm:col-span-3"
         />
         <KPICard
           eyebrow="Gastos"
@@ -184,7 +184,7 @@ export default function Dashboard({ config }: Props) {
           accent="terra"
           subtitle="Este mes"
           delay={0.15}
-          className="col-span-3"
+          className="col-span-1 sm:col-span-3"
         />
 
         {/* Second row */}
@@ -195,7 +195,7 @@ export default function Dashboard({ config }: Props) {
           subtitle="Histórico"
           icon={Wallet}
           delay={0.2}
-          className="col-span-6"
+          className="col-span-2 sm:col-span-6"
         />
         <KPICard
           eyebrow={`Mercado Pago · TNA ${config.mpTna}%`}
@@ -204,14 +204,14 @@ export default function Dashboard({ config }: Props) {
           subtitle="Proyección 30 días"
           icon={Zap}
           delay={0.25}
-          className="col-span-6"
+          className="col-span-2 sm:col-span-6"
         />
       </div>
 
       {/* Charts row */}
-      <div className="grid grid-cols-12 gap-6 mb-12">
+      <div className="grid grid-cols-2 sm:grid-cols-12 gap-3 sm:gap-6 mb-8 lg:mb-12">
         {/* Bar chart - evolution */}
-        <div className="col-span-8 surface p-8">
+        <div className="col-span-2 sm:col-span-8 surface p-8">
           <div className="flex items-start justify-between mb-6">
             <div>
               <div className="eyebrow mb-1">Evolución</div>
@@ -246,7 +246,7 @@ export default function Dashboard({ config }: Props) {
         </div>
 
         {/* Categories pie */}
-        <div className="col-span-4 surface p-8">
+        <div className="col-span-2 sm:col-span-4 surface p-8">
           <div className="eyebrow mb-1">Distribución</div>
           <h2 className="display text-2xl text-paper mb-6">Por categoría</h2>
 
@@ -365,21 +365,21 @@ function KPICard({ variant = "default", eyebrow, value, accent, subtitle, icon: 
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.5, delay, ease: [0.22, 1, 0.36, 1] }}
-      className={`surface p-7 relative overflow-hidden ${className}`}
+      className={`surface p-4 sm:p-7 relative overflow-hidden ${className}`}
     >
       {/* Accent line */}
       <div className="absolute top-0 left-0 right-0 h-px" style={{ background: color }} />
 
-      <div className="flex items-start justify-between mb-4">
-        <div className="eyebrow" style={{ color }}>{eyebrow}</div>
-        {Icon && <Icon className="w-4 h-4 text-ink-300" strokeWidth={1.5} />}
+      <div className="flex items-start justify-between mb-2 sm:mb-4">
+        <div className="eyebrow text-[8px] sm:text-[10px]" style={{ color }}>{eyebrow}</div>
+        {Icon && <Icon className="w-3 h-3 sm:w-4 sm:h-4 text-ink-300 hidden sm:block" strokeWidth={1.5} />}
       </div>
 
-      <div className={`display tabular leading-none ${isHero ? "text-6xl" : "text-4xl"} text-paper mb-2`}>
+      <div className={`display tabular leading-none ${isHero ? "text-3xl sm:text-5xl lg:text-6xl" : "text-2xl sm:text-3xl lg:text-4xl"} text-paper mb-1 sm:mb-2`}>
         {formatPesos(value)}
       </div>
 
-      <div className="text-[11px] text-ink-300 tracking-wide">
+      <div className="text-[9px] sm:text-[11px] text-ink-300 tracking-wide truncate">
         {subtitle}
       </div>
     </motion.div>

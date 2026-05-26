@@ -75,10 +75,10 @@ export default function ImportView({ config }: Props) {
   };
 
   return (
-    <div className="p-10 max-w-[1200px]">
+    <div className="p-4 sm:p-6 lg:p-10 max-w-[1200px]">
       <header className="mb-10">
         <div className="eyebrow mb-2">Importar</div>
-        <h1 className="display text-5xl text-paper">
+        <h1 className="display text-3xl sm:text-5xl text-paper">
           Desde tus <em className="italic text-amber">PDFs</em>
         </h1>
         <p className="text-ink-300 text-sm mt-2">
@@ -87,7 +87,7 @@ export default function ImportView({ config }: Props) {
       </header>
 
       {/* Doc type selector */}
-      <div className="grid grid-cols-2 gap-4 mb-8">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-8">
         <TypeCard
           active={docType === "tarjeta"}
           onClick={() => { setDocType("tarjeta"); setResult(null); setFile(null); }}

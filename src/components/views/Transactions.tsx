@@ -67,11 +67,11 @@ export default function Transactions({ config }: Props) {
   };
 
   return (
-    <div className="p-10 max-w-[1400px]">
+    <div className="p-4 sm:p-6 lg:p-10 max-w-[1400px]">
       <header className="mb-10 flex items-end justify-between">
         <div>
           <div className="eyebrow mb-2">Movimientos</div>
-          <h1 className="display text-5xl text-paper">
+          <h1 className="display text-3xl sm:text-5xl text-paper">
             Cada <em className="italic text-amber">peso</em>
           </h1>
         </div>
@@ -85,7 +85,7 @@ export default function Transactions({ config }: Props) {
       </header>
 
       {/* Filters */}
-      <div className="surface p-5 mb-6 flex flex-wrap gap-4 items-center">
+      <div className="surface p-3 sm:p-5 mb-4 sm:mb-6 flex flex-wrap gap-3 sm:gap-4 items-center">
         <div className="flex items-center gap-2 flex-1 min-w-[200px]">
           <Search className="w-4 h-4 text-ink-300" />
           <input
@@ -130,7 +130,7 @@ export default function Transactions({ config }: Props) {
       </div>
 
       {/* Summary */}
-      <div className="grid grid-cols-3 gap-6 mb-6">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 mb-6">
         <div className="surface p-4">
           <div className="eyebrow text-moss-light mb-1">Ingresos</div>
           <div className="display text-2xl text-paper tabular">{formatPesos(totals.ingresos)}</div>
@@ -149,6 +149,7 @@ export default function Transactions({ config }: Props) {
 
       {/* Table */}
       <div className="surface overflow-hidden">
+        <div className="overflow-x-auto">
         <table className="w-full">
           <thead>
             <tr className="hairline-b">
@@ -216,6 +217,7 @@ export default function Transactions({ config }: Props) {
             ))}
           </tbody>
         </table>
+        </div>
       </div>
 
       {/* Form modal */}
