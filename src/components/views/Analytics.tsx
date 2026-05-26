@@ -9,7 +9,7 @@ import {
 } from "recharts";
 import { Zap } from "lucide-react";
 import type { Transaction, AppConfig } from "@/types";
-import { formatPesos, formatPesosCompact, formatMes, fechaToMes } from "@/lib/utils";
+import { formatPesos, formatPesosCompact, formatMes, fechaToMes, uniqueMonths } from "@/lib/utils";
 import { getCategoryColor, CATEGORIES } from "@/lib/categories";
 
 interface Props { config: AppConfig; }
@@ -18,6 +18,10 @@ export default function Analytics({ config }: Props) {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<"tendencias" | "categorias" | "mercadopago" | "comparativa">("tendencias");
+  const [selectedMonth, setSelectedMonth] = useState(() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+  });
 
   useEffect(() => {
     fetch("/api/transactions").then(r => r.json()).then(d => {
@@ -25,6 +29,12 @@ export default function Analytics({ config }: Props) {
       setLoading(false);
     });
   }, []);
+
+  const months = useMemo(() => {
+    const m = uniqueMonths(transactions);
+    if (!m.includes(selectedMonth)) m.unshift(selectedMonth);
+    return m.slice(0, 24);
+  }, [transactions, selectedMonth]);
 
   const acumulado = useMemo(() =>
     transactions.reduce((s, t) => s + (t.tipo === "ingreso" ? t.monto : -t.monto), 0),
@@ -50,11 +60,6 @@ export default function Analytics({ config }: Props) {
       });
   }, [transactions]);
 
-  const currentMonth = useMemo(() => {
-    const d = new Date();
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-  }, []);
-
   const TABS = [
     { id: "tendencias", label: "Tendencias" },
     { id: "categorias", label: "Categorías" },
@@ -66,11 +71,29 @@ export default function Analytics({ config }: Props) {
 
   return (
     <div className="p-10 max-w-[1400px]">
-      <header className="mb-10">
-        <div className="eyebrow mb-2">Análisis</div>
-        <h1 className="display text-5xl text-paper">
-          Mirá los <em className="italic text-amber">patrones</em>
-        </h1>
+      <header className="mb-10 flex items-end justify-between">
+        <div>
+          <div className="eyebrow mb-2">Análisis</div>
+          <h1 className="display text-5xl text-paper">
+            Mirá los <em className="italic text-amber">patrones</em>
+          </h1>
+        </div>
+
+        {/* Month selector - visible for tabs that use it */}
+        {(tab === "categorias" || tab === "comparativa") && (
+          <div className="flex items-center gap-3">
+            <label className="eyebrow">Mes</label>
+            <select
+              value={selectedMonth}
+              onChange={(e) => setSelectedMonth(e.target.value)}
+              className="bg-ink-800 border border-ink-500 text-paper px-4 py-2 text-sm focus:border-amber outline-none cursor-pointer hover:border-ink-400 transition-colors"
+            >
+              {months.map(m => (
+                <option key={m} value={m}>{formatMes(m)}</option>
+              ))}
+            </select>
+          </div>
+        )}
       </header>
 
       {/* Tabs */}
@@ -95,9 +118,9 @@ export default function Analytics({ config }: Props) {
       </div>
 
       {tab === "tendencias" && <TendenciasTab evolution={evolution} />}
-      {tab === "categorias" && <CategoriasTab transactions={transactions} currentMonth={currentMonth} />}
+      {tab === "categorias" && <CategoriasTab transactions={transactions} selectedMonth={selectedMonth} />}
       {tab === "mercadopago" && <MercadoPagoTab acumulado={acumulado} tna={config.mpTna} />}
-      {tab === "comparativa" && <ComparativaTab transactions={transactions} currentMonth={currentMonth} />}
+      {tab === "comparativa" && <ComparativaTab transactions={transactions} selectedMonth={selectedMonth} />}
     </div>
   );
 }
@@ -171,8 +194,8 @@ function TendenciasTab({ evolution }: { evolution: any[] }) {
 
 // ── Categorías ───────────────────────────────────────────────────────────────
 
-function CategoriasTab({ transactions, currentMonth }: { transactions: Transaction[]; currentMonth: string }) {
-  const monthTxs = transactions.filter(t => t.tipo === "egreso" && fechaToMes(t.fechaPago) === currentMonth);
+function CategoriasTab({ transactions, selectedMonth }: { transactions: Transaction[]; selectedMonth: string }) {
+  const monthTxs = transactions.filter(t => t.tipo === "egreso" && fechaToMes(t.fechaPago) === selectedMonth);
   const catMap = new Map<string, number>();
   for (const t of monthTxs) catMap.set(t.categoria, (catMap.get(t.categoria) ?? 0) + t.monto);
   const total = Array.from(catMap.values()).reduce((a, b) => a + b, 0);
@@ -185,7 +208,7 @@ function CategoriasTab({ transactions, currentMonth }: { transactions: Transacti
   return (
     <div className="grid grid-cols-12 gap-6">
       <div className="col-span-7 surface p-8">
-        <div className="eyebrow mb-1">{formatMes(currentMonth)}</div>
+        <div className="eyebrow mb-1">{formatMes(selectedMonth)}</div>
         <h3 className="display text-2xl text-paper mb-6">Gastos por categoría</h3>
         <ResponsiveContainer width="100%" height={cats.length * 52 + 20}>
           <BarChart data={cats} layout="vertical" margin={{ left: 100 }}>
@@ -315,8 +338,8 @@ function MercadoPagoTab({ acumulado, tna }: { acumulado: number; tna: number }) 
 
 // ── Comparativa ──────────────────────────────────────────────────────────────
 
-function ComparativaTab({ transactions, currentMonth }: { transactions: Transaction[]; currentMonth: string }) {
-  const [yyyy, mm] = currentMonth.split("-").map(Number);
+function ComparativaTab({ transactions, selectedMonth }: { transactions: Transaction[]; selectedMonth: string }) {
+  const [yyyy, mm] = selectedMonth.split("-").map(Number);
   let pm = mm - 1, py = yyyy;
   if (pm < 1) { pm = 12; py--; }
   const prevMonth = `${py}-${String(pm).padStart(2, "0")}`;
@@ -330,7 +353,7 @@ function ComparativaTab({ transactions, currentMonth }: { transactions: Transact
     return map;
   };
 
-  const currMap = getMap(currentMonth);
+  const currMap = getMap(selectedMonth);
   const prevMap = getMap(prevMonth);
   const allCats = new Set([...currMap.keys(), ...prevMap.keys()]);
   const data = Array.from(allCats)
@@ -347,7 +370,7 @@ function ComparativaTab({ transactions, currentMonth }: { transactions: Transact
   return (
     <div className="grid grid-cols-2 gap-6">
       <div className="surface p-8">
-        <div className="eyebrow mb-1">{formatMes(prevMonth, true)} vs {formatMes(currentMonth, true)}</div>
+        <div className="eyebrow mb-1">{formatMes(prevMonth, true)} vs {formatMes(selectedMonth, true)}</div>
         <h3 className="display text-2xl text-paper mb-6">Comparativa mensual</h3>
         <ResponsiveContainer width="100%" height={data.length * 52 + 20}>
           <BarChart data={data} layout="vertical" margin={{ left: 100 }}>
@@ -357,7 +380,7 @@ function ComparativaTab({ transactions, currentMonth }: { transactions: Transact
               tickLine={false} axisLine={false} width={95} />
             <Tooltip content={<ChartTooltip />} cursor={{ fill: "rgba(244,241,234,0.03)" }} />
             <Bar dataKey="prev" fill="#5A574E" name={formatMes(prevMonth, true)} radius={[0,2,2,0]} barSize={14} />
-            <Bar dataKey="curr" name={formatMes(currentMonth, true)} radius={[0,2,2,0]} barSize={14}>
+            <Bar dataKey="curr" name={formatMes(selectedMonth, true)} radius={[0,2,2,0]} barSize={14}>
               {data.map((d, i) => <Cell key={i} fill={d.color} />)}
             </Bar>
           </BarChart>
