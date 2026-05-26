@@ -1,6 +1,8 @@
 import { loadConfig } from "@/lib/sheets";
 import MainClient from "./main-client";
 
+export const dynamic = "force-dynamic";
+
 export default async function Home() {
   const config = await loadConfig();
   // Check if credentials are available (either file path or env var)
