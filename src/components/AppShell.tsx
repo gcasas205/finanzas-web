@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { signOut, useSession } from "next-auth/react";
 import {
@@ -192,22 +192,24 @@ export default function AppShell({ initialConfig }: { initialConfig: AppConfig }
 
       {/* ── Main content ────────────────────────────────────── */}
       <main className="flex-1 min-w-0 pb-20 lg:pb-0">
-        <motion.div
-          key={view}
-          initial={{ opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.35 }}
-        >
-          {view === "dashboard" && <Dashboard config={config} />}
-          {view === "transactions" && <Transactions config={config} />}
-          {view === "analytics" && <Analytics config={config} />}
-          {view === "import" && <ImportView config={config} />}
-          {view === "settings" && <SettingsView config={config} onSaved={setConfig} />}
-        </motion.div>
+        {/* Views mount on first visit, then stay alive (hidden via CSS) */}
+        <LazyView visible={view === "dashboard"}><Dashboard config={config} /></LazyView>
+        <LazyView visible={view === "transactions"}><Transactions config={config} /></LazyView>
+        <LazyView visible={view === "analytics"}><Analytics config={config} /></LazyView>
+        <LazyView visible={view === "import"}><ImportView config={config} /></LazyView>
+        <LazyView visible={view === "settings"}><SettingsView config={config} onSaved={setConfig} /></LazyView>
       </main>
     </div>
     </DataProvider>
   );
+}
+
+/** Mounts children on first visibility, then keeps alive with CSS hidden */
+function LazyView({ visible, children }: { visible: boolean; children: React.ReactNode }) {
+  const mounted = useRef(false);
+  if (visible) mounted.current = true;
+  if (!mounted.current) return null;
+  return <div className={visible ? "" : "hidden"}>{children}</div>;
 }
 
 function UserBadge() {

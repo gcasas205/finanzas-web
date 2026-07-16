@@ -19,6 +19,7 @@ export default function Transactions({ config }: Props) {
   const [editing, setEditing] = useState<Transaction | null>(null);
   const [showForm, setShowForm] = useState(false);
 
+  const [visibleCount, setVisibleCount] = useState(50);
   const months = useMemo(() => uniqueMonths(transactions), [transactions]);
 
   const filtered = useMemo(() => {
@@ -33,6 +34,9 @@ export default function Transactions({ config }: Props) {
       return true;
     }).sort((a, b) => b.fechaPago.localeCompare(a.fechaPago));
   }, [transactions, filterMonth, filterType, search]);
+
+  const visibleRows = filtered.slice(0, visibleCount);
+  const hasMore = filtered.length > visibleCount;
 
   const totals = useMemo(() => {
     const i = filtered.filter(t => t.tipo === "ingreso").reduce((s, t) => s + t.monto, 0);
@@ -157,12 +161,9 @@ export default function Transactions({ config }: Props) {
               <tr><td colSpan={7} className="text-center py-12 text-ink-300 italic">Cargando...</td></tr>
             ) : filtered.length === 0 ? (
               <tr><td colSpan={7} className="text-center py-16 text-ink-300 italic">Sin movimientos para los filtros seleccionados</td></tr>
-            ) : filtered.map((tx, i) => (
-              <motion.tr
+            ) : visibleRows.map((tx) => (
+              <tr
                 key={tx.id}
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ delay: Math.min(i * 0.015, 0.3) }}
                 className="hairline-b last:border-0 hover:bg-ink-700/20 transition-colors group"
               >
                 <td className="px-6 py-4 text-sm text-paper tabular font-mono">{formatFecha(tx.fechaPago)}</td>
@@ -203,14 +204,27 @@ export default function Transactions({ config }: Props) {
                     </button>
                   </div>
                 </td>
-              </motion.tr>
+              </tr>
             ))}
           </tbody>
         </table>
         </div>
       </div>
 
-      {/* Form modal */}
+      {/* Pagination / Show more */}
+      {hasMore && (
+        <div className="mt-4 text-center">
+          <button
+            onClick={() => setVisibleCount(prev => prev + 50)}
+            className="text-xs text-amber border border-amber/30 px-6 py-2 hover:bg-amber/5 transition-all"
+          >
+            Mostrar más ({filtered.length - visibleCount} restantes)
+          </button>
+        </div>
+      )}
+      <div className="mt-3 text-center text-[10px] text-ink-400">
+        Mostrando {Math.min(visibleCount, filtered.length)} de {filtered.length} movimientos
+      </div>
       <AnimatePresence>
         {showForm && (
           <TransactionForm
