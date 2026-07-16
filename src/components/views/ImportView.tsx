@@ -6,6 +6,7 @@ import { Upload, FileText, CreditCard, Check, AlertCircle, Loader2 } from "lucid
 import { toast } from "sonner";
 import type { AppConfig, Transaction } from "@/types";
 import { formatPesos, formatFecha, formatMes } from "@/lib/utils";
+import { useTransactions } from "@/components/DataProvider";
 
 interface Props { config: AppConfig; }
 
@@ -13,6 +14,7 @@ type DocType = "tarjeta" | "sueldo";
 type ParseResult = any;
 
 export default function ImportView({ config }: Props) {
+  const { refresh } = useTransactions();
   const [docType, setDocType] = useState<DocType>("tarjeta");
   const [file, setFile] = useState<File | null>(null);
   const [parsing, setParsing] = useState(false);
@@ -64,6 +66,7 @@ export default function ImportView({ config }: Props) {
         toast.success(`Importados ${count} registros`);
         setResult(null);
         setFile(null);
+        refresh(); // Refresh shared data
       } else {
         toast.error(data.error || "Error al importar");
       }

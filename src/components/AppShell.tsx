@@ -13,6 +13,7 @@ import {
   Menu,
   X,
 } from "lucide-react";
+import { DataProvider } from "./DataProvider";
 import Dashboard from "./views/Dashboard";
 import Transactions from "./views/Transactions";
 import Analytics from "./views/Analytics";
@@ -41,6 +42,7 @@ export default function AppShell({ initialConfig }: { initialConfig: AppConfig }
   };
 
   return (
+    <DataProvider>
     <div className="min-h-screen flex flex-col lg:flex-row">
       {/* ── Mobile top bar ──────────────────────────────────── */}
       <div className="lg:hidden flex items-center justify-between px-4 py-3 hairline-b bg-ink-900/80 backdrop-blur-md sticky top-0 z-40">
@@ -204,6 +206,7 @@ export default function AppShell({ initialConfig }: { initialConfig: AppConfig }
         </motion.div>
       </main>
     </div>
+    </DataProvider>
   );
 }
 

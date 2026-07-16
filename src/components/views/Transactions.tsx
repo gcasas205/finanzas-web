@@ -1,33 +1,23 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Plus, Search, Edit2, Trash2, X, Filter } from "lucide-react";
 import { toast } from "sonner";
 import type { Transaction, AppConfig } from "@/types";
 import { formatPesos, formatFecha, fechaToMes, formatMes, uniqueMonths, calcularFechaPagoTarjeta } from "@/lib/utils";
 import { CATEGORIES, autoCategorizar, getCategoryColor } from "@/lib/categories";
+import { useTransactions } from "@/components/DataProvider";
 
 interface Props { config: AppConfig; }
 
 export default function Transactions({ config }: Props) {
-  const [transactions, setTransactions] = useState<Transaction[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { transactions, isLoading: loading, refresh } = useTransactions();
   const [filterMonth, setFilterMonth] = useState("");
   const [filterType, setFilterType] = useState<"todos" | "ingreso" | "egreso">("todos");
   const [search, setSearch] = useState("");
   const [editing, setEditing] = useState<Transaction | null>(null);
   const [showForm, setShowForm] = useState(false);
-
-  const reload = async () => {
-    setLoading(true);
-    const r = await fetch("/api/transactions");
-    const d = await r.json();
-    setTransactions(d.transactions || []);
-    setLoading(false);
-  };
-
-  useEffect(() => { reload(); }, []);
 
   const months = useMemo(() => uniqueMonths(transactions), [transactions]);
 
@@ -60,7 +50,7 @@ export default function Transactions({ config }: Props) {
     const d = await r.json();
     if (d.ok) {
       toast.success("Eliminada");
-      reload();
+      refresh();
     } else {
       toast.error("Error al eliminar");
     }
@@ -227,7 +217,7 @@ export default function Transactions({ config }: Props) {
             editing={editing}
             config={config}
             onClose={() => setShowForm(false)}
-            onSaved={() => { setShowForm(false); reload(); }}
+            onSaved={() => { setShowForm(false); refresh(); }}
           />
         )}
       </AnimatePresence>

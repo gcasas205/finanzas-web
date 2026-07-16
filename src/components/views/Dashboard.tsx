@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useMemo } from "react";
 import { motion } from "framer-motion";
 import {
   TrendingUp, TrendingDown, Wallet, Zap, ArrowUpRight,
@@ -15,26 +15,16 @@ import {
   formatPesos, formatPesosCompact, formatMes, formatFecha, fechaToMes, uniqueMonths,
 } from "@/lib/utils";
 import { getCategoryColor } from "@/lib/categories";
+import { useTransactions } from "@/components/DataProvider";
 
 interface Props { config: AppConfig; }
 
 export default function Dashboard({ config }: Props) {
-  const [transactions, setTransactions] = useState<Transaction[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { transactions, isLoading: loading } = useTransactions();
   const [selectedMonth, setSelectedMonth] = useState(() => {
     const d = new Date();
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
   });
-
-  useEffect(() => {
-    fetch("/api/transactions")
-      .then(r => r.json())
-      .then(d => {
-        setTransactions(d.transactions || []);
-        setLoading(false);
-      })
-      .catch(() => setLoading(false));
-  }, []);
 
   // ── Cálculos ──────────────────────────────────────────────────
   const months = useMemo(() => {
