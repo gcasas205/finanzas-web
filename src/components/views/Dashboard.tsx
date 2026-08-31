@@ -4,7 +4,7 @@ import { useState, useMemo } from "react";
 import { motion } from "framer-motion";
 import {
   TrendingUp, TrendingDown, Wallet, Zap, ArrowUpRight,
-  Calendar, Info,
+  Calendar, Info, DollarSign,
 } from "lucide-react";
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
@@ -12,15 +12,16 @@ import {
 } from "recharts";
 import type { Transaction, AppConfig } from "@/types";
 import {
-  formatPesos, formatPesosCompact, formatMes, formatFecha, fechaToMes, uniqueMonths,
+  formatPesos, formatPesosCompact, formatUSD, formatMes, formatFecha, fechaToMes, uniqueMonths,
 } from "@/lib/utils";
 import { getCategoryColor } from "@/lib/categories";
 import { useTransactions } from "@/components/DataProvider";
+import { resumenDolar, impactoPesosDolar } from "@/lib/dolar-calc";
 
 interface Props { config: AppConfig; }
 
 export default function Dashboard({ config }: Props) {
-  const { transactions, isLoading: loading } = useTransactions();
+  const { transactions, dolarOps, cotizacion, isLoading: loading } = useTransactions();
   const [selectedMonth, setSelectedMonth] = useState(() => {
     const d = new Date();
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
@@ -43,11 +44,26 @@ export default function Dashboard({ config }: Props) {
   const ahorro = ingresos - egresos;
   const tasaAhorro = ingresos > 0 ? (ahorro / ingresos) * 100 : 0;
 
-  const acumulado = useMemo(() => {
-    return transactions.reduce((s, t) => s + (t.tipo === "ingreso" ? t.monto : -t.monto), 0);
-  }, [transactions]);
+  // Acumulado en pesos: neto de transacciones ARS + impacto de operaciones de dólar
+  // (comprar USD resta pesos, vender USD suma pesos).
+  const acumuladoARS = useMemo(() => {
+    const pesos = transactions
+      .filter(t => t.moneda !== "USD")
+      .reduce((s, t) => s + (t.tipo === "ingreso" ? t.monto : -t.monto), 0);
+    return pesos + impactoPesosDolar(dolarOps);
+  }, [transactions, dolarOps]);
 
-  const mpGanancia30d = acumulado > 0 ? acumulado * (config.mpTna / 100 / 12) : 0;
+  // Posición en dólares
+  const dolar = useMemo(() => resumenDolar(dolarOps), [dolarOps]);
+  const precioValuacion = cotizacion && !cotizacion.fallback && cotizacion.compra > 0
+    ? cotizacion.compra
+    : dolar.precioPromedioCompra;
+  const tenenciaUSDenARS = dolar.tenenciaUSD * precioValuacion;
+
+  // Patrimonio total = pesos + tenencia en dólares valuada a hoy
+  const patrimonioTotal = acumuladoARS + tenenciaUSDenARS;
+
+  const mpGanancia30d = acumuladoARS > 0 ? acumuladoARS * (config.mpTna / 100 / 12) : 0;
 
   // Evolución últimos 6 meses (basado en fechaPago)
   const evolution = useMemo(() => {
@@ -177,15 +193,24 @@ export default function Dashboard({ config }: Props) {
           className="col-span-1 sm:col-span-3"
         />
 
-        {/* Second row */}
+        {/* Second row: patrimonio total (ARS + USD) */}
         <KPICard
-          eyebrow="Acumulado total"
-          value={acumulado}
-          accent="ink"
-          subtitle="Histórico"
+          variant="hero"
+          eyebrow="Patrimonio total"
+          value={patrimonioTotal}
+          accent="amber"
+          subtitle={`Pesos ${formatPesosCompact(acumuladoARS)} + USD ${formatPesosCompact(tenenciaUSDenARS)}`}
           icon={Wallet}
           delay={0.2}
           className="col-span-2 sm:col-span-6"
+        />
+        <KPICard
+          eyebrow="Saldo en pesos"
+          value={acumuladoARS}
+          accent="ink"
+          subtitle="Acumulado histórico"
+          delay={0.25}
+          className="col-span-1 sm:col-span-3"
         />
         <KPICard
           eyebrow={`Mercado Pago · TNA ${config.mpTna}%`}
@@ -193,8 +218,37 @@ export default function Dashboard({ config }: Props) {
           accent="amber"
           subtitle="Proyección 30 días"
           icon={Zap}
-          delay={0.25}
-          className="col-span-2 sm:col-span-6"
+          delay={0.3}
+          className="col-span-1 sm:col-span-3"
+        />
+
+        {/* Third row: posición en dólares */}
+        <KPICard
+          eyebrow="Tenencia en dólares"
+          value={dolar.tenenciaUSD}
+          valueText={formatUSD(dolar.tenenciaUSD)}
+          accent="moss"
+          subtitle={dolar.precioPromedioCompra > 0 ? `PPC ${formatPesos(dolar.precioPromedioCompra)}` : "Sin compras aún"}
+          icon={DollarSign}
+          delay={0.35}
+          className="col-span-1 sm:col-span-4"
+        />
+        <KPICard
+          eyebrow="USD en pesos (hoy)"
+          value={tenenciaUSDenARS}
+          accent="ink"
+          subtitle={precioValuacion > 0 ? `@ ${formatPesos(precioValuacion)}/USD` : "Sin cotización"}
+          delay={0.4}
+          className="col-span-1 sm:col-span-4"
+        />
+        <KPICard
+          eyebrow="Resultado por T.C."
+          value={tenenciaUSDenARS - dolar.tenenciaUSD * dolar.precioPromedioCompra}
+          accent={(tenenciaUSDenARS - dolar.tenenciaUSD * dolar.precioPromedioCompra) >= 0 ? "moss" : "terra"}
+          subtitle="Ganancia/pérdida latente"
+          icon={ArrowUpRight}
+          delay={0.45}
+          className="col-span-2 sm:col-span-4"
         />
       </div>
 
@@ -333,6 +387,8 @@ interface KPICardProps {
   variant?: "hero" | "default";
   eyebrow: string;
   value: number;
+  /** Si se pasa, se muestra en lugar de formatPesos(value) — para montos en USD u otros */
+  valueText?: string;
   accent: "moss" | "terra" | "amber" | "ink";
   subtitle: string;
   icon?: any;
@@ -340,7 +396,7 @@ interface KPICardProps {
   className?: string;
 }
 
-function KPICard({ variant = "default", eyebrow, value, accent, subtitle, icon: Icon, delay = 0, className = "" }: KPICardProps) {
+function KPICard({ variant = "default", eyebrow, value, valueText, accent, subtitle, icon: Icon, delay = 0, className = "" }: KPICardProps) {
   const accentColors = {
     moss: "#6A8970",
     terra: "#D4886E",
@@ -366,7 +422,7 @@ function KPICard({ variant = "default", eyebrow, value, accent, subtitle, icon: 
       </div>
 
       <div className={`display tabular leading-none ${isHero ? "text-3xl sm:text-5xl lg:text-6xl" : "text-2xl sm:text-3xl lg:text-4xl"} text-paper mb-1 sm:mb-2`}>
-        {formatPesos(value)}
+        {valueText ?? formatPesos(value)}
       </div>
 
       <div className="text-[9px] sm:text-[11px] text-ink-300 tracking-wide truncate">
