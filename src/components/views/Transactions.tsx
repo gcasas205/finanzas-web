@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Plus, Search, Edit2, Trash2, X, Filter } from "lucide-react";
 import { toast } from "sonner";
 import type { Transaction, AppConfig } from "@/types";
-import { formatPesos, formatFecha, fechaToMes, formatMes, uniqueMonths, calcularFechaPagoTarjeta } from "@/lib/utils";
+import { formatPesos, formatUSD, formatFecha, fechaToMes, formatMes, uniqueMonths, calcularFechaPagoTarjeta } from "@/lib/utils";
 import { CATEGORIES, autoCategorizar, getCategoryColor } from "@/lib/categories";
 import { useTransactions } from "@/components/DataProvider";
 
@@ -39,9 +39,17 @@ export default function Transactions({ config }: Props) {
   const hasMore = filtered.length > visibleCount;
 
   const totals = useMemo(() => {
-    const i = filtered.filter(t => t.tipo === "ingreso").reduce((s, t) => s + t.monto, 0);
-    const e = filtered.filter(t => t.tipo === "egreso").reduce((s, t) => s + t.monto, 0);
-    return { ingresos: i, egresos: e, balance: i - e };
+    const ars = filtered.filter(t => t.moneda !== "USD");
+    const usd = filtered.filter(t => t.moneda === "USD");
+    const i = ars.filter(t => t.tipo === "ingreso").reduce((s, t) => s + t.monto, 0);
+    const e = ars.filter(t => t.tipo === "egreso").reduce((s, t) => s + t.monto, 0);
+    const usdIng = usd.filter(t => t.tipo === "ingreso").reduce((s, t) => s + t.monto, 0);
+    const usdEgr = usd.filter(t => t.tipo === "egreso").reduce((s, t) => s + t.monto, 0);
+    return {
+      ingresos: i, egresos: e, balance: i - e,
+      usdIngresos: usdIng, usdEgresos: usdEgr, usdBalance: usdIng - usdEgr,
+      hayUSD: usd.length > 0,
+    };
   }, [filtered]);
 
   const handleDelete = async (id: string) => {
@@ -138,6 +146,11 @@ export default function Transactions({ config }: Props) {
           <div className={`display text-2xl tabular ${totals.balance >= 0 ? "text-moss-light" : "text-terra-light"}`}>
             {formatPesos(totals.balance)}
           </div>
+          {totals.hayUSD && (
+            <div className={`text-sm tabular font-mono mt-1 ${totals.usdBalance >= 0 ? "text-moss-light" : "text-terra-light"}`}>
+              {formatUSD(totals.usdBalance)} <span className="text-ink-400 text-[10px]">en dólares</span>
+            </div>
+          )}
         </div>
       </div>
 
@@ -182,8 +195,11 @@ export default function Transactions({ config }: Props) {
                 </td>
                 <td className="px-2 py-4 text-right">
                   <span className={`tabular font-mono text-sm ${tx.tipo === "ingreso" ? "text-moss-light" : "text-terra-light"}`}>
-                    {tx.tipo === "ingreso" ? "+" : "-"}{formatPesos(tx.monto)}
+                    {tx.tipo === "ingreso" ? "+" : "-"}{tx.moneda === "USD" ? formatUSD(tx.monto) : formatPesos(tx.monto)}
                   </span>
+                  {tx.moneda === "USD" && (
+                    <span className="ml-1.5 text-[9px] uppercase tracking-wider text-amber border border-amber/40 px-1 py-0.5">USD</span>
+                  )}
                 </td>
                 <td className="px-2 py-4 text-center text-xs text-ink-300 tabular">
                   {tx.cuotaTotal > 1 ? `${tx.cuotaNumero}/${tx.cuotaTotal}` : "—"}
@@ -257,6 +273,7 @@ function TransactionForm({ editing, config, onClose, onSaved }: FormProps) {
   const [fechaPagoAuto, setFechaPagoAuto] = useState(!editing);
   const [descripcion, setDescripcion] = useState(editing?.descripcion || "");
   const [monto, setMonto] = useState(editing?.monto?.toString() || "");
+  const [moneda, setMoneda] = useState<"ARS" | "USD">(editing?.moneda || "ARS");
   const [categoria, setCategoria] = useState(editing?.categoria || "Otros");
   const [subcategoria, setSubcategoria] = useState(editing?.subcategoria || "Sin categoría");
   const [fuente, setFuente] = useState<"manual" | "tarjeta" | "recibo">(editing?.fuente || "manual");
@@ -299,7 +316,7 @@ function TransactionForm({ editing, config, onClose, onSaved }: FormProps) {
       fechaPago,
       descripcion,
       monto: parseFloat(monto),
-      moneda: "ARS",
+      moneda,
       categoria,
       subcategoria,
       fuente,
@@ -383,17 +400,33 @@ function TransactionForm({ editing, config, onClose, onSaved }: FormProps) {
             />
           </Field>
 
-          {/* Monto + Fuente */}
+          {/* Monto + Moneda + Fuente */}
           <div className="grid grid-cols-2 gap-4">
-            <Field label="Monto (ARS)">
-              <input
-                type="number"
-                step="0.01"
-                value={monto}
-                onChange={(e) => setMonto(e.target.value)}
-                placeholder="0.00"
-                className="form-input tabular font-mono"
-              />
+            <Field label={`Monto (${moneda})`}>
+              <div className="flex">
+                <input
+                  type="number"
+                  step="0.01"
+                  value={monto}
+                  onChange={(e) => setMonto(e.target.value)}
+                  placeholder="0.00"
+                  className="form-input tabular font-mono rounded-none"
+                />
+                <div className="flex border border-l-0 border-ink-500">
+                  {(["ARS", "USD"] as const).map(m => (
+                    <button
+                      key={m}
+                      type="button"
+                      onClick={() => setMoneda(m)}
+                      className={`px-3 text-xs font-mono transition-colors ${
+                        moneda === m ? "bg-amber text-ink-900" : "text-ink-300 hover:bg-ink-700/40"
+                      }`}
+                    >
+                      {m}
+                    </button>
+                  ))}
+                </div>
+              </div>
             </Field>
             <Field label="Fuente">
               <select value={fuente} onChange={(e) => setFuente(e.target.value as any)} className="form-input">
@@ -403,6 +436,14 @@ function TransactionForm({ editing, config, onClose, onSaved }: FormProps) {
               </select>
             </Field>
           </div>
+
+          {moneda === "USD" && (
+            <p className="text-[11px] text-ink-400 -mt-2 leading-relaxed">
+              {tipo === "egreso"
+                ? "Gasto en dólares: se descuenta de tu tenencia de USD y no afecta tu saldo en pesos."
+                : "Ingreso en dólares: suma a tu tenencia de USD y no afecta tu saldo en pesos."}
+            </p>
+          )}
 
           {/* Fechas */}
           <div className="grid grid-cols-2 gap-4">

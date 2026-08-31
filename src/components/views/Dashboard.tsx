@@ -39,8 +39,14 @@ export default function Dashboard({ config }: Props) {
     [transactions, selectedMonth]
   );
 
-  const ingresos = monthTransactions.filter(t => t.tipo === "ingreso").reduce((s, t) => s + t.monto, 0);
-  const egresos = monthTransactions.filter(t => t.tipo === "egreso").reduce((s, t) => s + t.monto, 0);
+  // Los KPIs mensuales y la torta son en pesos: se excluyen los movimientos en USD
+  const monthTransactionsARS = useMemo(
+    () => monthTransactions.filter(t => t.moneda !== "USD"),
+    [monthTransactions]
+  );
+
+  const ingresos = monthTransactionsARS.filter(t => t.tipo === "ingreso").reduce((s, t) => s + t.monto, 0);
+  const egresos = monthTransactionsARS.filter(t => t.tipo === "egreso").reduce((s, t) => s + t.monto, 0);
   const ahorro = ingresos - egresos;
   const tasaAhorro = ingresos > 0 ? (ahorro / ingresos) * 100 : 0;
 
@@ -53,8 +59,9 @@ export default function Dashboard({ config }: Props) {
     return pesos + impactoPesosDolar(dolarOps);
   }, [transactions, dolarOps]);
 
-  // Posición en dólares
-  const dolar = useMemo(() => resumenDolar(dolarOps), [dolarOps]);
+  // Posición en dólares (incluye gastos/ingresos en USD que tocan la tenencia)
+  const usdTxs = useMemo(() => transactions.filter(t => t.moneda === "USD"), [transactions]);
+  const dolar = useMemo(() => resumenDolar(dolarOps, usdTxs), [dolarOps, usdTxs]);
   const precioValuacion = cotizacion && !cotizacion.fallback && cotizacion.compra > 0
     ? cotizacion.compra
     : dolar.precioPromedioCompra;
@@ -87,10 +94,10 @@ export default function Dashboard({ config }: Props) {
       }));
   }, [transactions]);
 
-  // Categorías mes seleccionado
+  // Categorías mes seleccionado (solo pesos)
   const categories = useMemo(() => {
     const map = new Map<string, number>();
-    for (const t of monthTransactions) {
+    for (const t of monthTransactionsARS) {
       if (t.tipo !== "egreso") continue;
       map.set(t.categoria, (map.get(t.categoria) ?? 0) + t.monto);
     }
@@ -103,7 +110,7 @@ export default function Dashboard({ config }: Props) {
         color: getCategoryColor(cat),
       }))
       .sort((a, b) => b.value - a.value);
-  }, [monthTransactions]);
+  }, [monthTransactionsARS]);
 
   // Próximos pagos (de tarjeta, en los próximos 30 días desde hoy)
   const upcomingPayments = useMemo(() => {

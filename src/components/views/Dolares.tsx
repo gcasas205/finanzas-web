@@ -10,15 +10,17 @@ import { toast } from "sonner";
 import type { DolarOperacion, Cotizacion } from "@/types";
 import { formatPesos, formatUSD, formatFecha, formatMes, fechaToMes } from "@/lib/utils";
 import { resumenDolar } from "@/lib/dolar-calc";
-import { useDolar } from "@/components/DataProvider";
+import { useDolar, useTransactions } from "@/components/DataProvider";
 
 export default function Dolares() {
   const { dolarOps, cotizacion, isLoading, refresh, refreshCotizacion } = useDolar();
+  const { transactions } = useTransactions();
   const [editing, setEditing] = useState<DolarOperacion | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [refreshingCot, setRefreshingCot] = useState(false);
 
-  const resumen = useMemo(() => resumenDolar(dolarOps), [dolarOps]);
+  const usdTxs = useMemo(() => transactions.filter(t => t.moneda === "USD"), [transactions]);
+  const resumen = useMemo(() => resumenDolar(dolarOps, usdTxs), [dolarOps, usdTxs]);
 
   // Valor actual de la tenencia: se valúa al precio de COMPRA del banco
   // (lo que te pagarían hoy si vendieras). Fallback al promedio si no hay cotización.
