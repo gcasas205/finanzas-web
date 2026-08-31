@@ -15,6 +15,16 @@ export function formatPesos(n: number): string {
   }).format(n);
 }
 
+/** Format as US dollars: US$1,234.56 */
+export function formatUSD(n: number, decimals = 2): string {
+  return new Intl.NumberFormat("es-AR", {
+    style: "currency",
+    currency: "USD",
+    minimumFractionDigits: decimals,
+    maximumFractionDigits: decimals,
+  }).format(n);
+}
+
 /** Compact format: $1.2M, $345K */
 export function formatPesosCompact(n: number): string {
   const abs = Math.abs(n);

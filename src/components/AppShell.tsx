@@ -12,20 +12,23 @@ import {
   LogOut,
   Menu,
   X,
+  DollarSign,
 } from "lucide-react";
 import { DataProvider } from "./DataProvider";
 import Dashboard from "./views/Dashboard";
 import Transactions from "./views/Transactions";
+import Dolares from "./views/Dolares";
 import Analytics from "./views/Analytics";
 import ImportView from "./views/ImportView";
 import SettingsView from "./views/SettingsView";
 import type { AppConfig } from "@/types";
 
-type View = "dashboard" | "transactions" | "analytics" | "import" | "settings";
+type View = "dashboard" | "transactions" | "dolares" | "analytics" | "import" | "settings";
 
 const NAV_ITEMS: Array<{ id: View; label: string; icon: any }> = [
   { id: "dashboard",    label: "Resumen",     icon: LayoutDashboard },
   { id: "transactions", label: "Movimientos", icon: ArrowLeftRight },
+  { id: "dolares",      label: "Dólares",     icon: DollarSign },
   { id: "analytics",    label: "Análisis",    icon: TrendingUp },
   { id: "import",       label: "Importar",    icon: Upload },
   { id: "settings",     label: "Ajustes",     icon: Settings },
@@ -195,6 +198,7 @@ export default function AppShell({ initialConfig }: { initialConfig: AppConfig }
         {/* Views mount on first visit, then stay alive (hidden via CSS) */}
         <LazyView visible={view === "dashboard"}><Dashboard config={config} /></LazyView>
         <LazyView visible={view === "transactions"}><Transactions config={config} /></LazyView>
+        <LazyView visible={view === "dolares"}><Dolares /></LazyView>
         <LazyView visible={view === "analytics"}><Analytics config={config} /></LazyView>
         <LazyView visible={view === "import"}><ImportView config={config} /></LazyView>
         <LazyView visible={view === "settings"}><SettingsView config={config} onSaved={setConfig} /></LazyView>

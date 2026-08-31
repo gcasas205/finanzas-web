@@ -2,7 +2,7 @@ import { google, sheets_v4 } from "googleapis";
 import fs from "fs/promises";
 import path from "path";
 import os from "os";
-import type { Transaction, Sueldo, AppConfig } from "@/types";
+import type { Transaction, Sueldo, AppConfig, DolarOperacion } from "@/types";
 
 /**
  * Config se puede cargar de:
@@ -118,6 +118,10 @@ const SUELDO_HEADERS = [
   "otrosDescuentos", "fechaPago", "createdAt"
 ];
 
+const DOLAR_HEADERS = [
+  "id", "fecha", "tipo", "montoUSD", "precioARS", "totalARS", "notas", "createdAt"
+];
+
 async function ensureSheets(client: sheets_v4.Sheets, sheetId: string) {
   const meta = await client.spreadsheets.get({ spreadsheetId: sheetId });
   const existing = meta.data.sheets?.map(s => s.properties?.title) ?? [];
@@ -125,6 +129,7 @@ async function ensureSheets(client: sheets_v4.Sheets, sheetId: string) {
   const required: Array<[string, string[]]> = [
     ["Transacciones", TX_HEADERS],
     ["Sueldos", SUELDO_HEADERS],
+    ["Dolares", DOLAR_HEADERS],
   ];
 
   for (const [name, headers] of required) {
@@ -210,6 +215,28 @@ function sueldoToRow(s: Sueldo): any[] {
     s.id, s.periodoTrabajado, s.periodoPago, s.empresa, s.cargo,
     s.bruto, s.neto, s.jubilacion, s.obraSocial, s.ley19032,
     s.otrosDescuentos, s.fechaPago, s.createdAt
+  ];
+}
+
+function rowToDolar(row: any[]): DolarOperacion {
+  const montoUSD = parseFloat(row[3]) || 0;
+  const precioARS = parseFloat(row[4]) || 0;
+  return {
+    id: row[0] ?? "",
+    fecha: row[1] ?? "",
+    tipo: (row[2] ?? "compra") as DolarOperacion["tipo"],
+    montoUSD,
+    precioARS,
+    // Recalcula por las dudas para que totalARS nunca quede inconsistente
+    totalARS: parseFloat(row[5]) || montoUSD * precioARS,
+    notas: row[6] ?? "",
+    createdAt: row[7] ?? new Date().toISOString(),
+  };
+}
+
+function dolarToRow(d: DolarOperacion): any[] {
+  return [
+    d.id, d.fecha, d.tipo, d.montoUSD, d.precioARS, d.totalARS, d.notas, d.createdAt
   ];
 }
 
@@ -369,6 +396,108 @@ export async function addSueldo(s: Sueldo): Promise<boolean> {
     return true;
   } catch (e) {
     console.error("Error adding sueldo:", e);
+    return false;
+  }
+}
+
+// ─── Operaciones de dólar ────────────────────────────────────────────────────
+
+export async function listDolarOps(): Promise<DolarOperacion[]> {
+  const ctx = await getSheetsClient();
+  if (!ctx) return [];
+  try {
+    await ensureSheets(ctx.client, ctx.sheetId);
+    const r = await ctx.client.spreadsheets.values.get({
+      spreadsheetId: ctx.sheetId,
+      range: "Dolares!A2:H",
+    });
+    return (r.data.values ?? []).filter(row => row[0]).map(rowToDolar);
+  } catch (e) {
+    console.error("Error listing dolar ops:", e);
+    return [];
+  }
+}
+
+export async function addDolarOp(op: DolarOperacion): Promise<boolean> {
+  const ctx = await getSheetsClient();
+  if (!ctx) return false;
+  try {
+    await ensureSheets(ctx.client, ctx.sheetId);
+    await ctx.client.spreadsheets.values.append({
+      spreadsheetId: ctx.sheetId,
+      range: "Dolares!A:H",
+      valueInputOption: "RAW",
+      requestBody: { values: [dolarToRow(op)] },
+    });
+    return true;
+  } catch (e) {
+    console.error("Error adding dolar op:", e);
+    return false;
+  }
+}
+
+export async function updateDolarOp(op: DolarOperacion): Promise<boolean> {
+  const ctx = await getSheetsClient();
+  if (!ctx) return false;
+  try {
+    const r = await ctx.client.spreadsheets.values.get({
+      spreadsheetId: ctx.sheetId,
+      range: "Dolares!A2:A",
+    });
+    const ids = (r.data.values ?? []).map(row => row[0]);
+    const idx = ids.indexOf(op.id);
+    if (idx === -1) return false;
+
+    const rowNumber = idx + 2;
+    await ctx.client.spreadsheets.values.update({
+      spreadsheetId: ctx.sheetId,
+      range: `Dolares!A${rowNumber}:H${rowNumber}`,
+      valueInputOption: "RAW",
+      requestBody: { values: [dolarToRow(op)] },
+    });
+    return true;
+  } catch (e) {
+    console.error("Error updating dolar op:", e);
+    return false;
+  }
+}
+
+export async function deleteDolarOp(id: string): Promise<boolean> {
+  const ctx = await getSheetsClient();
+  if (!ctx) return false;
+  try {
+    const r = await ctx.client.spreadsheets.values.get({
+      spreadsheetId: ctx.sheetId,
+      range: "Dolares!A2:A",
+    });
+    const ids = (r.data.values ?? []).map(row => row[0]);
+    const idx = ids.indexOf(id);
+    if (idx === -1) return false;
+
+    const meta = await ctx.client.spreadsheets.get({ spreadsheetId: ctx.sheetId });
+    const sheet = meta.data.sheets?.find(s => s.properties?.title === "Dolares");
+    if (sheet?.properties?.sheetId == null) return false;
+    const innerSheetId = sheet.properties.sheetId;
+
+    const rowIndex = idx + 1; // fila 1 = header, datos arrancan en índice 1
+    await ctx.client.spreadsheets.batchUpdate({
+      spreadsheetId: ctx.sheetId,
+      requestBody: {
+        requests: [{
+          deleteDimension: {
+            range: {
+              sheetId: innerSheetId,
+              dimension: "ROWS",
+              startIndex: rowIndex,
+              endIndex: rowIndex + 1,
+            }
+          }
+        }]
+      }
+    });
+    return true;
+  } catch (e) {
+    console.error("Error deleting dolar op:", e);
     return false;
   }
 }

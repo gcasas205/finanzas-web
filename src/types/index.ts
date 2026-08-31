@@ -38,6 +38,36 @@ export interface Sueldo {
   createdAt: string;
 }
 
+export type DolarOperacionTipo = "compra" | "venta";
+
+export interface DolarOperacion {
+  id: string;
+  /** Fecha de la operación (ISO yyyy-mm-dd). Puede ser de meses anteriores. */
+  fecha: string;
+  /** compra = comprás USD (salen pesos); venta = vendés USD (entran pesos) */
+  tipo: DolarOperacionTipo;
+  /** Cantidad de dólares operados */
+  montoUSD: number;
+  /** Precio en pesos por cada dólar (ARS/USD) usado en esta operación */
+  precioARS: number;
+  /** Total en pesos = montoUSD * precioARS (se recalcula al guardar) */
+  totalARS: number;
+  notas: string;
+  createdAt: string;
+}
+
+/** Cotización oficial scrapeada de dolarhoy.com */
+export interface Cotizacion {
+  compra: number;
+  venta: number;
+  /** Texto "dd/mm/aa hh:mm AM" que informa dolarhoy */
+  actualizado: string | null;
+  /** ISO en que la app trajo el dato */
+  fetchedAt: string;
+  /** true si es un valor de respaldo porque falló el scraping */
+  fallback?: boolean;
+}
+
 export interface AppConfig {
   nombre: string;
   mpTna: number;

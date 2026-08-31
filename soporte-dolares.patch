@@ -1,0 +1,1305 @@
+diff --git a/src/app/api/dolar/cotizacion/route.ts b/src/app/api/dolar/cotizacion/route.ts
+new file mode 100644
+index 0000000..94ce78e
+--- /dev/null
++++ b/src/app/api/dolar/cotizacion/route.ts
+@@ -0,0 +1,23 @@
++import { NextRequest, NextResponse } from "next/server";
++import { getCotizacionOficial } from "@/lib/dolar";
++import type { Cotizacion } from "@/types";
++
++// Valor de respaldo por si dolarhoy está caído la primera vez (sin caché previa).
++// El usuario siempre puede sobreescribir el precio a mano al cargar la operación.
++const FALLBACK: Cotizacion = {
++  compra: 0,
++  venta: 0,
++  actualizado: null,
++  fetchedAt: new Date(0).toISOString(),
++  fallback: true,
++};
++
++export async function GET(req: NextRequest) {
++  const force = req.nextUrl.searchParams.get("force") === "1";
++  try {
++    const cot = await getCotizacionOficial(force);
++    return NextResponse.json(cot);
++  } catch {
++    return NextResponse.json(FALLBACK);
++  }
++}
+diff --git a/src/app/api/dolar/route.ts b/src/app/api/dolar/route.ts
+new file mode 100644
+index 0000000..9bd94b9
+--- /dev/null
++++ b/src/app/api/dolar/route.ts
+@@ -0,0 +1,67 @@
++import { NextRequest, NextResponse } from "next/server";
++import { listDolarOps, addDolarOp, updateDolarOp, deleteDolarOp } from "@/lib/sheets";
++import { generateId } from "@/lib/utils";
++import { cacheOrFetch, cacheInvalidate } from "@/lib/cache";
++import type { DolarOperacion } from "@/types";
++
++const CACHE_KEY = "dolar-ops";
++const CACHE_TTL = 3 * 60 * 1000; // 3 minutos
++
++export async function GET() {
++  const operaciones = await cacheOrFetch(
++    CACHE_KEY,
++    () => listDolarOps(),
++    CACHE_TTL,
++  );
++  return NextResponse.json({ operaciones });
++}
++
++function normalize(body: any): DolarOperacion {
++  const montoUSD = Number(body.montoUSD) || 0;
++  const precioARS = Number(body.precioARS) || 0;
++  return {
++    id: body.id || generateId(),
++    fecha: body.fecha,
++    tipo: body.tipo === "venta" ? "venta" : "compra",
++    montoUSD,
++    precioARS,
++    // El total siempre se deriva en el server: fuente de verdad única
++    totalARS: Math.round(montoUSD * precioARS * 100) / 100,
++    notas: body.notas || "",
++    createdAt: body.createdAt || new Date().toISOString(),
++  };
++}
++
++export async function POST(req: NextRequest) {
++  const body = await req.json();
++
++  if (!body.fecha || !body.montoUSD || !body.precioARS) {
++    return NextResponse.json(
++      { ok: false, error: "Faltan fecha, montoUSD o precioARS" },
++      { status: 400 },
++    );
++  }
++
++  const op = normalize(body);
++  const ok = await addDolarOp(op);
++  cacheInvalidate(CACHE_KEY);
++  return NextResponse.json({ ok, operacion: op });
++}
++
++export async function PUT(req: NextRequest) {
++  const body = await req.json();
++  if (!body.id) {
++    return NextResponse.json({ ok: false, error: "Falta id" }, { status: 400 });
++  }
++  const op = normalize(body);
++  const ok = await updateDolarOp(op);
++  cacheInvalidate(CACHE_KEY);
++  return NextResponse.json({ ok });
++}
++
++export async function DELETE(req: NextRequest) {
++  const { id } = await req.json();
++  const ok = await deleteDolarOp(id);
++  cacheInvalidate(CACHE_KEY);
++  return NextResponse.json({ ok });
++}
+diff --git a/src/components/AppShell.tsx b/src/components/AppShell.tsx
+index ee589dc..ff8597d 100644
+--- a/src/components/AppShell.tsx
++++ b/src/components/AppShell.tsx
+@@ -12,20 +12,23 @@ import {
+   LogOut,
+   Menu,
+   X,
++  DollarSign,
+ } from "lucide-react";
+ import { DataProvider } from "./DataProvider";
+ import Dashboard from "./views/Dashboard";
+ import Transactions from "./views/Transactions";
++import Dolares from "./views/Dolares";
+ import Analytics from "./views/Analytics";
+ import ImportView from "./views/ImportView";
+ import SettingsView from "./views/SettingsView";
+ import type { AppConfig } from "@/types";
+ 
+-type View = "dashboard" | "transactions" | "analytics" | "import" | "settings";
++type View = "dashboard" | "transactions" | "dolares" | "analytics" | "import" | "settings";
+ 
+ const NAV_ITEMS: Array<{ id: View; label: string; icon: any }> = [
+   { id: "dashboard",    label: "Resumen",     icon: LayoutDashboard },
+   { id: "transactions", label: "Movimientos", icon: ArrowLeftRight },
++  { id: "dolares",      label: "Dólares",     icon: DollarSign },
+   { id: "analytics",    label: "Análisis",    icon: TrendingUp },
+   { id: "import",       label: "Importar",    icon: Upload },
+   { id: "settings",     label: "Ajustes",     icon: Settings },
+@@ -195,6 +198,7 @@ export default function AppShell({ initialConfig }: { initialConfig: AppConfig }
+         {/* Views mount on first visit, then stay alive (hidden via CSS) */}
+         <LazyView visible={view === "dashboard"}><Dashboard config={config} /></LazyView>
+         <LazyView visible={view === "transactions"}><Transactions config={config} /></LazyView>
++        <LazyView visible={view === "dolares"}><Dolares /></LazyView>
+         <LazyView visible={view === "analytics"}><Analytics config={config} /></LazyView>
+         <LazyView visible={view === "import"}><ImportView config={config} /></LazyView>
+         <LazyView visible={view === "settings"}><SettingsView config={config} onSaved={setConfig} /></LazyView>
+diff --git a/src/components/DataProvider.tsx b/src/components/DataProvider.tsx
+index 49403ed..31afe09 100644
+--- a/src/components/DataProvider.tsx
++++ b/src/components/DataProvider.tsx
+@@ -2,49 +2,75 @@
+ 
+ import { createContext, useContext, useCallback } from "react";
+ import useSWR from "swr";
+-import type { Transaction, AppConfig } from "@/types";
++import type { Transaction, DolarOperacion, Cotizacion } from "@/types";
+ 
+ const fetcher = (url: string) => fetch(url).then(r => r.json());
+ 
+ interface DataContextType {
+   transactions: Transaction[];
++  dolarOps: DolarOperacion[];
++  cotizacion: Cotizacion | null;
+   isLoading: boolean;
+   error: any;
+-  /** Call after any mutation (add/edit/delete/import) to refresh data */
++  /** Refresca transacciones y operaciones de dólar tras cualquier mutación */
+   refresh: () => void;
++  /** Vuelve a pedir la cotización (opcionalmente forzando el scraping) */
++  refreshCotizacion: (force?: boolean) => void;
+ }
+ 
+ const DataContext = createContext<DataContextType>({
+   transactions: [],
++  dolarOps: [],
++  cotizacion: null,
+   isLoading: true,
+   error: null,
+   refresh: () => {},
++  refreshCotizacion: () => {},
+ });
+ 
++const SWR_OPTS = {
++  revalidateOnFocus: false,
++  revalidateOnReconnect: false,
++  dedupingInterval: 60_000,
++  refreshInterval: 0,
++  keepPreviousData: true,
++};
++
+ export function DataProvider({ children }: { children: React.ReactNode }) {
+-  const { data, error, isLoading, mutate } = useSWR(
+-    "/api/transactions",
+-    fetcher,
+-    {
+-      revalidateOnFocus: false,      // Don't refetch on tab focus
+-      revalidateOnReconnect: false,  // Don't refetch on reconnect
+-      dedupingInterval: 60_000,      // Dedup requests within 60s
+-      refreshInterval: 0,            // No automatic refresh
+-      keepPreviousData: true,        // Show stale data while revalidating
+-    }
+-  );
++  const tx = useSWR("/api/transactions", fetcher, SWR_OPTS);
++  const dolar = useSWR("/api/dolar", fetcher, SWR_OPTS);
++  const cot = useSWR("/api/dolar/cotizacion", fetcher, {
++    ...SWR_OPTS,
++    // La cotización cambia durante el día: refrescar cada 15 min
++    refreshInterval: 15 * 60 * 1000,
++  });
+ 
+   const refresh = useCallback(() => {
+-    mutate();
+-  }, [mutate]);
++    tx.mutate();
++    dolar.mutate();
++  }, [tx, dolar]);
++
++  const refreshCotizacion = useCallback((force = false) => {
++    if (force) {
++      // Pide al server que re-scrapee, ignorando su caché de 10 min
++      fetch("/api/dolar/cotizacion?force=1")
++        .then(r => r.json())
++        .then(data => cot.mutate(data, { revalidate: false }));
++    } else {
++      cot.mutate();
++    }
++  }, [cot]);
+ 
+   return (
+     <DataContext.Provider
+       value={{
+-        transactions: data?.transactions ?? [],
+-        isLoading,
+-        error,
++        transactions: tx.data?.transactions ?? [],
++        dolarOps: dolar.data?.operaciones ?? [],
++        cotizacion: cot.data ?? null,
++        isLoading: tx.isLoading,
++        error: tx.error || dolar.error,
+         refresh,
++        refreshCotizacion,
+       }}
+     >
+       {children}
+@@ -52,7 +78,13 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
+   );
+ }
+ 
+-/** Hook to access shared transaction data */
++/** Hook para acceder a los datos compartidos */
+ export function useTransactions() {
+   return useContext(DataContext);
+ }
++
++/** Alias semántico para las operaciones de dólar */
++export function useDolar() {
++  const { dolarOps, cotizacion, isLoading, refresh, refreshCotizacion } = useContext(DataContext);
++  return { dolarOps, cotizacion, isLoading, refresh, refreshCotizacion };
++}
+diff --git a/src/components/views/Dashboard.tsx b/src/components/views/Dashboard.tsx
+index cb06c82..5d162ed 100644
+--- a/src/components/views/Dashboard.tsx
++++ b/src/components/views/Dashboard.tsx
+@@ -4,7 +4,7 @@ import { useState, useMemo } from "react";
+ import { motion } from "framer-motion";
+ import {
+   TrendingUp, TrendingDown, Wallet, Zap, ArrowUpRight,
+-  Calendar, Info,
++  Calendar, Info, DollarSign,
+ } from "lucide-react";
+ import {
+   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
+@@ -12,15 +12,16 @@ import {
+ } from "recharts";
+ import type { Transaction, AppConfig } from "@/types";
+ import {
+-  formatPesos, formatPesosCompact, formatMes, formatFecha, fechaToMes, uniqueMonths,
++  formatPesos, formatPesosCompact, formatUSD, formatMes, formatFecha, fechaToMes, uniqueMonths,
+ } from "@/lib/utils";
+ import { getCategoryColor } from "@/lib/categories";
+ import { useTransactions } from "@/components/DataProvider";
++import { resumenDolar, impactoPesosDolar } from "@/lib/dolar-calc";
+ 
+ interface Props { config: AppConfig; }
+ 
+ export default function Dashboard({ config }: Props) {
+-  const { transactions, isLoading: loading } = useTransactions();
++  const { transactions, dolarOps, cotizacion, isLoading: loading } = useTransactions();
+   const [selectedMonth, setSelectedMonth] = useState(() => {
+     const d = new Date();
+     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+@@ -43,11 +44,26 @@ export default function Dashboard({ config }: Props) {
+   const ahorro = ingresos - egresos;
+   const tasaAhorro = ingresos > 0 ? (ahorro / ingresos) * 100 : 0;
+ 
+-  const acumulado = useMemo(() => {
+-    return transactions.reduce((s, t) => s + (t.tipo === "ingreso" ? t.monto : -t.monto), 0);
+-  }, [transactions]);
++  // Acumulado en pesos: neto de transacciones ARS + impacto de operaciones de dólar
++  // (comprar USD resta pesos, vender USD suma pesos).
++  const acumuladoARS = useMemo(() => {
++    const pesos = transactions
++      .filter(t => t.moneda !== "USD")
++      .reduce((s, t) => s + (t.tipo === "ingreso" ? t.monto : -t.monto), 0);
++    return pesos + impactoPesosDolar(dolarOps);
++  }, [transactions, dolarOps]);
++
++  // Posición en dólares
++  const dolar = useMemo(() => resumenDolar(dolarOps), [dolarOps]);
++  const precioValuacion = cotizacion && !cotizacion.fallback && cotizacion.compra > 0
++    ? cotizacion.compra
++    : dolar.precioPromedioCompra;
++  const tenenciaUSDenARS = dolar.tenenciaUSD * precioValuacion;
++
++  // Patrimonio total = pesos + tenencia en dólares valuada a hoy
++  const patrimonioTotal = acumuladoARS + tenenciaUSDenARS;
+ 
+-  const mpGanancia30d = acumulado > 0 ? acumulado * (config.mpTna / 100 / 12) : 0;
++  const mpGanancia30d = acumuladoARS > 0 ? acumuladoARS * (config.mpTna / 100 / 12) : 0;
+ 
+   // Evolución últimos 6 meses (basado en fechaPago)
+   const evolution = useMemo(() => {
+@@ -177,24 +193,62 @@ export default function Dashboard({ config }: Props) {
+           className="col-span-1 sm:col-span-3"
+         />
+ 
+-        {/* Second row */}
++        {/* Second row: patrimonio total (ARS + USD) */}
+         <KPICard
+-          eyebrow="Acumulado total"
+-          value={acumulado}
+-          accent="ink"
+-          subtitle="Histórico"
++          variant="hero"
++          eyebrow="Patrimonio total"
++          value={patrimonioTotal}
++          accent="amber"
++          subtitle={`Pesos ${formatPesosCompact(acumuladoARS)} + USD ${formatPesosCompact(tenenciaUSDenARS)}`}
+           icon={Wallet}
+           delay={0.2}
+           className="col-span-2 sm:col-span-6"
+         />
++        <KPICard
++          eyebrow="Saldo en pesos"
++          value={acumuladoARS}
++          accent="ink"
++          subtitle="Acumulado histórico"
++          delay={0.25}
++          className="col-span-1 sm:col-span-3"
++        />
+         <KPICard
+           eyebrow={`Mercado Pago · TNA ${config.mpTna}%`}
+           value={mpGanancia30d}
+           accent="amber"
+           subtitle="Proyección 30 días"
+           icon={Zap}
+-          delay={0.25}
+-          className="col-span-2 sm:col-span-6"
++          delay={0.3}
++          className="col-span-1 sm:col-span-3"
++        />
++
++        {/* Third row: posición en dólares */}
++        <KPICard
++          eyebrow="Tenencia en dólares"
++          value={dolar.tenenciaUSD}
++          valueText={formatUSD(dolar.tenenciaUSD)}
++          accent="moss"
++          subtitle={dolar.precioPromedioCompra > 0 ? `PPC ${formatPesos(dolar.precioPromedioCompra)}` : "Sin compras aún"}
++          icon={DollarSign}
++          delay={0.35}
++          className="col-span-1 sm:col-span-4"
++        />
++        <KPICard
++          eyebrow="USD en pesos (hoy)"
++          value={tenenciaUSDenARS}
++          accent="ink"
++          subtitle={precioValuacion > 0 ? `@ ${formatPesos(precioValuacion)}/USD` : "Sin cotización"}
++          delay={0.4}
++          className="col-span-1 sm:col-span-4"
++        />
++        <KPICard
++          eyebrow="Resultado por T.C."
++          value={tenenciaUSDenARS - dolar.tenenciaUSD * dolar.precioPromedioCompra}
++          accent={(tenenciaUSDenARS - dolar.tenenciaUSD * dolar.precioPromedioCompra) >= 0 ? "moss" : "terra"}
++          subtitle="Ganancia/pérdida latente"
++          icon={ArrowUpRight}
++          delay={0.45}
++          className="col-span-2 sm:col-span-4"
+         />
+       </div>
+ 
+@@ -333,6 +387,8 @@ interface KPICardProps {
+   variant?: "hero" | "default";
+   eyebrow: string;
+   value: number;
++  /** Si se pasa, se muestra en lugar de formatPesos(value) — para montos en USD u otros */
++  valueText?: string;
+   accent: "moss" | "terra" | "amber" | "ink";
+   subtitle: string;
+   icon?: any;
+@@ -340,7 +396,7 @@ interface KPICardProps {
+   className?: string;
+ }
+ 
+-function KPICard({ variant = "default", eyebrow, value, accent, subtitle, icon: Icon, delay = 0, className = "" }: KPICardProps) {
++function KPICard({ variant = "default", eyebrow, value, valueText, accent, subtitle, icon: Icon, delay = 0, className = "" }: KPICardProps) {
+   const accentColors = {
+     moss: "#6A8970",
+     terra: "#D4886E",
+@@ -366,7 +422,7 @@ function KPICard({ variant = "default", eyebrow, value, accent, subtitle, icon:
+       </div>
+ 
+       <div className={`display tabular leading-none ${isHero ? "text-3xl sm:text-5xl lg:text-6xl" : "text-2xl sm:text-3xl lg:text-4xl"} text-paper mb-1 sm:mb-2`}>
+-        {formatPesos(value)}
++        {valueText ?? formatPesos(value)}
+       </div>
+ 
+       <div className="text-[9px] sm:text-[11px] text-ink-300 tracking-wide truncate">
+diff --git a/src/components/views/Dolares.tsx b/src/components/views/Dolares.tsx
+new file mode 100644
+index 0000000..45a5702
+--- /dev/null
++++ b/src/components/views/Dolares.tsx
+@@ -0,0 +1,496 @@
++"use client";
++
++import { useState, useMemo, useEffect } from "react";
++import { motion, AnimatePresence } from "framer-motion";
++import {
++  Plus, Edit2, Trash2, X, RefreshCw, TrendingUp, TrendingDown,
++  DollarSign, ArrowUpRight, ArrowDownRight,
++} from "lucide-react";
++import { toast } from "sonner";
++import type { DolarOperacion, Cotizacion } from "@/types";
++import { formatPesos, formatUSD, formatFecha, formatMes, fechaToMes } from "@/lib/utils";
++import { resumenDolar } from "@/lib/dolar-calc";
++import { useDolar } from "@/components/DataProvider";
++
++export default function Dolares() {
++  const { dolarOps, cotizacion, isLoading, refresh, refreshCotizacion } = useDolar();
++  const [editing, setEditing] = useState<DolarOperacion | null>(null);
++  const [showForm, setShowForm] = useState(false);
++  const [refreshingCot, setRefreshingCot] = useState(false);
++
++  const resumen = useMemo(() => resumenDolar(dolarOps), [dolarOps]);
++
++  // Valor actual de la tenencia: se valúa al precio de COMPRA del banco
++  // (lo que te pagarían hoy si vendieras). Fallback al promedio si no hay cotización.
++  const precioValuacion = cotizacion && !cotizacion.fallback && cotizacion.compra > 0
++    ? cotizacion.compra
++    : resumen.precioPromedioCompra;
++
++  const valorActualARS = resumen.tenenciaUSD * precioValuacion;
++  const costoTenenciaARS = resumen.tenenciaUSD * resumen.precioPromedioCompra;
++  const resultadoARS = valorActualARS - costoTenenciaARS;
++  const resultadoPct = costoTenenciaARS > 0 ? (resultadoARS / costoTenenciaARS) * 100 : 0;
++
++  const opsOrdenadas = useMemo(
++    () => [...dolarOps].sort((a, b) => b.fecha.localeCompare(a.fecha)),
++    [dolarOps],
++  );
++
++  const handleRefreshCot = async () => {
++    setRefreshingCot(true);
++    refreshCotizacion(true);
++    setTimeout(() => setRefreshingCot(false), 1200);
++  };
++
++  const handleDelete = async (id: string) => {
++    if (!confirm("¿Eliminar esta operación?")) return;
++    const r = await fetch("/api/dolar", {
++      method: "DELETE",
++      headers: { "Content-Type": "application/json" },
++      body: JSON.stringify({ id }),
++    });
++    const d = await r.json();
++    if (d.ok) { toast.success("Eliminada"); refresh(); }
++    else toast.error("Error al eliminar");
++  };
++
++  return (
++    <div className="p-4 sm:p-6 lg:p-10 max-w-[1400px]">
++      {/* Header */}
++      <header className="mb-8 flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
++        <div>
++          <div className="eyebrow mb-2">Ahorro en moneda dura</div>
++          <h1 className="display text-3xl sm:text-5xl text-paper">
++            Tus <em className="italic text-amber">dólares</em>
++          </h1>
++        </div>
++        <button
++          onClick={() => { setEditing(null); setShowForm(true); }}
++          className="inline-flex items-center gap-2 bg-amber text-ink-900 px-5 py-2.5 text-sm font-medium hover:bg-amber-light transition-all self-start sm:self-auto"
++        >
++          <Plus className="w-4 h-4" />
++          Nueva operación
++        </button>
++      </header>
++
++      {/* Cotización oficial */}
++      <CotizacionBanner
++        cot={cotizacion}
++        onRefresh={handleRefreshCot}
++        refreshing={refreshingCot}
++      />
++
++      {/* KPIs */}
++      <div className="grid grid-cols-2 sm:grid-cols-12 gap-3 sm:gap-6 mb-8 lg:mb-12">
++        <KPICard
++          variant="hero"
++          eyebrow="Tenencia en dólares"
++          value={formatUSD(resumen.tenenciaUSD)}
++          subtitle={`Precio prom. compra ${formatPesos(resumen.precioPromedioCompra)}`}
++          accent="amber"
++          icon={DollarSign}
++          className="col-span-2 sm:col-span-6"
++          delay={0}
++        />
++        <KPICard
++          eyebrow="Valor hoy (en pesos)"
++          value={formatPesos(valorActualARS)}
++          subtitle={precioValuacion > 0 ? `@ ${formatPesos(precioValuacion)}/USD` : "Sin cotización"}
++          accent="ink"
++          className="col-span-1 sm:col-span-3"
++          delay={0.1}
++        />
++        <KPICard
++          eyebrow="Resultado por T.C."
++          value={formatPesos(resultadoARS)}
++          subtitle={`${resultadoARS >= 0 ? "+" : ""}${resultadoPct.toFixed(1)}% vs. costo`}
++          accent={resultadoARS >= 0 ? "moss" : "terra"}
++          icon={resultadoARS >= 0 ? TrendingUp : TrendingDown}
++          className="col-span-1 sm:col-span-3"
++          delay={0.15}
++        />
++      </div>
++
++      {/* Resumen compra/venta histórico */}
++      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-6 mb-8">
++        <div className="surface p-5 flex items-center gap-4">
++          <div className="w-9 h-9 rounded-full bg-moss/10 flex items-center justify-center shrink-0">
++            <ArrowDownRight className="w-4 h-4 text-moss-light" />
++          </div>
++          <div className="flex-1 min-w-0">
++            <div className="eyebrow text-moss-light mb-0.5">Comprado histórico</div>
++            <div className="text-paper tabular">{formatUSD(resumen.totalCompradoUSD)}</div>
++          </div>
++          <div className="text-right text-xs text-ink-300 tabular">{formatPesos(resumen.totalCompradoARS)}</div>
++        </div>
++        <div className="surface p-5 flex items-center gap-4">
++          <div className="w-9 h-9 rounded-full bg-terra/10 flex items-center justify-center shrink-0">
++            <ArrowUpRight className="w-4 h-4 text-terra-light" />
++          </div>
++          <div className="flex-1 min-w-0">
++            <div className="eyebrow text-terra-light mb-0.5">Vendido histórico</div>
++            <div className="text-paper tabular">{formatUSD(resumen.totalVendidoUSD)}</div>
++          </div>
++          <div className="text-right text-xs text-ink-300 tabular">{formatPesos(resumen.totalVendidoARS)}</div>
++        </div>
++      </div>
++
++      {/* Tabla de operaciones */}
++      <div className="surface overflow-hidden">
++        <div className="overflow-x-auto">
++          <table className="w-full">
++            <thead>
++              <tr className="hairline-b">
++                <th className="eyebrow text-left px-6 py-4">Fecha</th>
++                <th className="eyebrow text-left px-2 py-4">Tipo</th>
++                <th className="eyebrow text-right px-2 py-4">USD</th>
++                <th className="eyebrow text-right px-2 py-4">Precio</th>
++                <th className="eyebrow text-right px-2 py-4">Total ARS</th>
++                <th className="eyebrow text-left px-2 py-4">Notas</th>
++                <th className="eyebrow text-right px-6 py-4 w-24">Acciones</th>
++              </tr>
++            </thead>
++            <tbody>
++              {isLoading ? (
++                <tr><td colSpan={7} className="text-center py-12 text-ink-300 italic">Cargando...</td></tr>
++              ) : opsOrdenadas.length === 0 ? (
++                <tr><td colSpan={7} className="text-center py-16 text-ink-300 italic">
++                  Todavía no registraste compras ni ventas de dólares
++                </td></tr>
++              ) : opsOrdenadas.map((op) => (
++                <tr key={op.id} className="hairline-b last:border-0 hover:bg-ink-700/20 transition-colors group">
++                  <td className="px-6 py-4 text-sm text-paper tabular font-mono">
++                    {formatFecha(op.fecha)}
++                    <div className="text-[10px] text-ink-400">{formatMes(fechaToMes(op.fecha), true)}</div>
++                  </td>
++                  <td className="px-2 py-4">
++                    <span className={`inline-flex items-center gap-1.5 text-xs px-2 py-1 border ${
++                      op.tipo === "compra"
++                        ? "border-moss/40 text-moss-light bg-moss/5"
++                        : "border-terra/40 text-terra-light bg-terra/5"
++                    }`}>
++                      {op.tipo === "compra" ? "↓ Compra" : "↑ Venta"}
++                    </span>
++                  </td>
++                  <td className="px-2 py-4 text-right tabular font-mono text-sm text-paper">
++                    {formatUSD(op.montoUSD)}
++                  </td>
++                  <td className="px-2 py-4 text-right tabular font-mono text-xs text-ink-200">
++                    {formatPesos(op.precioARS)}
++                  </td>
++                  <td className="px-2 py-4 text-right tabular font-mono text-sm">
++                    <span className={op.tipo === "compra" ? "text-terra-light" : "text-moss-light"}>
++                      {op.tipo === "compra" ? "-" : "+"}{formatPesos(op.totalARS)}
++                    </span>
++                  </td>
++                  <td className="px-2 py-4 text-xs text-ink-300 max-w-[160px] truncate">{op.notas || "—"}</td>
++                  <td className="px-6 py-4 text-right">
++                    <div className="inline-flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
++                      <button onClick={() => { setEditing(op); setShowForm(true); }}
++                        className="p-1.5 text-ink-300 hover:text-paper transition-colors">
++                        <Edit2 className="w-3.5 h-3.5" />
++                      </button>
++                      <button onClick={() => handleDelete(op.id)}
++                        className="p-1.5 text-ink-300 hover:text-terra-light transition-colors">
++                        <Trash2 className="w-3.5 h-3.5" />
++                      </button>
++                    </div>
++                  </td>
++                </tr>
++              ))}
++            </tbody>
++          </table>
++        </div>
++      </div>
++
++      <p className="mt-4 text-[11px] text-ink-400 leading-relaxed max-w-2xl">
++        Cada compra descuenta su equivalente en pesos de tu acumulado y cada venta lo suma,
++        así que no hace falta cargar también un movimiento manual en pesos por la operación.
++      </p>
++
++      <AnimatePresence>
++        {showForm && (
++          <DolarForm
++            editing={editing}
++            cotizacion={cotizacion}
++            onClose={() => setShowForm(false)}
++            onSaved={() => { setShowForm(false); refresh(); }}
++          />
++        )}
++      </AnimatePresence>
++    </div>
++  );
++}
++
++// ── Banner de cotización ──────────────────────────────────────────────────────
++
++function CotizacionBanner({ cot, onRefresh, refreshing }: {
++  cot: Cotizacion | null; onRefresh: () => void; refreshing: boolean;
++}) {
++  const noData = !cot || cot.fallback || (cot.compra === 0 && cot.venta === 0);
++
++  return (
++    <div className="surface p-5 mb-8 flex flex-col sm:flex-row sm:items-center gap-4 sm:gap-8">
++      <div className="flex items-center gap-3">
++        <div className="eyebrow text-amber">Dólar oficial · dolarhoy</div>
++        <button
++          onClick={onRefresh}
++          disabled={refreshing}
++          className="text-ink-300 hover:text-amber transition-colors disabled:opacity-50"
++          title="Actualizar cotización"
++        >
++          <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? "animate-spin" : ""}`} />
++        </button>
++      </div>
++
++      {noData ? (
++        <div className="text-sm text-ink-300 italic">
++          No se pudo leer la cotización. Podés cargar el precio a mano en cada operación.
++        </div>
++      ) : (
++        <div className="flex items-center gap-8 flex-1">
++          <div>
++            <div className="text-[10px] uppercase tracking-wider text-ink-400 mb-0.5">Compra</div>
++            <div className="display text-2xl text-moss-light tabular">{formatPesos(cot!.compra)}</div>
++          </div>
++          <div>
++            <div className="text-[10px] uppercase tracking-wider text-ink-400 mb-0.5">Venta</div>
++            <div className="display text-2xl text-terra-light tabular">{formatPesos(cot!.venta)}</div>
++          </div>
++          {cot!.actualizado && (
++            <div className="ml-auto text-[10px] text-ink-400 hidden sm:block">
++              Actualizado {cot!.actualizado}
++            </div>
++          )}
++        </div>
++      )}
++    </div>
++  );
++}
++
++// ── KPI card (misma estética que Dashboard) ───────────────────────────────────
++
++function KPICard({ variant = "default", eyebrow, value, accent, subtitle, icon: Icon, delay = 0, className = "" }: {
++  variant?: "hero" | "default";
++  eyebrow: string; value: string; accent: "moss" | "terra" | "amber" | "ink";
++  subtitle: string; icon?: any; delay?: number; className?: string;
++}) {
++  const accentColors = { moss: "#6A8970", terra: "#D4886E", amber: "#C9A24B", ink: "#8A8576" };
++  const color = accentColors[accent];
++  const isHero = variant === "hero";
++
++  return (
++    <motion.div
++      initial={{ opacity: 0, y: 12 }}
++      animate={{ opacity: 1, y: 0 }}
++      transition={{ duration: 0.5, delay, ease: [0.22, 1, 0.36, 1] }}
++      className={`surface p-4 sm:p-7 relative overflow-hidden ${className}`}
++    >
++      <div className="absolute top-0 left-0 right-0 h-px" style={{ background: color }} />
++      <div className="flex items-start justify-between mb-2 sm:mb-4">
++        <div className="eyebrow text-[8px] sm:text-[10px]" style={{ color }}>{eyebrow}</div>
++        {Icon && <Icon className="w-3 h-3 sm:w-4 sm:h-4 text-ink-300 hidden sm:block" strokeWidth={1.5} />}
++      </div>
++      <div className={`display tabular leading-none ${isHero ? "text-3xl sm:text-5xl lg:text-6xl" : "text-2xl sm:text-3xl lg:text-4xl"} text-paper mb-1 sm:mb-2`}>
++        {value}
++      </div>
++      <div className="text-[9px] sm:text-[11px] text-ink-300 tracking-wide truncate">{subtitle}</div>
++    </motion.div>
++  );
++}
++
++// ── Formulario ────────────────────────────────────────────────────────────────
++
++function DolarForm({ editing, cotizacion, onClose, onSaved }: {
++  editing: DolarOperacion | null;
++  cotizacion: Cotizacion | null;
++  onClose: () => void;
++  onSaved: () => void;
++}) {
++  const today = new Date().toISOString().slice(0, 10);
++
++  const [tipo, setTipo] = useState<"compra" | "venta">(editing?.tipo || "compra");
++  const [fecha, setFecha] = useState(editing?.fecha || today);
++  const [montoUSD, setMontoUSD] = useState(editing?.montoUSD?.toString() || "");
++  const [precioARS, setPrecioARS] = useState(editing?.precioARS?.toString() || "");
++  const [precioAuto, setPrecioAuto] = useState(!editing);
++  const [notas, setNotas] = useState(editing?.notas || "");
++  const [saving, setSaving] = useState(false);
++
++  const cotDisponible = cotizacion && !cotizacion.fallback &&
++    (cotizacion.compra > 0 || cotizacion.venta > 0);
++
++  // Autocompleta el precio con la cotización del día según el tipo:
++  // al comprar pagás el precio de VENTA del banco; al vender cobrás el de COMPRA.
++  useEffect(() => {
++    if (precioAuto && cotDisponible) {
++      const sugerido = tipo === "compra" ? cotizacion!.venta : cotizacion!.compra;
++      setPrecioARS(sugerido ? String(sugerido) : "");
++    }
++  }, [tipo, precioAuto, cotDisponible, cotizacion]);
++
++  const usd = parseFloat(montoUSD) || 0;
++  const precio = parseFloat(precioARS) || 0;
++  const totalARS = usd * precio;
++
++  const handleSubmit = async () => {
++    if (!montoUSD || !precioARS || !fecha) {
++      toast.error("Completá fecha, monto en USD y precio");
++      return;
++    }
++    setSaving(true);
++    const payload = {
++      ...(editing ? { id: editing.id, createdAt: editing.createdAt } : {}),
++      fecha, tipo,
++      montoUSD: usd,
++      precioARS: precio,
++      notas,
++    };
++    const method = editing ? "PUT" : "POST";
++    const r = await fetch("/api/dolar", {
++      method,
++      headers: { "Content-Type": "application/json" },
++      body: JSON.stringify(payload),
++    });
++    const d = await r.json();
++    if (d.ok || d.operacion) {
++      toast.success(editing ? "Actualizada" : "Registrada");
++      onSaved();
++    } else {
++      toast.error(d.error || "Error al guardar");
++    }
++    setSaving(false);
++  };
++
++  return (
++    <motion.div
++      initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
++      className="fixed inset-0 bg-ink-900/80 backdrop-blur-sm z-50 flex items-center justify-center p-6"
++      onClick={onClose}
++    >
++      <motion.div
++        initial={{ opacity: 0, scale: 0.96, y: 20 }}
++        animate={{ opacity: 1, scale: 1, y: 0 }}
++        exit={{ opacity: 0, scale: 0.96, y: 20 }}
++        transition={{ duration: 0.25 }}
++        className="surface-elevated w-full max-w-xl p-8 max-h-[90vh] overflow-y-auto"
++        onClick={(e) => e.stopPropagation()}
++      >
++        <div className="flex items-start justify-between mb-6">
++          <div>
++            <div className="eyebrow mb-1">{editing ? "Editar" : "Nueva"}</div>
++            <h2 className="display text-3xl text-paper">
++              {editing ? "Modificar operación" : "Comprar / Vender USD"}
++            </h2>
++          </div>
++          <button onClick={onClose} className="text-ink-300 hover:text-paper p-2">
++            <X className="w-5 h-5" />
++          </button>
++        </div>
++
++        <div className="space-y-5">
++          {/* Tipo */}
++          <div className="grid grid-cols-2 gap-3">
++            {(["compra", "venta"] as const).map(t => (
++              <button
++                key={t}
++                onClick={() => { setTipo(t); setPrecioAuto(true); }}
++                className={`py-3 border text-sm transition-all ${
++                  tipo === t
++                    ? t === "compra" ? "border-moss bg-moss/10 text-moss-light" : "border-terra bg-terra/10 text-terra-light"
++                    : "border-ink-500 text-ink-300 hover:border-ink-400"
++                }`}
++              >
++                {t === "compra" ? "↓ Compro USD" : "↑ Vendo USD"}
++              </button>
++            ))}
++          </div>
++
++          {/* Monto USD + Precio */}
++          <div className="grid grid-cols-2 gap-4">
++            <Field label="Monto (USD)">
++              <input type="number" step="0.01" value={montoUSD}
++                onChange={(e) => setMontoUSD(e.target.value)}
++                placeholder="0.00" className="form-input tabular font-mono" autoFocus />
++            </Field>
++            <Field label={
++              <span className="flex items-center gap-2">
++                Precio (ARS/USD)
++                {cotDisponible && (
++                  <label className="flex items-center gap-1 text-[10px] cursor-pointer">
++                    <input type="checkbox" checked={precioAuto}
++                      onChange={(e) => setPrecioAuto(e.target.checked)}
++                      className="accent-amber" />
++                    <span>Auto</span>
++                  </label>
++                )}
++              </span>
++            }>
++              <input type="number" step="0.01" value={precioARS}
++                onChange={(e) => { setPrecioARS(e.target.value); setPrecioAuto(false); }}
++                placeholder="0.00" className="form-input tabular font-mono" />
++            </Field>
++          </div>
++
++          {/* Fecha */}
++          <Field label="Fecha de la operación">
++            <input type="date" value={fecha} max={today}
++              onChange={(e) => setFecha(e.target.value)}
++              className="form-input tabular" />
++            <p className="text-[10px] text-ink-400 mt-1">
++              Podés cargar operaciones de meses anteriores con el precio de ese momento.
++            </p>
++          </Field>
++
++          {/* Total calculado */}
++          <div className="surface p-4 flex items-center justify-between">
++            <span className="eyebrow">Total en pesos</span>
++            <span className={`display text-2xl tabular ${tipo === "compra" ? "text-terra-light" : "text-moss-light"}`}>
++              {tipo === "compra" ? "-" : "+"}{formatPesos(totalARS)}
++            </span>
++          </div>
++
++          {/* Notas */}
++          <Field label="Notas (opcional)">
++            <input type="text" value={notas} onChange={(e) => setNotas(e.target.value)}
++              placeholder="Ej: compra mensual en el banco" className="form-input" />
++          </Field>
++        </div>
++
++        <div className="flex justify-end gap-3 mt-8 pt-6 hairline-t">
++          <button onClick={onClose}
++            className="px-5 py-2.5 text-sm text-ink-300 hover:text-paper transition-colors">
++            Cancelar
++          </button>
++          <button onClick={handleSubmit} disabled={saving}
++            className="px-6 py-2.5 bg-amber text-ink-900 text-sm font-medium hover:bg-amber-light disabled:opacity-50 transition-all">
++            {saving ? "Guardando..." : "Guardar"}
++          </button>
++        </div>
++      </motion.div>
++
++      <style jsx global>{`
++        .form-input {
++          width: 100%;
++          background: rgba(13, 18, 13, 0.6);
++          border: 1px solid #3A3833;
++          color: #F4F1EA;
++          padding: 10px 14px;
++          font-size: 14px;
++          outline: none;
++          transition: border-color 0.2s;
++        }
++        .form-input:focus { border-color: #C9A24B; }
++      `}</style>
++    </motion.div>
++  );
++}
++
++function Field({ label, children }: { label: React.ReactNode; children: React.ReactNode }) {
++  return (
++    <div>
++      <label className="eyebrow block mb-2">{label}</label>
++      {children}
++    </div>
++  );
++}
+diff --git a/src/lib/dolar-calc.ts b/src/lib/dolar-calc.ts
+new file mode 100644
+index 0000000..8fff0c4
+--- /dev/null
++++ b/src/lib/dolar-calc.ts
+@@ -0,0 +1,74 @@
++import type { DolarOperacion } from "@/types";
++
++export interface DolarResumen {
++  /** USD actualmente en cartera (compras − ventas) */
++  tenenciaUSD: number;
++  /** Pesos totales invertidos netos (compras ARS − ventas ARS) */
++  netoInvertidoARS: number;
++  /** Precio promedio ponderado de compra (ARS/USD) de la tenencia actual */
++  precioPromedioCompra: number;
++  /** Total de USD comprados históricamente */
++  totalCompradoUSD: number;
++  /** Total de USD vendidos históricamente */
++  totalVendidoUSD: number;
++  /** Pesos gastados en compras */
++  totalCompradoARS: number;
++  /** Pesos recibidos por ventas */
++  totalVendidoARS: number;
++}
++
++/**
++ * Calcula la tenencia y el precio promedio de compra usando el método
++ * de costo promedio ponderado: las ventas reducen la tenencia al costo
++ * promedio vigente, sin alterar el precio promedio de lo que queda.
++ * Las operaciones se procesan en orden cronológico.
++ */
++export function resumenDolar(ops: DolarOperacion[]): DolarResumen {
++  const ordenadas = [...ops].sort((a, b) => a.fecha.localeCompare(b.fecha));
++
++  let tenencia = 0;          // USD en cartera
++  let costoAcumARS = 0;      // costo total en pesos de la tenencia actual
++
++  let totalCompradoUSD = 0, totalVendidoUSD = 0;
++  let totalCompradoARS = 0, totalVendidoARS = 0;
++
++  for (const op of ordenadas) {
++    if (op.tipo === "compra") {
++      tenencia += op.montoUSD;
++      costoAcumARS += op.totalARS;
++      totalCompradoUSD += op.montoUSD;
++      totalCompradoARS += op.totalARS;
++    } else {
++      // venta: saca USD al costo promedio vigente
++      const ppc = tenencia > 0 ? costoAcumARS / tenencia : 0;
++      const usdVendidos = Math.min(op.montoUSD, tenencia);
++      tenencia -= op.montoUSD;
++      costoAcumARS -= ppc * usdVendidos;
++      if (tenencia < 0.0001) { tenencia = Math.max(tenencia, 0); costoAcumARS = 0; }
++      totalVendidoUSD += op.montoUSD;
++      totalVendidoARS += op.totalARS;
++    }
++  }
++
++  return {
++    tenenciaUSD: tenencia,
++    netoInvertidoARS: totalCompradoARS - totalVendidoARS,
++    precioPromedioCompra: tenencia > 0 ? costoAcumARS / tenencia : 0,
++    totalCompradoUSD,
++    totalVendidoUSD,
++    totalCompradoARS,
++    totalVendidoARS,
++  };
++}
++
++/**
++ * Impacto neto en pesos de las operaciones de dólar sobre el acumulado:
++ * las compras restan pesos (salieron de la cuenta), las ventas suman.
++ * Es decir: ventasARS − comprasARS.
++ */
++export function impactoPesosDolar(ops: DolarOperacion[]): number {
++  return ops.reduce(
++    (s, op) => s + (op.tipo === "venta" ? op.totalARS : -op.totalARS),
++    0,
++  );
++}
+diff --git a/src/lib/dolar.ts b/src/lib/dolar.ts
+new file mode 100644
+index 0000000..6da6fd8
+--- /dev/null
++++ b/src/lib/dolar.ts
+@@ -0,0 +1,73 @@
++import type { Cotizacion } from "@/types";
++
++/**
++ * Scraper de la cotización del dólar oficial desde dolarhoy.com.
++ *
++ * La página renderiza los valores en HTML plano dentro de un bloque
++ * `<div class="tile cotizacion_value">` con dos `<div class="value">`,
++ * así que se pueden extraer con una expresión regular sin depender de
++ * ninguna librería de parseo.
++ *
++ * Se cachea en memoria del proceso para no pegarle a dolarhoy en cada
++ * request (y para tolerar caídas puntuales del sitio).
++ */
++
++const DOLARHOY_URL = "https://dolarhoy.com/cotizaciondolaroficial";
++const CACHE_TTL = 10 * 60 * 1000; // 10 minutos
++
++let cache: { data: Cotizacion; at: number } | null = null;
++
++/** Convierte "1.470,00" o "1470,00" (formato AR) a number */
++function parseNumAR(s: string): number {
++  return parseFloat(s.replace(/\./g, "").replace(",", "."));
++}
++
++function parseCotizacion(html: string): Cotizacion {
++  // Ancla en el div real (evita el primer match, que está dentro de un <style>)
++  const m = html.match(
++    /tile cotizacion_value["'][\s\S]{0,1200}?Compra<\/div>\s*<div class="value">\s*\$?\s*([\d.,]+)[\s\S]{0,400}?Venta<\/div>\s*<div class="value">\s*\$?\s*([\d.,]+)/i
++  );
++  if (!m) throw new Error("No se encontraron los valores de compra/venta");
++
++  const upd = html.match(/Actualizado por última vez:\s*([^<]+)</i);
++
++  return {
++    compra: parseNumAR(m[1]),
++    venta: parseNumAR(m[2]),
++    actualizado: upd ? upd[1].trim() : null,
++    fetchedAt: new Date().toISOString(),
++  };
++}
++
++/**
++ * Devuelve la cotización oficial. Usa caché de 10 minutos.
++ * Si el scraping falla y hay caché vieja, la devuelve; si no, tira error
++ * controlado que la API traduce a un fallback editable por el usuario.
++ */
++export async function getCotizacionOficial(force = false): Promise<Cotizacion> {
++  const now = Date.now();
++  if (!force && cache && now - cache.at < CACHE_TTL) {
++    return cache.data;
++  }
++
++  try {
++    const res = await fetch(DOLARHOY_URL, {
++      headers: {
++        "User-Agent":
++          "Mozilla/5.0 (compatible; finanzas-web/1.0; +https://github.com/gcasas205/finanzas-web)",
++      },
++      // Evita que Next cachee la respuesta a nivel fetch; el caché lo maneja este módulo
++      cache: "no-store",
++    });
++    if (!res.ok) throw new Error(`dolarhoy respondió ${res.status}`);
++    const html = await res.text();
++    const data = parseCotizacion(html);
++    cache = { data, at: now };
++    return data;
++  } catch (e) {
++    console.error("Error obteniendo cotización de dolarhoy:", e);
++    // Si tenemos algo en caché, aunque esté vencido, es mejor que nada
++    if (cache) return cache.data;
++    throw e;
++  }
++}
+diff --git a/src/lib/sheets.ts b/src/lib/sheets.ts
+index 55075bb..39bd8c5 100644
+--- a/src/lib/sheets.ts
++++ b/src/lib/sheets.ts
+@@ -2,7 +2,7 @@ import { google, sheets_v4 } from "googleapis";
+ import fs from "fs/promises";
+ import path from "path";
+ import os from "os";
+-import type { Transaction, Sueldo, AppConfig } from "@/types";
++import type { Transaction, Sueldo, AppConfig, DolarOperacion } from "@/types";
+ 
+ /**
+  * Config se puede cargar de:
+@@ -118,6 +118,10 @@ const SUELDO_HEADERS = [
+   "otrosDescuentos", "fechaPago", "createdAt"
+ ];
+ 
++const DOLAR_HEADERS = [
++  "id", "fecha", "tipo", "montoUSD", "precioARS", "totalARS", "notas", "createdAt"
++];
++
+ async function ensureSheets(client: sheets_v4.Sheets, sheetId: string) {
+   const meta = await client.spreadsheets.get({ spreadsheetId: sheetId });
+   const existing = meta.data.sheets?.map(s => s.properties?.title) ?? [];
+@@ -125,6 +129,7 @@ async function ensureSheets(client: sheets_v4.Sheets, sheetId: string) {
+   const required: Array<[string, string[]]> = [
+     ["Transacciones", TX_HEADERS],
+     ["Sueldos", SUELDO_HEADERS],
++    ["Dolares", DOLAR_HEADERS],
+   ];
+ 
+   for (const [name, headers] of required) {
+@@ -213,6 +218,28 @@ function sueldoToRow(s: Sueldo): any[] {
+   ];
+ }
+ 
++function rowToDolar(row: any[]): DolarOperacion {
++  const montoUSD = parseFloat(row[3]) || 0;
++  const precioARS = parseFloat(row[4]) || 0;
++  return {
++    id: row[0] ?? "",
++    fecha: row[1] ?? "",
++    tipo: (row[2] ?? "compra") as DolarOperacion["tipo"],
++    montoUSD,
++    precioARS,
++    // Recalcula por las dudas para que totalARS nunca quede inconsistente
++    totalARS: parseFloat(row[5]) || montoUSD * precioARS,
++    notas: row[6] ?? "",
++    createdAt: row[7] ?? new Date().toISOString(),
++  };
++}
++
++function dolarToRow(d: DolarOperacion): any[] {
++  return [
++    d.id, d.fecha, d.tipo, d.montoUSD, d.precioARS, d.totalARS, d.notas, d.createdAt
++  ];
++}
++
+ // ─── API pública ────────────────────────────────────────────────────────────
+ 
+ export async function listTransactions(): Promise<Transaction[]> {
+@@ -373,6 +400,108 @@ export async function addSueldo(s: Sueldo): Promise<boolean> {
+   }
+ }
+ 
++// ─── Operaciones de dólar ────────────────────────────────────────────────────
++
++export async function listDolarOps(): Promise<DolarOperacion[]> {
++  const ctx = await getSheetsClient();
++  if (!ctx) return [];
++  try {
++    await ensureSheets(ctx.client, ctx.sheetId);
++    const r = await ctx.client.spreadsheets.values.get({
++      spreadsheetId: ctx.sheetId,
++      range: "Dolares!A2:H",
++    });
++    return (r.data.values ?? []).filter(row => row[0]).map(rowToDolar);
++  } catch (e) {
++    console.error("Error listing dolar ops:", e);
++    return [];
++  }
++}
++
++export async function addDolarOp(op: DolarOperacion): Promise<boolean> {
++  const ctx = await getSheetsClient();
++  if (!ctx) return false;
++  try {
++    await ensureSheets(ctx.client, ctx.sheetId);
++    await ctx.client.spreadsheets.values.append({
++      spreadsheetId: ctx.sheetId,
++      range: "Dolares!A:H",
++      valueInputOption: "RAW",
++      requestBody: { values: [dolarToRow(op)] },
++    });
++    return true;
++  } catch (e) {
++    console.error("Error adding dolar op:", e);
++    return false;
++  }
++}
++
++export async function updateDolarOp(op: DolarOperacion): Promise<boolean> {
++  const ctx = await getSheetsClient();
++  if (!ctx) return false;
++  try {
++    const r = await ctx.client.spreadsheets.values.get({
++      spreadsheetId: ctx.sheetId,
++      range: "Dolares!A2:A",
++    });
++    const ids = (r.data.values ?? []).map(row => row[0]);
++    const idx = ids.indexOf(op.id);
++    if (idx === -1) return false;
++
++    const rowNumber = idx + 2;
++    await ctx.client.spreadsheets.values.update({
++      spreadsheetId: ctx.sheetId,
++      range: `Dolares!A${rowNumber}:H${rowNumber}`,
++      valueInputOption: "RAW",
++      requestBody: { values: [dolarToRow(op)] },
++    });
++    return true;
++  } catch (e) {
++    console.error("Error updating dolar op:", e);
++    return false;
++  }
++}
++
++export async function deleteDolarOp(id: string): Promise<boolean> {
++  const ctx = await getSheetsClient();
++  if (!ctx) return false;
++  try {
++    const r = await ctx.client.spreadsheets.values.get({
++      spreadsheetId: ctx.sheetId,
++      range: "Dolares!A2:A",
++    });
++    const ids = (r.data.values ?? []).map(row => row[0]);
++    const idx = ids.indexOf(id);
++    if (idx === -1) return false;
++
++    const meta = await ctx.client.spreadsheets.get({ spreadsheetId: ctx.sheetId });
++    const sheet = meta.data.sheets?.find(s => s.properties?.title === "Dolares");
++    if (sheet?.properties?.sheetId == null) return false;
++    const innerSheetId = sheet.properties.sheetId;
++
++    const rowIndex = idx + 1; // fila 1 = header, datos arrancan en índice 1
++    await ctx.client.spreadsheets.batchUpdate({
++      spreadsheetId: ctx.sheetId,
++      requestBody: {
++        requests: [{
++          deleteDimension: {
++            range: {
++              sheetId: innerSheetId,
++              dimension: "ROWS",
++              startIndex: rowIndex,
++              endIndex: rowIndex + 1,
++            }
++          }
++        }]
++      }
++    });
++    return true;
++  } catch (e) {
++    console.error("Error deleting dolar op:", e);
++    return false;
++  }
++}
++
+ export async function testConnection(): Promise<{ ok: boolean; error?: string }> {
+   const config = await loadConfig();
+   if (!config.googleSheetId) return { ok: false, error: "Sheet ID no configurado" };
+diff --git a/src/lib/utils.ts b/src/lib/utils.ts
+index c1fb46d..986919a 100644
+--- a/src/lib/utils.ts
++++ b/src/lib/utils.ts
+@@ -15,6 +15,16 @@ export function formatPesos(n: number): string {
+   }).format(n);
+ }
+ 
++/** Format as US dollars: US$1,234.56 */
++export function formatUSD(n: number, decimals = 2): string {
++  return new Intl.NumberFormat("es-AR", {
++    style: "currency",
++    currency: "USD",
++    minimumFractionDigits: decimals,
++    maximumFractionDigits: decimals,
++  }).format(n);
++}
++
+ /** Compact format: $1.2M, $345K */
+ export function formatPesosCompact(n: number): string {
+   const abs = Math.abs(n);
+diff --git a/src/types/index.ts b/src/types/index.ts
+index 85a697a..f225f07 100644
+--- a/src/types/index.ts
++++ b/src/types/index.ts
+@@ -38,6 +38,36 @@ export interface Sueldo {
+   createdAt: string;
+ }
+ 
++export type DolarOperacionTipo = "compra" | "venta";
++
++export interface DolarOperacion {
++  id: string;
++  /** Fecha de la operación (ISO yyyy-mm-dd). Puede ser de meses anteriores. */
++  fecha: string;
++  /** compra = comprás USD (salen pesos); venta = vendés USD (entran pesos) */
++  tipo: DolarOperacionTipo;
++  /** Cantidad de dólares operados */
++  montoUSD: number;
++  /** Precio en pesos por cada dólar (ARS/USD) usado en esta operación */
++  precioARS: number;
++  /** Total en pesos = montoUSD * precioARS (se recalcula al guardar) */
++  totalARS: number;
++  notas: string;
++  createdAt: string;
++}
++
++/** Cotización oficial scrapeada de dolarhoy.com */
++export interface Cotizacion {
++  compra: number;
++  venta: number;
++  /** Texto "dd/mm/aa hh:mm AM" que informa dolarhoy */
++  actualizado: string | null;
++  /** ISO en que la app trajo el dato */
++  fetchedAt: string;
++  /** true si es un valor de respaldo porque falló el scraping */
++  fallback?: boolean;
++}
++
+ export interface AppConfig {
+   nombre: string;
+   mpTna: number;
