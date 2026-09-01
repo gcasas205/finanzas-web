@@ -3,46 +3,57 @@ import type { Cotizacion } from "@/types";
 /**
  * Scraper de la cotización del dólar oficial desde dolarhoy.com.
  *
- * La página renderiza los valores en HTML plano dentro de un bloque
- * `<div class="tile cotizacion_value">` con dos `<div class="value">`,
- * así que se pueden extraer con una expresión regular sin depender de
- * ninguna librería de parseo.
+ * Fuente principal: la HOME (https://dolarhoy.com/), que se actualiza a diario.
+ * La página dedicada /cotizaciondolaroficial a veces queda congelada en
+ * dolarhoy (bug de ellos), por eso NO se usa como fuente principal.
  *
- * Se cachea en memoria del proceso para no pegarle a dolarhoy en cada
- * request (y para tolerar caídas puntuales del sitio).
+ * En la home, el recuadro del oficial está anclado por
+ *   aria-label="Link a Dólar Oficial"
+ * y los dos primeros <div class="val"> son compra y venta.
+ *
+ * Se cachea en memoria del proceso para no pegarle a dolarhoy en cada request.
  */
 
-const DOLARHOY_URL = "https://dolarhoy.com/cotizaciondolaroficial";
-const CACHE_TTL = 10 * 60 * 1000; // 10 minutos
+const HOME_URL = "https://dolarhoy.com/";
+const CACHE_TTL = 5 * 60 * 1000; // 5 minutos
 
 let cache: { data: Cotizacion; at: number } | null = null;
 
-/** Convierte "1.470,00" o "1470,00" (formato AR) a number */
+/** Convierte "1.485,00" o "1485" (formato AR) a number */
 function parseNumAR(s: string): number {
   return parseFloat(s.replace(/\./g, "").replace(",", "."));
 }
 
-function parseCotizacion(html: string): Cotizacion {
-  // Ancla en el div real (evita el primer match, que está dentro de un <style>)
-  const m = html.match(
-    /tile cotizacion_value["'][\s\S]{0,1200}?Compra<\/div>\s*<div class="value">\s*\$?\s*([\d.,]+)[\s\S]{0,400}?Venta<\/div>\s*<div class="value">\s*\$?\s*([\d.,]+)/i
-  );
-  if (!m) throw new Error("No se encontraron los valores de compra/venta");
+function parseHome(html: string): { compra: number; venta: number } {
+  const i = html.search(/aria-label="Link a D[oó]lar Oficial"/i);
+  if (i === -1) throw new Error("No se encontró el recuadro del dólar oficial en la home");
+  const block = html.slice(i, i + 900);
+  const vals = [...block.matchAll(/<div class="val">\s*\$?\s*([\d.,]+)\s*<\/div>/gi)].map(m => m[1]);
+  if (vals.length < 2) throw new Error("No se encontraron los valores de compra/venta");
+  const compra = parseNumAR(vals[0]);
+  const venta = parseNumAR(vals[1]);
+  // Sanidad: valores plausibles y venta >= compra
+  if (!compra || !venta || compra < 100 || venta < compra) {
+    throw new Error(`Valores inválidos: compra=${compra} venta=${venta}`);
+  }
+  return { compra, venta };
+}
 
-  const upd = html.match(/Actualizado por última vez:\s*([^<]+)</i);
-
-  return {
-    compra: parseNumAR(m[1]),
-    venta: parseNumAR(m[2]),
-    actualizado: upd ? upd[1].trim() : null,
-    fetchedAt: new Date().toISOString(),
-  };
+async function fetchHtml(url: string): Promise<string> {
+  const res = await fetch(url, {
+    headers: {
+      "User-Agent":
+        "Mozilla/5.0 (compatible; finanzas-web/1.0; +https://github.com/gcasas205/finanzas-web)",
+    },
+    cache: "no-store",
+  });
+  if (!res.ok) throw new Error(`dolarhoy respondió ${res.status}`);
+  return res.text();
 }
 
 /**
- * Devuelve la cotización oficial. Usa caché de 10 minutos.
- * Si el scraping falla y hay caché vieja, la devuelve; si no, tira error
- * controlado que la API traduce a un fallback editable por el usuario.
+ * Devuelve la cotización oficial. Usa caché de 5 minutos.
+ * Si el scraping falla y hay caché (aunque vencida), la devuelve.
  */
 export async function getCotizacionOficial(force = false): Promise<Cotizacion> {
   const now = Date.now();
@@ -51,22 +62,18 @@ export async function getCotizacionOficial(force = false): Promise<Cotizacion> {
   }
 
   try {
-    const res = await fetch(DOLARHOY_URL, {
-      headers: {
-        "User-Agent":
-          "Mozilla/5.0 (compatible; finanzas-web/1.0; +https://github.com/gcasas205/finanzas-web)",
-      },
-      // Evita que Next cachee la respuesta a nivel fetch; el caché lo maneja este módulo
-      cache: "no-store",
-    });
-    if (!res.ok) throw new Error(`dolarhoy respondió ${res.status}`);
-    const html = await res.text();
-    const data = parseCotizacion(html);
+    const html = await fetchHtml(HOME_URL);
+    const { compra, venta } = parseHome(html);
+    const data: Cotizacion = {
+      compra,
+      venta,
+      actualizado: null, // la home no expone un timestamp por recuadro; usamos fetchedAt
+      fetchedAt: new Date().toISOString(),
+    };
     cache = { data, at: now };
     return data;
   } catch (e) {
     console.error("Error obteniendo cotización de dolarhoy:", e);
-    // Si tenemos algo en caché, aunque esté vencido, es mejor que nada
     if (cache) return cache.data;
     throw e;
   }
