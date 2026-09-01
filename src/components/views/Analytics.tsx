@@ -29,14 +29,17 @@ export default function Analytics({ config }: Props) {
     return m.slice(0, 24);
   }, [transactions, selectedMonth]);
 
+  // Todos los gráficos de esta vista son en pesos: se excluyen los movimientos en USD
+  const txsARS = useMemo(() => transactions.filter(t => t.moneda !== "USD"), [transactions]);
+
   const acumulado = useMemo(() =>
-    transactions.reduce((s, t) => s + (t.tipo === "ingreso" ? t.monto : -t.monto), 0),
-    [transactions]
+    txsARS.reduce((s, t) => s + (t.tipo === "ingreso" ? t.monto : -t.monto), 0),
+    [txsARS]
   );
 
   const evolution = useMemo(() => {
     const map = new Map<string, { ingresos: number; egresos: number }>();
-    for (const t of transactions) {
+    for (const t of txsARS) {
       const mes = fechaToMes(t.fechaPago);
       const cur = map.get(mes) ?? { ingresos: 0, egresos: 0 };
       if (t.tipo === "ingreso") cur.ingresos += t.monto; else cur.egresos += t.monto;
@@ -51,7 +54,7 @@ export default function Analytics({ config }: Props) {
         acum += ahorro;
         return { mes, label: formatMes(mes, true), ...v, ahorro, acumulado: acum };
       });
-  }, [transactions]);
+  }, [txsARS]);
 
   const TABS = [
     { id: "tendencias", label: "Tendencias" },
@@ -70,6 +73,9 @@ export default function Analytics({ config }: Props) {
           <h1 className="display text-3xl sm:text-5xl text-paper">
             Mirá los <em className="italic text-amber">patrones</em>
           </h1>
+          <p className="text-[11px] text-ink-400 mt-2">
+            Valores en pesos · tus dólares se analizan en la pestaña Dólares
+          </p>
         </div>
 
         {/* Month selector - visible for tabs that use it */}
@@ -111,9 +117,9 @@ export default function Analytics({ config }: Props) {
       </div>
 
       {tab === "tendencias" && <TendenciasTab evolution={evolution} />}
-      {tab === "categorias" && <CategoriasTab transactions={transactions} selectedMonth={selectedMonth} />}
+      {tab === "categorias" && <CategoriasTab transactions={txsARS} selectedMonth={selectedMonth} />}
       {tab === "mercadopago" && <MercadoPagoTab acumulado={acumulado} tna={config.mpTna} />}
-      {tab === "comparativa" && <ComparativaTab transactions={transactions} selectedMonth={selectedMonth} />}
+      {tab === "comparativa" && <ComparativaTab transactions={txsARS} selectedMonth={selectedMonth} />}
     </div>
   );
 }

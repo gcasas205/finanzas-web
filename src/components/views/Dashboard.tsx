@@ -3,7 +3,7 @@
 import { useState, useMemo } from "react";
 import { motion } from "framer-motion";
 import {
-  TrendingUp, TrendingDown, Wallet, Zap, ArrowUpRight,
+  TrendingUp, TrendingDown, Wallet, Zap,
   Calendar, Info, DollarSign,
 } from "lucide-react";
 import {
@@ -66,16 +66,18 @@ export default function Dashboard({ config }: Props) {
     ? cotizacion.compra
     : dolar.precioPromedioCompra;
   const tenenciaUSDenARS = dolar.tenenciaUSD * precioValuacion;
+  const resultadoTC = tenenciaUSDenARS - dolar.tenenciaUSD * dolar.precioPromedioCompra;
 
   // Patrimonio total = pesos + tenencia en dólares valuada a hoy
   const patrimonioTotal = acumuladoARS + tenenciaUSDenARS;
 
   const mpGanancia30d = acumuladoARS > 0 ? acumuladoARS * (config.mpTna / 100 / 12) : 0;
 
-  // Evolución últimos 6 meses (basado en fechaPago)
+  // Evolución últimos 6 meses (en pesos, basado en fechaPago)
   const evolution = useMemo(() => {
     const map = new Map<string, { ingresos: number; egresos: number }>();
     for (const t of transactions) {
+      if (t.moneda === "USD") continue;
       const mes = fechaToMes(t.fechaPago);
       const cur = map.get(mes) ?? { ingresos: 0, egresos: 0 };
       if (t.tipo === "ingreso") cur.ingresos += t.monto;
@@ -172,89 +174,79 @@ export default function Dashboard({ config }: Props) {
 
       {/* KPI Grid - Editorial style */}
       <div className="grid grid-cols-2 sm:grid-cols-12 gap-3 sm:gap-6 mb-8 lg:mb-12">
-        {/* Hero: Ahorro del mes - takes more space */}
-        <KPICard
-          variant="hero"
-          eyebrow="Ahorro del mes"
-          value={ahorro}
-          accent={ahorro >= 0 ? "moss" : "terra"}
-          subtitle={`${tasaAhorro.toFixed(1)}% tasa de ahorro`}
-          icon={ahorro >= 0 ? TrendingUp : TrendingDown}
-          delay={0}
-          className="col-span-2 sm:col-span-6"
-        />
-        <KPICard
-          eyebrow="Ingresos"
-          value={ingresos}
-          accent="moss"
-          subtitle="Este mes"
-          delay={0.1}
-          className="col-span-1 sm:col-span-3"
-        />
-        <KPICard
-          eyebrow="Gastos"
-          value={egresos}
-          accent="terra"
-          subtitle="Este mes"
-          delay={0.15}
-          className="col-span-1 sm:col-span-3"
-        />
-
-        {/* Second row: patrimonio total (ARS + USD) */}
+        {/* Headline: patrimonio total (ARS + USD) */}
         <KPICard
           variant="hero"
           eyebrow="Patrimonio total"
           value={patrimonioTotal}
           accent="amber"
-          subtitle={`Pesos ${formatPesosCompact(acumuladoARS)} + USD ${formatPesosCompact(tenenciaUSDenARS)}`}
+          subtitle={`Pesos ${formatPesosCompact(acumuladoARS)} · USD ${formatPesosCompact(tenenciaUSDenARS)}`}
           icon={Wallet}
-          delay={0.2}
+          delay={0}
           className="col-span-2 sm:col-span-6"
+        />
+        <KPICard
+          eyebrow="Ahorro del mes"
+          value={ahorro}
+          accent={ahorro >= 0 ? "moss" : "terra"}
+          subtitle={`${tasaAhorro.toFixed(1)}% tasa · ${formatPesosCompact(ingresos)} in / ${formatPesosCompact(egresos)} out`}
+          icon={ahorro >= 0 ? TrendingUp : TrendingDown}
+          delay={0.1}
+          className="col-span-1 sm:col-span-3"
         />
         <KPICard
           eyebrow="Saldo en pesos"
           value={acumuladoARS}
           accent="ink"
           subtitle="Acumulado histórico"
-          delay={0.25}
+          delay={0.15}
           className="col-span-1 sm:col-span-3"
         />
+
+        {/* Posición en dólares: una sola tarjeta con 3 métricas */}
+        <motion.div
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, delay: 0.2, ease: [0.22, 1, 0.36, 1] }}
+          className="surface p-4 sm:p-7 relative overflow-hidden col-span-2 sm:col-span-8"
+        >
+          <div className="absolute top-0 left-0 right-0 h-px bg-moss" />
+          <div className="flex items-center justify-between mb-4">
+            <div className="eyebrow text-[10px] text-moss-light">Posición en dólares</div>
+            <DollarSign className="w-4 h-4 text-ink-300 hidden sm:block" strokeWidth={1.5} />
+          </div>
+          <div className="grid grid-cols-3 gap-4">
+            <div>
+              <div className="text-[9px] uppercase tracking-wider text-ink-400 mb-1">Tenencia</div>
+              <div className="display text-2xl sm:text-3xl text-paper tabular leading-none">{formatUSD(dolar.tenenciaUSD)}</div>
+              <div className="text-[10px] text-ink-300 mt-1 truncate">
+                {dolar.precioPromedioCompra > 0 ? `PPC ${formatPesos(dolar.precioPromedioCompra)}` : "Sin compras"}
+              </div>
+            </div>
+            <div>
+              <div className="text-[9px] uppercase tracking-wider text-ink-400 mb-1">Valor hoy</div>
+              <div className="display text-2xl sm:text-3xl text-paper tabular leading-none">{formatPesosCompact(tenenciaUSDenARS)}</div>
+              <div className="text-[10px] text-ink-300 mt-1 truncate">
+                {precioValuacion > 0 ? `@ ${formatPesos(precioValuacion)}` : "Sin cotización"}
+              </div>
+            </div>
+            <div>
+              <div className="text-[9px] uppercase tracking-wider text-ink-400 mb-1">Resultado T.C.</div>
+              <div className={`display text-2xl sm:text-3xl tabular leading-none ${resultadoTC >= 0 ? "text-moss-light" : "text-terra-light"}`}>
+                {resultadoTC >= 0 ? "+" : ""}{formatPesosCompact(resultadoTC)}
+              </div>
+              <div className="text-[10px] text-ink-300 mt-1">latente</div>
+            </div>
+          </div>
+        </motion.div>
+
         <KPICard
           eyebrow={`Mercado Pago · TNA ${config.mpTna}%`}
           value={mpGanancia30d}
           accent="amber"
           subtitle="Proyección 30 días"
           icon={Zap}
-          delay={0.3}
-          className="col-span-1 sm:col-span-3"
-        />
-
-        {/* Third row: posición en dólares */}
-        <KPICard
-          eyebrow="Tenencia en dólares"
-          value={dolar.tenenciaUSD}
-          valueText={formatUSD(dolar.tenenciaUSD)}
-          accent="moss"
-          subtitle={dolar.precioPromedioCompra > 0 ? `PPC ${formatPesos(dolar.precioPromedioCompra)}` : "Sin compras aún"}
-          icon={DollarSign}
-          delay={0.35}
-          className="col-span-1 sm:col-span-4"
-        />
-        <KPICard
-          eyebrow="USD en pesos (hoy)"
-          value={tenenciaUSDenARS}
-          accent="ink"
-          subtitle={precioValuacion > 0 ? `@ ${formatPesos(precioValuacion)}/USD` : "Sin cotización"}
-          delay={0.4}
-          className="col-span-1 sm:col-span-4"
-        />
-        <KPICard
-          eyebrow="Resultado por T.C."
-          value={tenenciaUSDenARS - dolar.tenenciaUSD * dolar.precioPromedioCompra}
-          accent={(tenenciaUSDenARS - dolar.tenenciaUSD * dolar.precioPromedioCompra) >= 0 ? "moss" : "terra"}
-          subtitle="Ganancia/pérdida latente"
-          icon={ArrowUpRight}
-          delay={0.45}
+          delay={0.25}
           className="col-span-2 sm:col-span-4"
         />
       </div>
