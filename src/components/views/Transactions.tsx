@@ -5,9 +5,10 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Plus, Search, Edit2, Trash2, X, Filter } from "lucide-react";
 import { toast } from "sonner";
 import type { Transaction, AppConfig } from "@/types";
-import { formatPesos, formatUSD, formatFecha, fechaToMes, formatMes, uniqueMonths, calcularFechaPagoTarjeta } from "@/lib/utils";
+import { formatPesos, formatFecha, fechaToMes, formatMes, uniqueMonths, calcularFechaPagoTarjeta, hoyLocal } from "@/lib/utils";
 import { CATEGORIES, autoCategorizar, getCategoryColor } from "@/lib/categories";
 import { useTransactions } from "@/components/DataProvider";
+import { UsdAmount } from "@/components/UsdAmount";
 
 interface Props { config: AppConfig; }
 
@@ -148,7 +149,7 @@ export default function Transactions({ config }: Props) {
           </div>
           {totals.hayUSD && (
             <div className={`text-sm tabular font-mono mt-1 ${totals.usdBalance >= 0 ? "text-moss-light" : "text-terra-light"}`}>
-              {formatUSD(totals.usdBalance)} <span className="text-ink-400 text-[10px]">en dólares</span>
+              <UsdAmount value={totals.usdBalance} /> <span className="text-ink-400 text-[10px]">en dólares</span>
             </div>
           )}
         </div>
@@ -195,7 +196,7 @@ export default function Transactions({ config }: Props) {
                 </td>
                 <td className="px-2 py-4 text-right">
                   <span className={`tabular font-mono text-sm ${tx.tipo === "ingreso" ? "text-moss-light" : "text-terra-light"}`}>
-                    {tx.tipo === "ingreso" ? "+" : "-"}{tx.moneda === "USD" ? formatUSD(tx.monto) : formatPesos(tx.monto)}
+                    {tx.tipo === "ingreso" ? "+" : "-"}{tx.moneda === "USD" ? <UsdAmount value={tx.monto} /> : formatPesos(tx.monto)}
                   </span>
                   {tx.moneda === "USD" && (
                     <span className="ml-1.5 text-[9px] uppercase tracking-wider text-amber border border-amber/40 px-1 py-0.5">USD</span>
@@ -205,18 +206,18 @@ export default function Transactions({ config }: Props) {
                   {tx.cuotaTotal > 1 ? `${tx.cuotaNumero}/${tx.cuotaTotal}` : "—"}
                 </td>
                 <td className="px-6 py-4 text-right">
-                  <div className="inline-flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <div className="inline-flex gap-1 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
                     <button
                       onClick={() => { setEditing(tx); setShowForm(true); }}
-                      className="p-1.5 text-ink-300 hover:text-paper transition-colors"
+                      className="p-2 sm:p-1.5 text-ink-300 hover:text-paper transition-colors"
                     >
-                      <Edit2 className="w-3.5 h-3.5" />
+                      <Edit2 className="w-4 h-4 sm:w-3.5 sm:h-3.5" />
                     </button>
                     <button
                       onClick={() => handleDelete(tx.id)}
-                      className="p-1.5 text-ink-300 hover:text-terra-light transition-colors"
+                      className="p-2 sm:p-1.5 text-ink-300 hover:text-terra-light transition-colors"
                     >
-                      <Trash2 className="w-3.5 h-3.5" />
+                      <Trash2 className="w-4 h-4 sm:w-3.5 sm:h-3.5" />
                     </button>
                   </div>
                 </td>
@@ -265,7 +266,7 @@ interface FormProps {
 }
 
 function TransactionForm({ editing, config, onClose, onSaved }: FormProps) {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = hoyLocal();
 
   const [tipo, setTipo] = useState<"ingreso" | "egreso">(editing?.tipo || "egreso");
   const [fechaConsumo, setFechaConsumo] = useState(editing?.fechaConsumo || today);

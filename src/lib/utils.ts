@@ -117,6 +117,19 @@ export function generateId(): string {
   return `${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
 }
 
+/**
+ * Fecha de HOY en la zona horaria local del navegador (YYYY-MM-DD).
+ * No usar toISOString(): eso convierte a UTC y de noche en Argentina (GMT-3)
+ * devuelve el día siguiente.
+ */
+export function hoyLocal(): string {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
 export function uniqueMonths(transactions: { fechaPago: string }[]): string[] {
   const set = new Set(transactions.map(t => t.fechaPago.slice(0, 7)));
   return Array.from(set).sort().reverse();

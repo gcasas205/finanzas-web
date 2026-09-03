@@ -12,11 +12,12 @@ import type { Transaction, AppConfig } from "@/types";
 import { formatPesos, formatPesosCompact, formatMes, fechaToMes, uniqueMonths } from "@/lib/utils";
 import { getCategoryColor, CATEGORIES } from "@/lib/categories";
 import { useTransactions } from "@/components/DataProvider";
+import { impactoPesosDolar } from "@/lib/dolar-calc";
 
 interface Props { config: AppConfig; }
 
 export default function Analytics({ config }: Props) {
-  const { transactions, isLoading: loading } = useTransactions();
+  const { transactions, dolarOps, isLoading: loading } = useTransactions();
   const [tab, setTab] = useState<"tendencias" | "categorias" | "mercadopago" | "comparativa">("tendencias");
   const [selectedMonth, setSelectedMonth] = useState(() => {
     const d = new Date();
@@ -35,6 +36,14 @@ export default function Analytics({ config }: Props) {
   const acumulado = useMemo(() =>
     txsARS.reduce((s, t) => s + (t.tipo === "ingreso" ? t.monto : -t.monto), 0),
     [txsARS]
+  );
+
+  // Capital que realmente sigue en pesos: el acumulado ARS menos lo que se
+  // convirtió a dólares (las compras restan, las ventas suman). Es la única
+  // base válida para proyectar el rendimiento en Mercado Pago.
+  const capitalPesos = useMemo(
+    () => acumulado + impactoPesosDolar(dolarOps),
+    [acumulado, dolarOps]
   );
 
   const evolution = useMemo(() => {
@@ -118,7 +127,7 @@ export default function Analytics({ config }: Props) {
 
       {tab === "tendencias" && <TendenciasTab evolution={evolution} />}
       {tab === "categorias" && <CategoriasTab transactions={txsARS} selectedMonth={selectedMonth} />}
-      {tab === "mercadopago" && <MercadoPagoTab acumulado={acumulado} tna={config.mpTna} />}
+      {tab === "mercadopago" && <MercadoPagoTab acumulado={capitalPesos} tna={config.mpTna} />}
       {tab === "comparativa" && <ComparativaTab transactions={txsARS} selectedMonth={selectedMonth} />}
     </div>
   );
@@ -276,7 +285,7 @@ function MercadoPagoTab({ acumulado, tna }: { acumulado: number; tna: number }) 
       {/* KPI row */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
         {[
-          { label: "Capital actual", value: acumulado, color: "#8A8576" },
+          { label: "Capital en pesos", value: acumulado, color: "#8A8576" },
           { label: "Ganancia 1 mes", value: g1, color: "#6A8970" },
           { label: "Ganancia 6 meses", value: g6, color: "#C9A24B" },
           { label: "Ganancia 12 meses", value: g12, color: "#E8C982" },
@@ -302,7 +311,8 @@ function MercadoPagoTab({ acumulado, tna }: { acumulado: number; tna: number }) 
           <div>
             <div className="eyebrow mb-1">Interés compuesto</div>
             <h3 className="display text-2xl text-paper">Proyección a 12 meses</h3>
-            <p className="text-xs text-ink-300 mt-1">TNA {tna}% · Capital: {formatPesos(acumulado)}</p>
+            <p className="text-xs text-ink-300 mt-1">TNA {tna}% · Capital en pesos: {formatPesos(acumulado)}</p>
+            <p className="text-[11px] text-ink-400 mt-1">No incluye lo que tenés en dólares, solo el ahorro que sigue en pesos.</p>
           </div>
           <Zap className="w-5 h-5 text-amber" strokeWidth={1.5} />
         </div>

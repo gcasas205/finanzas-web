@@ -12,9 +12,10 @@ import {
 } from "recharts";
 import { toast } from "sonner";
 import type { DolarOperacion, Cotizacion, Transaction } from "@/types";
-import { formatPesos, formatPesosCompact, formatUSD, formatFecha, formatMes, fechaToMes, uniqueMonths } from "@/lib/utils";
+import { formatPesos, formatPesosCompact, formatFecha, formatMes, fechaToMes, uniqueMonths, hoyLocal } from "@/lib/utils";
 import { resumenDolar } from "@/lib/dolar-calc";
 import { useDolar, useTransactions } from "@/components/DataProvider";
+import { UsdAmount } from "@/components/UsdAmount";
 
 const ALL = "__all__";
 
@@ -140,18 +141,18 @@ export default function Dolares() {
             Tus <em className="italic text-amber">dólares</em>
           </h1>
         </div>
-        <div className="flex items-center gap-3 self-start sm:self-auto">
+        <div className="flex items-center gap-3 w-full sm:w-auto">
           <select
             value={selectedMonth}
             onChange={(e) => setSelectedMonth(e.target.value)}
-            className="bg-ink-800 border border-ink-500 text-paper px-3 py-2 text-sm focus:border-amber outline-none cursor-pointer"
+            className="flex-1 sm:flex-none bg-ink-800 border border-ink-500 text-paper px-3 py-2 text-sm focus:border-amber outline-none cursor-pointer"
           >
             <option value={ALL}>Todo el histórico</option>
             {months.map(m => <option key={m} value={m}>{formatMes(m)}</option>)}
           </select>
           <button
             onClick={() => { setEditing(null); setShowForm(true); }}
-            className="inline-flex items-center gap-2 bg-amber text-ink-900 px-5 py-2.5 text-sm font-medium hover:bg-amber-light transition-all"
+            className="inline-flex items-center gap-2 bg-amber text-ink-900 px-5 py-2.5 text-sm font-medium hover:bg-amber-light transition-all shrink-0"
           >
             <Plus className="w-4 h-4" />
             Nueva
@@ -167,7 +168,7 @@ export default function Dolares() {
         <KPICard
           variant="hero"
           eyebrow="Tenencia en dólares"
-          value={formatUSD(resumen.tenenciaUSD)}
+          value={<UsdAmount value={resumen.tenenciaUSD} />}
           subtitle={`Precio prom. compra ${formatPesos(resumen.precioPromedioCompra)}`}
           accent="amber"
           icon={DollarSign}
@@ -277,7 +278,7 @@ export default function Dolares() {
                   </td>
                   <td className="px-2 py-4"><ConceptoBadge tipo={f.tipo} /></td>
                   <td className="px-2 py-4 text-right tabular font-mono text-sm text-paper">
-                    {formatUSD(f.usd)}
+                    <UsdAmount value={f.usd} />
                   </td>
                   <td className="px-2 py-4 text-right tabular font-mono text-xs text-ink-200">
                     {f.precio > 0 ? formatPesos(f.precio) : "—"}
@@ -292,14 +293,14 @@ export default function Dolares() {
                   <td className="px-2 py-4 text-xs text-ink-300 max-w-[160px] truncate">{f.notas || "—"}</td>
                   <td className="px-6 py-4 text-right">
                     {f.kind === "op" ? (
-                      <div className="inline-flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <div className="inline-flex gap-1 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
                         <button onClick={() => { setEditing(f.raw as DolarOperacion); setShowForm(true); }}
-                          className="p-1.5 text-ink-300 hover:text-paper transition-colors">
-                          <Edit2 className="w-3.5 h-3.5" />
+                          className="p-2 sm:p-1.5 text-ink-300 hover:text-paper transition-colors">
+                          <Edit2 className="w-4 h-4 sm:w-3.5 sm:h-3.5" />
                         </button>
                         <button onClick={() => handleDelete(f.id)}
-                          className="p-1.5 text-ink-300 hover:text-terra-light transition-colors">
-                          <Trash2 className="w-3.5 h-3.5" />
+                          className="p-2 sm:p-1.5 text-ink-300 hover:text-terra-light transition-colors">
+                          <Trash2 className="w-4 h-4 sm:w-3.5 sm:h-3.5" />
                         </button>
                       </div>
                     ) : (
@@ -357,7 +358,7 @@ function DesgloseCard({ icon: Icon, accent, label, usd, ars, arsLabel }: {
         <div className="eyebrow text-[9px] sm:text-[10px]" style={{ color: accent }}>{label}</div>
         <Icon className="w-3.5 h-3.5 text-ink-300" strokeWidth={1.5} />
       </div>
-      <div className="display text-xl sm:text-2xl text-paper tabular leading-none">{formatUSD(usd)}</div>
+      <div className="display text-xl sm:text-2xl text-paper tabular leading-none"><UsdAmount value={usd} /></div>
       <div className="text-[10px] text-ink-300 mt-1 tabular">
         {ars !== undefined ? `${formatPesosCompact(ars)} ${arsLabel}` : arsLabel}
       </div>
@@ -410,7 +411,7 @@ function CotizacionBanner({ cot, onRefresh, refreshing }: {
 
 function KPICard({ variant = "default", eyebrow, value, accent, subtitle, icon: Icon, className = "" }: {
   variant?: "hero" | "default";
-  eyebrow: string; value: string; accent: "moss" | "terra" | "amber" | "ink";
+  eyebrow: string; value: React.ReactNode; accent: "moss" | "terra" | "amber" | "ink";
   subtitle: string; icon?: any; className?: string;
 }) {
   const accentColors = { moss: "#6A8970", terra: "#D4886E", amber: "#C9A24B", ink: "#8A8576" };
@@ -451,7 +452,7 @@ function UsdTooltip({ active, payload, label }: any) {
             <div className="w-2 h-2 rounded-full" style={{ background: e.color }} />
             <span className="text-ink-200">{e.name}</span>
           </div>
-          <span className="text-paper tabular font-mono">{formatUSD(Math.abs(e.value))}</span>
+          <span className="text-paper tabular font-mono"><UsdAmount value={Math.abs(e.value)} /></span>
         </div>
       ))}
     </div>
@@ -466,7 +467,7 @@ function DolarForm({ editing, cotizacion, onClose, onSaved }: {
   onClose: () => void;
   onSaved: () => void;
 }) {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = hoyLocal();
   const [tipo, setTipo] = useState<"compra" | "venta">(editing?.tipo || "compra");
   const [fecha, setFecha] = useState(editing?.fecha || today);
   const [montoUSD, setMontoUSD] = useState(editing?.montoUSD?.toString() || "");

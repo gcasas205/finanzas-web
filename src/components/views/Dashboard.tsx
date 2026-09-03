@@ -12,11 +12,12 @@ import {
 } from "recharts";
 import type { Transaction, AppConfig } from "@/types";
 import {
-  formatPesos, formatPesosCompact, formatUSD, formatMes, formatFecha, fechaToMes, uniqueMonths,
+  formatPesos, formatPesosCompact, formatMes, formatFecha, fechaToMes, uniqueMonths,
 } from "@/lib/utils";
 import { getCategoryColor } from "@/lib/categories";
 import { useTransactions } from "@/components/DataProvider";
 import { resumenDolar, impactoPesosDolar } from "@/lib/dolar-calc";
+import { UsdAmount } from "@/components/UsdAmount";
 
 interface Props { config: AppConfig; }
 
@@ -215,24 +216,24 @@ export default function Dashboard({ config }: Props) {
             <div className="eyebrow text-[10px] text-moss-light">Posición en dólares</div>
             <DollarSign className="w-4 h-4 text-ink-300 hidden sm:block" strokeWidth={1.5} />
           </div>
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-3 gap-2 sm:gap-4">
             <div>
               <div className="text-[9px] uppercase tracking-wider text-ink-400 mb-1">Tenencia</div>
-              <div className="display text-2xl sm:text-3xl text-paper tabular leading-none">{formatUSD(dolar.tenenciaUSD)}</div>
+              <div className="display text-lg sm:text-3xl text-paper tabular leading-none"><UsdAmount value={dolar.tenenciaUSD} /></div>
               <div className="text-[10px] text-ink-300 mt-1 truncate">
-                {dolar.precioPromedioCompra > 0 ? `PPC ${formatPesos(dolar.precioPromedioCompra)}` : "Sin compras"}
+                {dolar.precioPromedioCompra > 0 ? `PPC ${formatPesosCompact(dolar.precioPromedioCompra)}` : "Sin compras"}
               </div>
             </div>
             <div>
               <div className="text-[9px] uppercase tracking-wider text-ink-400 mb-1">Valor hoy</div>
-              <div className="display text-2xl sm:text-3xl text-paper tabular leading-none">{formatPesosCompact(tenenciaUSDenARS)}</div>
+              <div className="display text-lg sm:text-3xl text-paper tabular leading-none">{formatPesosCompact(tenenciaUSDenARS)}</div>
               <div className="text-[10px] text-ink-300 mt-1 truncate">
-                {precioValuacion > 0 ? `@ ${formatPesos(precioValuacion)}` : "Sin cotización"}
+                {precioValuacion > 0 ? `@ ${formatPesosCompact(precioValuacion)}` : "Sin cotización"}
               </div>
             </div>
             <div>
-              <div className="text-[9px] uppercase tracking-wider text-ink-400 mb-1">Resultado T.C.</div>
-              <div className={`display text-2xl sm:text-3xl tabular leading-none ${resultadoTC >= 0 ? "text-moss-light" : "text-terra-light"}`}>
+              <div className="text-[9px] uppercase tracking-wider text-ink-400 mb-1">Result. T.C.</div>
+              <div className={`display text-lg sm:text-3xl tabular leading-none ${resultadoTC >= 0 ? "text-moss-light" : "text-terra-light"}`}>
                 {resultadoTC >= 0 ? "+" : ""}{formatPesosCompact(resultadoTC)}
               </div>
               <div className="text-[10px] text-ink-300 mt-1">latente</div>
