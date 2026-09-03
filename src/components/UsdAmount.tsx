@@ -1,68 +1,45 @@
-import { NextRequest, NextResponse } from "next/server";
-import { parseVisaPDF, parseSueldoPDF } from "@/lib/pdf-parser";
-import { loadConfig, addTransactionsBulk, addSueldo } from "@/lib/sheets";
-import { cacheInvalidate } from "@/lib/cache";
+import React from "react";
 
-export async function POST(req: NextRequest) {
-  try {
-    const formData = await req.formData();
-    const file = formData.get("file") as File | null;
-    const tipo = formData.get("tipo") as string;
-    const action = formData.get("action") as string; // "preview" | "import"
+/**
+ * Muestra un monto en dólares con los centavos como superíndice:
+ *   US$ 1.234⁵⁶
+ * El entero va con separador de miles es-AR (punto) y los centavos
+ * en chiquito, arriba a la derecha. El tamaño es relativo (em), así
+ * escala solo según el tamaño de fuente del contenedor.
+ */
+export function UsdAmount({
+  value,
+  symbol = true,
+  className,
+}: {
+  value: number;
+  symbol?: boolean;
+  className?: string;
+}) {
+  const neg = value < 0;
+  const totalCents = Math.round(Math.abs(value) * 100);
+  const intPart = Math.floor(totalCents / 100);
+  const cents = totalCents % 100;
 
-    if (!file) {
-      return NextResponse.json({ error: "Archivo no recibido" }, { status: 400 });
-    }
+  const intStr = intPart.toLocaleString("es-AR");
+  const centStr = String(cents).padStart(2, "0");
 
-    const arrayBuffer = await file.arrayBuffer();
-    const buffer = Buffer.from(arrayBuffer);
-    const config = await loadConfig();
-
-    if (tipo === "tarjeta") {
-      const result = await parseVisaPDF(buffer, config.cardCutoffDay, config.cardDueDay);
-
-      if (action === "import") {
-        // Si el cliente mandó la lista revisada (editada/filtrada), se usa esa;
-        // si no, se importa lo parseado tal cual.
-        let toImport = result.transactions;
-        const edited = formData.get("transactions") as string | null;
-        if (edited) {
-          try {
-            const parsed = JSON.parse(edited);
-            if (Array.isArray(parsed)) toImport = parsed;
-          } catch {
-            // JSON inválido → se ignora y se usa lo parseado
-          }
-        }
-        const imported = await addTransactionsBulk(toImport);
-        cacheInvalidate("transactions"); // Refresh cache
-        return NextResponse.json({ ok: true, imported, result });
-      }
-
-      return NextResponse.json({ ok: true, result });
-    }
-
-    if (tipo === "sueldo") {
-      const result = await parseSueldoPDF(buffer, config.salaryPaymentOffsetMonths);
-
-      if (action === "import") {
-        await addSueldo(result.sueldo);
-        if (result.ingresoTransaction) {
-          await addTransactionsBulk([result.ingresoTransaction]);
-        }
-        cacheInvalidate("transactions"); // Refresh cache
-        return NextResponse.json({ ok: true, result });
-      }
-
-      return NextResponse.json({ ok: true, result });
-    }
-
-    return NextResponse.json({ error: "Tipo no soportado" }, { status: 400 });
-  } catch (e: any) {
-    console.error("Error import-pdf:", e);
-    return NextResponse.json(
-      { error: e?.message || "Error desconocido" },
-      { status: 500 }
-    );
-  }
+  return (
+    <span className={className} style={{ whiteSpace: "nowrap" }}>
+      {neg ? "-" : ""}
+      {symbol ? "US$\u00A0" : ""}
+      {intStr}
+      <span
+        style={{
+          fontSize: "0.55em",
+          verticalAlign: "0.45em",
+          marginLeft: "0.08em",
+          fontWeight: 400,
+          letterSpacing: "0.02em",
+        }}
+      >
+        {centStr}
+      </span>
+    </span>
+  );
 }
