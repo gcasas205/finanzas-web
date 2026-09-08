@@ -120,7 +120,7 @@ export default function AppShell({ initialConfig }: { initialConfig: AppConfig }
               <div className="p-5 hairline-t space-y-3">
                 <UserBadge />
                 <div className="text-[10px] text-ink-300 tracking-widest uppercase">
-                  v1.0 · Edición Personal
+                  v3.2 · Edición Personal
                 </div>
               </div>
             </motion.aside>
@@ -170,7 +170,7 @@ export default function AppShell({ initialConfig }: { initialConfig: AppConfig }
           <div className="pt-6 hairline-t space-y-3">
             <UserBadge />
             <div className="text-[10px] text-ink-300 tracking-widest uppercase">
-              v1.0 · Edición Personal
+              v3.2 · Edición Personal
             </div>
           </div>
         </div>
