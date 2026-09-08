@@ -4,8 +4,9 @@ import { useState, useMemo, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Plus, Search, Edit2, Trash2, X, Filter } from "lucide-react";
 import { toast } from "sonner";
-import type { Transaction, AppConfig } from "@/types";
+import type { Transaction, AppConfig, BucketOrigen } from "@/types";
 import { formatPesos, formatFecha, fechaToMes, formatMes, uniqueMonths, calcularFechaPagoTarjeta, hoyLocal } from "@/lib/utils";
+import { ORIGEN_LABEL } from "@/lib/ahorro-calc";
 import { CATEGORIES, autoCategorizar, getCategoryColor } from "@/lib/categories";
 import { useTransactions } from "@/components/DataProvider";
 import { UsdAmount } from "@/components/UsdAmount";
@@ -281,8 +282,10 @@ function TransactionForm({ editing, config, onClose, onSaved }: FormProps) {
   const [cuotaTotal, setCuotaTotal] = useState(editing?.cuotaTotal?.toString() || "1");
   const [cuotaNumero, setCuotaNumero] = useState(editing?.cuotaNumero?.toString() || "1");
   const [notas, setNotas] = useState(editing?.notas || "");
+  const [origen, setOrigen] = useState<BucketOrigen>(editing?.origen ?? "regla");
   const [saving, setSaving] = useState(false);
 
+  const ORIGENES: BucketOrigen[] = ["regla", "emergencia", "auto", "mud", "vac", "tec", "largo"];
   const subcategories = CATEGORIES.find(c => c.name === categoria)?.subcategories || ["Sin categoría"];
 
   // Auto-categorize on description change (only for new)
@@ -324,6 +327,7 @@ function TransactionForm({ editing, config, onClose, onSaved }: FormProps) {
       cuotaTotal: parseInt(cuotaTotal),
       cuotaNumero: parseInt(cuotaNumero),
       notas,
+      origen,
     };
 
     const method = editing ? "PUT" : "POST";
@@ -444,6 +448,19 @@ function TransactionForm({ editing, config, onClose, onSaved }: FormProps) {
                 ? "Gasto en dólares: se descuenta de tu tenencia de USD y no afecta tu saldo en pesos."
                 : "Ingreso en dólares: suma a tu tenencia de USD y no afecta tu saldo en pesos."}
             </p>
+          )}
+
+          {moneda === "USD" && tipo === "egreso" && (
+            <Field label="Origen del gasto (ahorro)">
+              <select value={origen} onChange={(e) => setOrigen(e.target.value as BucketOrigen)}
+                className="form-input">
+                {ORIGENES.map(o => <option key={o} value={o}>{ORIGEN_LABEL[o]}</option>)}
+              </select>
+              <p className="text-[10px] text-ink-400 mt-1">
+                De qué bucket sale este gasto. &quot;Automático&quot; usa la regla (mediano → largo → piso);
+                o elegí un sobre puntual (ej. usar solo los de Tecnología).
+              </p>
+            </Field>
           )}
 
           {/* Fechas */}

@@ -46,6 +46,10 @@ export async function POST(req: NextRequest) {
     cuotaNumero: Number(body.cuotaNumero) || 1,
     notas: body.notas || "",
     createdAt: body.createdAt || new Date().toISOString(),
+    // Solo relevante en movimientos USD: origen del gasto / reparto del ingreso
+    origen: body.moneda === "USD" && body.tipo === "egreso" ? (body.origen || "regla") : undefined,
+    asigMediano: body.moneda === "USD" && body.tipo === "ingreso" ? Number(body.asigMediano) || 0 : undefined,
+    asigLargo: body.moneda === "USD" && body.tipo === "ingreso" ? Number(body.asigLargo) || 0 : undefined,
   };
 
   const ok = await addTransaction(tx);

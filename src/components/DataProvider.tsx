@@ -2,7 +2,7 @@
 
 import { createContext, useContext, useCallback } from "react";
 import useSWR from "swr";
-import type { Transaction, DolarOperacion, Cotizacion } from "@/types";
+import type { Transaction, DolarOperacion, Cotizacion, AhorroConfig } from "@/types";
 
 const fetcher = (url: string) => fetch(url).then(r => r.json());
 
@@ -10,6 +10,7 @@ interface DataContextType {
   transactions: Transaction[];
   dolarOps: DolarOperacion[];
   cotizacion: Cotizacion | null;
+  ahorroConfig: AhorroConfig | null;
   isLoading: boolean;
   error: any;
   /** Refresca transacciones y operaciones de dólar tras cualquier mutación */
@@ -22,6 +23,7 @@ const DataContext = createContext<DataContextType>({
   transactions: [],
   dolarOps: [],
   cotizacion: null,
+  ahorroConfig: null,
   isLoading: true,
   error: null,
   refresh: () => {},
@@ -44,11 +46,13 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     // La cotización cambia durante el día: refrescar cada 15 min
     refreshInterval: 15 * 60 * 1000,
   });
+  const ahorro = useSWR("/api/ahorro/config", fetcher, SWR_OPTS);
 
   const refresh = useCallback(() => {
     tx.mutate();
     dolar.mutate();
-  }, [tx, dolar]);
+    ahorro.mutate();
+  }, [tx, dolar, ahorro]);
 
   const refreshCotizacion = useCallback((force = false) => {
     if (force) {
@@ -67,6 +71,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         transactions: tx.data?.transactions ?? [],
         dolarOps: dolar.data?.operaciones ?? [],
         cotizacion: cot.data ?? null,
+        ahorroConfig: ahorro.data?.config ?? null,
         isLoading: tx.isLoading,
         error: tx.error || dolar.error,
         refresh,
@@ -87,4 +92,10 @@ export function useTransactions() {
 export function useDolar() {
   const { dolarOps, cotizacion, isLoading, refresh, refreshCotizacion } = useContext(DataContext);
   return { dolarOps, cotizacion, isLoading, refresh, refreshCotizacion };
+}
+
+/** Datos necesarios para la vista de Ahorro */
+export function useAhorro() {
+  const { dolarOps, transactions, ahorroConfig, isLoading, refresh } = useContext(DataContext);
+  return { dolarOps, transactions, ahorroConfig, isLoading, refresh };
 }

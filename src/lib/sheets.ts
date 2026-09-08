@@ -2,7 +2,7 @@ import { google, sheets_v4 } from "googleapis";
 import fs from "fs/promises";
 import path from "path";
 import os from "os";
-import type { Transaction, Sueldo, AppConfig, DolarOperacion } from "@/types";
+import type { Transaction, Sueldo, AppConfig, DolarOperacion, AhorroConfig, SobreKey } from "@/types";
 
 /**
  * Config se puede cargar de:
@@ -109,7 +109,7 @@ async function getSheetsClient(): Promise<{ client: sheets_v4.Sheets; sheetId: s
 const TX_HEADERS = [
   "id", "fechaConsumo", "fechaPago", "tipo", "descripcion", "monto",
   "moneda", "categoria", "subcategoria", "fuente", "cuotaTotal",
-  "cuotaNumero", "notas", "createdAt"
+  "cuotaNumero", "notas", "createdAt", "origen"
 ];
 
 const SUELDO_HEADERS = [
@@ -119,45 +119,73 @@ const SUELDO_HEADERS = [
 ];
 
 const DOLAR_HEADERS = [
-  "id", "fecha", "tipo", "montoUSD", "precioARS", "totalARS", "notas", "createdAt"
+  "id", "fecha", "tipo", "montoUSD", "precioARS", "totalARS", "notas", "createdAt",
+  "asigMediano", "asigLargo", "origen"
 ];
+
+const CONFIG_HEADERS = ["parametro", "valor"];
+
+/** Parámetros por defecto del plan de ahorro (se siembran al crear la hoja Config) */
+const AHORRO_DEFAULTS: Array<[string, number]> = [
+  ["emergencia_objetivo", 3000],
+  ["sp500_retorno_anual", 7],
+  ["mediano_auto_pct", 40],
+  ["mediano_mud_pct", 25],
+  ["mediano_vac_pct", 20],
+  ["mediano_tec_pct", 15],
+  ["objetivo_auto", 4000],
+  ["objetivo_mud", 3000],
+  ["objetivo_vac", 1000],
+  ["objetivo_tec", 600],
+];
+
+const SOBRE_NOMBRES: Record<SobreKey, string> = {
+  auto: "Cambiar el auto",
+  mud: "Mudanza",
+  vac: "Vacaciones",
+  tec: "Tecnología",
+};
 
 async function ensureSheets(client: sheets_v4.Sheets, sheetId: string) {
   const meta = await client.spreadsheets.get({ spreadsheetId: sheetId });
   const existing = meta.data.sheets?.map(s => s.properties?.title) ?? [];
 
-  const required: Array<[string, string[]]> = [
-    ["Transacciones", TX_HEADERS],
-    ["Sueldos", SUELDO_HEADERS],
-    ["Dolares", DOLAR_HEADERS],
+  // seedRows: filas de datos a sembrar al crear la hoja (además del header)
+  const required: Array<{ name: string; headers: string[]; seedRows?: any[][] }> = [
+    { name: "Transacciones", headers: TX_HEADERS },
+    { name: "Sueldos", headers: SUELDO_HEADERS },
+    { name: "Dolares", headers: DOLAR_HEADERS },
+    { name: "Config", headers: CONFIG_HEADERS, seedRows: AHORRO_DEFAULTS.map(([k, v]) => [k, v]) },
   ];
 
-  for (const [name, headers] of required) {
+  for (const { name, headers, seedRows } of required) {
     if (!existing.includes(name)) {
       await client.spreadsheets.batchUpdate({
         spreadsheetId: sheetId,
-        requestBody: {
-          requests: [{ addSheet: { properties: { title: name } } }]
-        }
+        requestBody: { requests: [{ addSheet: { properties: { title: name } } }] },
       });
+      const values = seedRows ? [headers, ...seedRows] : [headers];
       await client.spreadsheets.values.update({
         spreadsheetId: sheetId,
         range: `${name}!A1`,
         valueInputOption: "RAW",
-        requestBody: { values: [headers] }
+        requestBody: { values },
       });
     } else {
-      // Verificar que tenga headers
+      // La hoja ya existe: garantizar que el header exista y esté completo.
+      // Si el header viejo tiene menos columnas de las esperadas (migración por
+      // columnas nuevas), lo reescribimos sin tocar los datos de abajo.
       const r = await client.spreadsheets.values.get({
         spreadsheetId: sheetId,
         range: `${name}!A1:Z1`,
       });
-      if (!r.data.values?.[0]?.length) {
+      const current = r.data.values?.[0] ?? [];
+      if (current.length < headers.length) {
         await client.spreadsheets.values.update({
           spreadsheetId: sheetId,
           range: `${name}!A1`,
           valueInputOption: "RAW",
-          requestBody: { values: [headers] }
+          requestBody: { values: [headers] },
         });
       }
     }
@@ -181,6 +209,7 @@ function rowToTransaction(row: any[]): Transaction {
     cuotaNumero: parseInt(row[11]) || 1,
     notas: row[12] ?? "",
     createdAt: row[13] ?? new Date().toISOString(),
+    origen: (row[14] || undefined) as Transaction["origen"],
   };
 }
 
@@ -188,7 +217,7 @@ function transactionToRow(t: Transaction): any[] {
   return [
     t.id, t.fechaConsumo, t.fechaPago, t.tipo, t.descripcion, t.monto,
     t.moneda, t.categoria, t.subcategoria, t.fuente, t.cuotaTotal,
-    t.cuotaNumero, t.notas, t.createdAt
+    t.cuotaNumero, t.notas, t.createdAt, t.origen ?? ""
   ];
 }
 
@@ -231,12 +260,16 @@ function rowToDolar(row: any[]): DolarOperacion {
     totalARS: parseFloat(row[5]) || montoUSD * precioARS,
     notas: row[6] ?? "",
     createdAt: row[7] ?? new Date().toISOString(),
+    asigMediano: row[8] !== undefined && row[8] !== "" ? parseFloat(row[8]) || 0 : undefined,
+    asigLargo: row[9] !== undefined && row[9] !== "" ? parseFloat(row[9]) || 0 : undefined,
+    origen: (row[10] || undefined) as DolarOperacion["origen"],
   };
 }
 
 function dolarToRow(d: DolarOperacion): any[] {
   return [
-    d.id, d.fecha, d.tipo, d.montoUSD, d.precioARS, d.totalARS, d.notas, d.createdAt
+    d.id, d.fecha, d.tipo, d.montoUSD, d.precioARS, d.totalARS, d.notas, d.createdAt,
+    d.asigMediano ?? "", d.asigLargo ?? "", d.origen ?? ""
   ];
 }
 
@@ -250,7 +283,7 @@ export async function listTransactions(): Promise<Transaction[]> {
     await ensureSheets(ctx.client, ctx.sheetId);
     const r = await ctx.client.spreadsheets.values.get({
       spreadsheetId: ctx.sheetId,
-      range: "Transacciones!A2:N",
+      range: "Transacciones!A2:Q",
     });
     const rows = r.data.values ?? [];
     return rows.filter(row => row[0]).map(rowToTransaction);
@@ -268,7 +301,7 @@ export async function addTransaction(tx: Transaction): Promise<boolean> {
     await ensureSheets(ctx.client, ctx.sheetId);
     await ctx.client.spreadsheets.values.append({
       spreadsheetId: ctx.sheetId,
-      range: "Transacciones!A:N",
+      range: "Transacciones!A:Q",
       valueInputOption: "RAW",
       requestBody: { values: [transactionToRow(tx)] },
     });
@@ -288,7 +321,7 @@ export async function addTransactionsBulk(txs: Transaction[]): Promise<number> {
     await ensureSheets(ctx.client, ctx.sheetId);
     await ctx.client.spreadsheets.values.append({
       spreadsheetId: ctx.sheetId,
-      range: "Transacciones!A:N",
+      range: "Transacciones!A:Q",
       valueInputOption: "RAW",
       requestBody: { values: txs.map(transactionToRow) },
     });
@@ -314,7 +347,7 @@ export async function updateTransaction(tx: Transaction): Promise<boolean> {
     const rowNumber = idx + 2;
     await ctx.client.spreadsheets.values.update({
       spreadsheetId: ctx.sheetId,
-      range: `Transacciones!A${rowNumber}:N${rowNumber}`,
+      range: `Transacciones!A${rowNumber}:Q${rowNumber}`,
       valueInputOption: "RAW",
       requestBody: { values: [transactionToRow(tx)] },
     });
@@ -409,7 +442,7 @@ export async function listDolarOps(): Promise<DolarOperacion[]> {
     await ensureSheets(ctx.client, ctx.sheetId);
     const r = await ctx.client.spreadsheets.values.get({
       spreadsheetId: ctx.sheetId,
-      range: "Dolares!A2:H",
+      range: "Dolares!A2:K",
     });
     return (r.data.values ?? []).filter(row => row[0]).map(rowToDolar);
   } catch (e) {
@@ -425,7 +458,7 @@ export async function addDolarOp(op: DolarOperacion): Promise<boolean> {
     await ensureSheets(ctx.client, ctx.sheetId);
     await ctx.client.spreadsheets.values.append({
       spreadsheetId: ctx.sheetId,
-      range: "Dolares!A:H",
+      range: "Dolares!A:K",
       valueInputOption: "RAW",
       requestBody: { values: [dolarToRow(op)] },
     });
@@ -451,7 +484,7 @@ export async function updateDolarOp(op: DolarOperacion): Promise<boolean> {
     const rowNumber = idx + 2;
     await ctx.client.spreadsheets.values.update({
       spreadsheetId: ctx.sheetId,
-      range: `Dolares!A${rowNumber}:H${rowNumber}`,
+      range: `Dolares!A${rowNumber}:K${rowNumber}`,
       valueInputOption: "RAW",
       requestBody: { values: [dolarToRow(op)] },
     });
@@ -499,6 +532,48 @@ export async function deleteDolarOp(id: string): Promise<boolean> {
   } catch (e) {
     console.error("Error deleting dolar op:", e);
     return false;
+  }
+}
+
+// ─── Config del plan de ahorro (hoja "Config") ──────────────────────────────
+
+function buildAhorroConfig(map: Record<string, number>): AhorroConfig {
+  const g = (k: string, def: number) =>
+    map[k] !== undefined && isFinite(map[k]) ? map[k] : def;
+  return {
+    emergenciaObjetivo: g("emergencia_objetivo", 3000),
+    // En la hoja se guarda como porcentaje (7); acá lo pasamos a fracción (0.07)
+    sp500RetornoAnual: g("sp500_retorno_anual", 7) / 100,
+    sobres: [
+      { key: "auto", nombre: SOBRE_NOMBRES.auto, pct: g("mediano_auto_pct", 40), objetivo: g("objetivo_auto", 4000) },
+      { key: "mud", nombre: SOBRE_NOMBRES.mud, pct: g("mediano_mud_pct", 25), objetivo: g("objetivo_mud", 3000) },
+      { key: "vac", nombre: SOBRE_NOMBRES.vac, pct: g("mediano_vac_pct", 20), objetivo: g("objetivo_vac", 1000) },
+      { key: "tec", nombre: SOBRE_NOMBRES.tec, pct: g("mediano_tec_pct", 15), objetivo: g("objetivo_tec", 600) },
+    ],
+  };
+}
+
+/** Lee la hoja Config (clave/valor) y devuelve la configuración del ahorro con defaults */
+export async function getAhorroConfig(): Promise<AhorroConfig> {
+  const ctx = await getSheetsClient();
+  if (!ctx) return buildAhorroConfig({});
+  try {
+    await ensureSheets(ctx.client, ctx.sheetId);
+    const r = await ctx.client.spreadsheets.values.get({
+      spreadsheetId: ctx.sheetId,
+      range: "Config!A2:B",
+    });
+    const map: Record<string, number> = {};
+    for (const row of r.data.values ?? []) {
+      const key = String(row[0] ?? "").trim();
+      if (!key) continue;
+      const val = parseFloat(String(row[1]).replace(",", "."));
+      if (isFinite(val)) map[key] = val;
+    }
+    return buildAhorroConfig(map);
+  } catch (e) {
+    console.error("Error leyendo Config de ahorro:", e);
+    return buildAhorroConfig({});
   }
 }
 

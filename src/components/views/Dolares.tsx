@@ -11,9 +11,12 @@ import {
   ResponsiveContainer, CartesianGrid, Cell,
 } from "recharts";
 import { toast } from "sonner";
-import type { DolarOperacion, Cotizacion, Transaction } from "@/types";
+import type { DolarOperacion, Cotizacion, Transaction, BucketOrigen } from "@/types";
 import { formatPesos, formatPesosCompact, formatFecha, formatMes, fechaToMes, uniqueMonths, hoyLocal } from "@/lib/utils";
 import { resumenDolar } from "@/lib/dolar-calc";
+import { ORIGEN_LABEL } from "@/lib/ahorro-calc";
+
+const ORIGENES: BucketOrigen[] = ["regla", "emergencia", "auto", "mud", "vac", "tec", "largo"];
 import { useDolar, useTransactions } from "@/components/DataProvider";
 import { UsdAmount } from "@/components/UsdAmount";
 
@@ -474,6 +477,9 @@ function DolarForm({ editing, cotizacion, onClose, onSaved }: {
   const [precioARS, setPrecioARS] = useState(editing?.precioARS?.toString() || "");
   const [precioAuto, setPrecioAuto] = useState(!editing);
   const [notas, setNotas] = useState(editing?.notas || "");
+  const [asigMediano, setAsigMediano] = useState(editing?.asigMediano != null ? String(editing.asigMediano) : "");
+  const [asigLargo, setAsigLargo] = useState(editing?.asigLargo != null ? String(editing.asigLargo) : "");
+  const [origen, setOrigen] = useState<BucketOrigen>(editing?.origen ?? "regla");
   const [saving, setSaving] = useState(false);
 
   const cotDisponible = cotizacion && !cotizacion.fallback &&
@@ -499,6 +505,9 @@ function DolarForm({ editing, cotizacion, onClose, onSaved }: {
     const payload = {
       ...(editing ? { id: editing.id, createdAt: editing.createdAt } : {}),
       fecha, tipo, montoUSD: usd, precioARS: precio, notas,
+      ...(tipo === "compra"
+        ? { asigMediano: parseFloat(asigMediano) || 0, asigLargo: parseFloat(asigLargo) || 0 }
+        : { origen }),
     };
     const method = editing ? "PUT" : "POST";
     const r = await fetch("/api/dolar", {
@@ -587,6 +596,53 @@ function DolarForm({ editing, cotizacion, onClose, onSaved }: {
               {tipo === "compra" ? "-" : "+"}{formatPesos(totalARS)}
             </span>
           </div>
+
+          {/* Ahorro: reparto (compra) u origen del retiro (venta) */}
+          {tipo === "compra" ? (
+            <div className="surface p-4 space-y-3">
+              <div className="eyebrow text-amber">Destino del ahorro</div>
+              <p className="text-[11px] text-ink-400 leading-relaxed">
+                El piso de emergencia se completa primero de forma automática. Repartí el resto de esta compra
+                entre mediano y largo plazo.
+              </p>
+              <div className="grid grid-cols-2 gap-4">
+                <Field label="→ Mediano (USD)">
+                  <input type="number" step="0.01" value={asigMediano}
+                    onChange={(e) => setAsigMediano(e.target.value)}
+                    placeholder="0.00" className="form-input tabular font-mono" />
+                </Field>
+                <Field label="→ Largo · S&P (USD)">
+                  <input type="number" step="0.01" value={asigLargo}
+                    onChange={(e) => setAsigLargo(e.target.value)}
+                    placeholder="0.00" className="form-input tabular font-mono" />
+                </Field>
+              </div>
+              {usd > 0 && (
+                (() => {
+                  const rep = (parseFloat(asigMediano) || 0) + (parseFloat(asigLargo) || 0);
+                  const dif = Math.round((usd - rep) * 100) / 100;
+                  if (Math.abs(dif) < 0.01) return null;
+                  return (
+                    <p className="text-[11px] text-ink-300">
+                      {dif > 0
+                        ? `Sin asignar: US$ ${dif.toLocaleString("es-AR")} — irá al piso si falta, o a mediano.`
+                        : `Asignaste US$ ${Math.abs(dif).toLocaleString("es-AR")} de más respecto del monto comprado.`}
+                    </p>
+                  );
+                })()
+              )}
+            </div>
+          ) : (
+            <Field label="Origen del retiro">
+              <select value={origen} onChange={(e) => setOrigen(e.target.value as BucketOrigen)}
+                className="form-input">
+                {ORIGENES.map(o => <option key={o} value={o}>{ORIGEN_LABEL[o]}</option>)}
+              </select>
+              <p className="text-[10px] text-ink-400 mt-1">
+                &quot;Automático&quot; descuenta por la regla (mediano → largo → piso). O elegí un sobre puntual.
+              </p>
+            </Field>
+          )}
 
           <Field label="Notas (opcional)">
             <input type="text" value={notas} onChange={(e) => setNotas(e.target.value)}

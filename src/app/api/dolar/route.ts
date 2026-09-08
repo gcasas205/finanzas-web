@@ -19,16 +19,21 @@ export async function GET() {
 function normalize(body: any): DolarOperacion {
   const montoUSD = Number(body.montoUSD) || 0;
   const precioARS = Number(body.precioARS) || 0;
+  const esVenta = body.tipo === "venta";
   return {
     id: body.id || generateId(),
     fecha: body.fecha,
-    tipo: body.tipo === "venta" ? "venta" : "compra",
+    tipo: esVenta ? "venta" : "compra",
     montoUSD,
     precioARS,
     // El total siempre se deriva en el server: fuente de verdad única
     totalARS: Math.round(montoUSD * precioARS * 100) / 100,
     notas: body.notas || "",
     createdAt: body.createdAt || new Date().toISOString(),
+    // Compra: reparto del ahorro. Venta: origen del retiro.
+    asigMediano: esVenta ? undefined : Number(body.asigMediano) || 0,
+    asigLargo: esVenta ? undefined : Number(body.asigLargo) || 0,
+    origen: esVenta ? (body.origen || "regla") : undefined,
   };
 }
 

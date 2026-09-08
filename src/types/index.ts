@@ -18,6 +18,14 @@ export interface Transaction {
   cuotaNumero: number;
   notas: string;
   createdAt: string;
+  /**
+   * Solo para movimientos en USD. En un egreso (gasto en dólares) indica de qué
+   * bucket de ahorro se descuenta: "regla" (automático) o un sobre puntual.
+   */
+  origen?: BucketOrigen;
+  /** Solo para ingresos en USD: reparto opcional del excedente tras el piso. */
+  asigMediano?: number;
+  asigLargo?: number;
 }
 
 export interface Sueldo {
@@ -54,6 +62,12 @@ export interface DolarOperacion {
   totalARS: number;
   notas: string;
   createdAt: string;
+  /** Compra: cuántos de los USD comprados van a mediano plazo (el piso se llena primero). */
+  asigMediano?: number;
+  /** Compra: cuántos van a largo plazo (S&P). El resto lo absorbe el piso. */
+  asigLargo?: number;
+  /** Venta: de qué bucket sale ("regla" = automático, o un sobre puntual). */
+  origen?: BucketOrigen;
 }
 
 /** Cotización oficial scrapeada de dolarhoy.com */
@@ -97,4 +111,40 @@ export interface CategoryTotal {
   total: number;
   porcentaje: number;
   color: string;
+}
+
+// ─── Ahorro ───────────────────────────────────────────────────────────────
+
+/** Sobres del mediano plazo */
+export type SobreKey = "auto" | "mud" | "vac" | "tec";
+
+/** De dónde sale una salida de USD */
+export type BucketOrigen =
+  | "regla"        // automático (mediano proporcional → largo → piso)
+  | "emergencia"
+  | "auto"
+  | "mud"
+  | "vac"
+  | "tec"
+  | "largo";
+
+export interface AhorroSobreConfig {
+  key: SobreKey;
+  nombre: string;
+  /** % del pozo de mediano plazo que le corresponde a este sobre */
+  pct: number;
+  /** objetivo en USD */
+  objetivo: number;
+}
+
+/**
+ * Parámetros generales del plan de ahorro. Viven en la hoja "Config" del mismo
+ * Google Sheets (no en el código), para editarlos sin redeployar.
+ */
+export interface AhorroConfig {
+  /** Piso base de emergencia en USD */
+  emergenciaObjetivo: number;
+  /** Rendimiento anual nominal supuesto del S&P para la proyección (fracción, ej 0.07) */
+  sp500RetornoAnual: number;
+  sobres: AhorroSobreConfig[];
 }

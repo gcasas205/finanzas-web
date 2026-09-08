@@ -11,7 +11,7 @@ export function UsdAmount({
   value,
   symbol = true,
   className,
-}: {
+}: {  
   value: number;
   symbol?: boolean;
   className?: string;
