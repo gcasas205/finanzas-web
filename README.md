@@ -1,6 +1,6 @@
 # Finanzas — Casas
 
-Web app de seguimiento financiero personal con importación automática de resúmenes de tarjeta VISA ICBC y recibos de sueldo argentinos.
+Web app de seguimiento financiero personal con importación automática de resúmenes de tarjeta VISA ICBC y recibos de sueldo argentinos, seguimiento de dólares y ahorro por objetivos.
 
 **Stack:** Next.js 14 · React 18 · TypeScript · Tailwind CSS · Recharts · Google Sheets (base de datos) · NextAuth (autenticación Google OAuth)
 
@@ -13,7 +13,9 @@ Web app de seguimiento financiero personal con importación automática de resú
 | Feature | Descripción |
 |---|---|
 | **Dashboard** | KPIs en tiempo real: ingresos, gastos, ahorro, tasa de ahorro, acumulado histórico y proyección Mercado Pago |
-| **Movimientos** | Carga manual con auto-categorización inteligente. Filtros por mes, tipo y búsqueda libre |
+| **Movimientos** | Carga manual con auto-categorización inteligente. Filtros por mes, tipo y búsqueda libre. Gastos e ingresos en USD con origen de ahorro |
+| **Dólares** | Compra/venta de USD con costo promedio ponderado, cotización oficial en vivo (dolarhoy), tenencia y resultado por tipo de cambio. Reparto de ahorro al comprar y origen al vender |
+| **Ahorro** | Ahorro por objetivos sobre tu tenencia de USD: piso de emergencia (se llena primero), sobres de mediano plazo por % y objetivo, y largo plazo (S&P). Todo configurable desde el Sheets |
 | **Importar PDF** | Parsea automáticamente resúmenes VISA ICBC y recibos de sueldo (incluye PDFs con encoding PUA) |
 | **Análisis BI** | 4 tabs: Tendencias, Categorías (con filtro por mes), Proyección Mercado Pago, Comparativa mensual |
 | **Fechas duales** | Cada gasto tiene fecha de consumo + fecha de pago real. Sueldos se asignan al mes de cobro |
@@ -72,7 +74,7 @@ Esto es lo que la app usa para leer/escribir en tu planilla.
 2. Copiar el **ID** de la URL: `docs.google.com/spreadsheets/d/`**`ESTE_ES_EL_ID`**`/edit`
 3. Click **"Compartir"** → agregar el email de la cuenta de servicio (está en el `.json` que descargaste, campo `client_email`, algo como `sheets-connector@finanzas-web-XXXXX.iam.gserviceaccount.com`) → darle permisor de **Editor**
 
-La app crea automáticamente las pestañas "Transacciones" y "Sueldos" la primera vez que se conecta.
+La app crea automáticamente las pestañas "Transacciones", "Sueldos", "Dolares" y "Config" la primera vez que se conecta. La hoja **Config** se siembra con los parámetros del plan de ahorro (piso, %, objetivos, rendimiento), que podés editar a mano cuando quieras.
 
 ### 6. Crear credenciales OAuth (para el login con Google)
 
@@ -258,9 +260,24 @@ Al escribir una descripción o importar un PDF, la categoría se detecta por pal
 | Rappi, PedidosYa | Alimentación → Delivery |
 | Sueldo, Haberes | Ingresos → Sueldo |
 
+### Dólares
+
+Registrás compras y ventas de USD con su precio. La app calcula tu tenencia con **costo promedio ponderado**: las compras suben el promedio, las ventas y los gastos en USD reducen la tenencia sin alterar el precio promedio de lo que queda. La cotización oficial se scrapea de dolarhoy (con valor de respaldo si falla) y se usa para valuar la posición y mostrar el resultado por tipo de cambio. Los gastos/ingresos en USD se cargan en Movimientos (eligiendo USD) y aparecen también acá porque afectan la tenencia.
+
+### Ahorro por objetivos
+
+La solapa Ahorro es una **capa de asignación sobre tu tenencia de dólares** — no es plata aparte. Invariante: `piso + mediano + largo = tenencia neta de USD`.
+
+- **Entradas** (compra de USD, o ingreso en USD): el **piso de emergencia se llena primero** de forma automática; el excedente se reparte según la intención mediano/largo que cargás en ese movimiento (variable mes a mes, ideal para el aguinaldo). Sin intención, el excedente va a mediano.
+- **Mediano plazo**: un pozo que se reparte entre los sobres (auto, mudanza, vacaciones, tecnología) según los **% generales** de la hoja Config. Si un sobre llega a su objetivo, el excedente se redistribuye entre los que faltan.
+- **Salidas** (venta de USD, o gasto en USD): descuentan de un bucket por **origen** — "regla" automática (mediano proporcional → largo → piso) o un sobre puntual (ej. usar solo los de Tecnología).
+- **Largo plazo**: USD apartados para el S&P (no se valúa la posición acá); la proyección a 15/20 años es solo ilustrativa.
+
+Todas las operaciones que afectan USD se procesan en orden cronológico para calcular el saldo vivo de cada bucket. Los objetivos, % y el piso viven en la hoja **Config** del Sheets, no en el código.
+
 ### Caché
 
-Para no exceder los límites de la API de Google Sheets (60 requests/minuto), la app cachea las transacciones en memoria del servidor durante 3 minutos. Al crear, editar o eliminar una transacción, el caché se invalida automáticamente.
+Para no exceder los límites de la API de Google Sheets (60 requests/minuto), la app cachea en memoria del servidor: transacciones y operaciones de dólar **3 minutos**, y la config del ahorro **2 minutos**. Al crear, editar o eliminar, el caché correspondiente se invalida. La cotización del dólar se cachea aparte (10 min) y se refresca cada 15 min en el cliente. Si editás un parámetro en la hoja Config, puede tardar hasta 2 minutos en reflejarse.
 
 ---
 
@@ -280,7 +297,10 @@ src/
 ├── app/
 │   ├── api/
 │   │   ├── auth/[...nextauth]/route.ts   # Autenticación
-│   │   ├── config/route.ts               # Configuración
+│   │   ├── config/route.ts               # Configuración de la app (env/archivo)
+│   │   ├── ahorro/config/route.ts        # Config del plan de ahorro (hoja Config)
+│   │   ├── dolar/route.ts                # CRUD operaciones de dólar
+│   │   ├── dolar/cotizacion/route.ts     # Cotización oficial (dolarhoy)
 │   │   ├── health/route.ts               # Health check
 │   │   ├── import-pdf/route.ts           # Importación de PDFs
 │   │   └── transactions/route.ts         # CRUD transacciones
@@ -293,18 +313,25 @@ src/
 │   ├── views/
 │   │   ├── Dashboard.tsx                  # Dashboard con KPIs
 │   │   ├── Transactions.tsx               # Gestión de movimientos
+│   │   ├── Dolares.tsx                    # Compra/venta y tenencia de USD
+│   │   ├── Ahorro.tsx                     # Ahorro por objetivos (piso/mediano/largo)
 │   │   ├── Analytics.tsx                  # Gráficos BI
 │   │   ├── ImportView.tsx                 # Importación de PDFs
 │   │   └── SettingsView.tsx               # Configuración
 │   ├── AppShell.tsx                       # Layout principal + navegación
 │   ├── AuthProvider.tsx                   # Wrapper de sesión
+│   ├── DataProvider.tsx                   # Estado compartido (SWR) + hooks
+│   ├── UsdAmount.tsx                      # Formato de montos en USD
 │   └── SetupWizard.tsx                    # Wizard de primera vez
 ├── lib/
 │   ├── cache.ts                           # Caché en memoria
 │   ├── categories.ts                      # Categorías y auto-categorización
+│   ├── ahorro-calc.ts                     # Motor del ahorro (cascada de buckets)
+│   ├── dolar-calc.ts                      # Tenencia y costo promedio de USD
+│   ├── dolar.ts                           # Scraping de cotización
 │   ├── pdf-parser.ts                      # Parser de VISA ICBC
 │   ├── pdf-parser-sueldo.ts              # Parser de recibos de sueldo
-│   ├── sheets.ts                          # Google Sheets API
+│   ├── sheets.ts                          # Google Sheets API + getAhorroConfig
 │   └── utils.ts                           # Utilidades (fechas, formato)
 ├── types/index.ts                         # TypeScript types
 └── middleware.ts                           # Auth middleware
@@ -312,7 +339,8 @@ src/
 
 ### Dónde viven los datos
 
-- **Transacciones y sueldos**: en tu Google Sheets personal
+- **Transacciones, sueldos y operaciones de dólar**: en tu Google Sheets personal (pestañas Transacciones, Sueldos, Dolares)
+- **Parámetros del plan de ahorro** (piso, %, objetivos, rendimiento): en la pestaña **Config** del mismo Sheets, editables a mano
 - **Configuración de la app**: variables de entorno en Vercel (producción) o `~/.finanzas-web/config.json` (desarrollo local)
 - **Sesión de usuario**: JWT encriptado en cookie del navegador (30 días)
 - **Caché**: memoria del servidor (se resetea en cada deploy)
@@ -338,10 +366,23 @@ Algunos PDFs usan fuentes con encoding especial. La app soporta Unicode PUA pero
 
 ---
 
+## Novedades
+
+### v3.2
+
+- **Nueva solapa Ahorro**: ahorro por objetivos construido sobre tu tenencia de USD (no es plata aparte). Piso de emergencia que se llena primero, sobres de mediano plazo por % y objetivo con redistribución al completarse, y largo plazo (S&P) como USD apartados con proyección ilustrativa.
+- **Reparto en la compra de dólares**: al comprar USD elegís cuánto va a mediano y cuánto a largo; el piso se cubre automáticamente antes que nada.
+- **Origen en salidas de USD**: al vender (Dólares) o gastar en USD (Movimientos), elegís de qué bucket sale — por regla automática (mediano → largo → piso) o un sobre puntual.
+- **Config en el Sheets**: nueva hoja `Config` (clave/valor) con piso, %, objetivos y rendimiento supuesto. Se edita sin redeployar; no vive en Vercel.
+- **Motor de cálculo** (`ahorro-calc.ts`): procesa todas las operaciones en USD en orden cronológico manteniendo el saldo vivo de cada bucket, con la invariante `piso + mediano + largo = tenencia neta`.
+- Columnas nuevas en las hojas `Dolares` (asigMediano, asigLargo, origen) y `Transacciones` (origen); migración automática de encabezados al arrancar.
+
+---
+
 ## Licencia
 
 Proyecto personal. Uso libre.
 
 ---
 
-v1.0 · Gonzalo Casas
+v3.2 · Gonzalo Casas
