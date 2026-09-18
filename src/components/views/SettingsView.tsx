@@ -5,13 +5,14 @@ import { motion } from "framer-motion";
 import { Check, Loader2, ExternalLink, AlertCircle } from "lucide-react";
 import { toast } from "sonner";
 import type { AppConfig } from "@/types";
+import { useRouter } from "next/navigation";
 
 interface Props {
   config: AppConfig;
-  onSaved: (c: AppConfig) => void;
 }
 
-export default function SettingsView({ config, onSaved }: Props) {
+export default function SettingsView({ config }: Props) {
+  const router = useRouter();
   const [form, setForm] = useState<AppConfig>({ ...config });
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
@@ -29,9 +30,9 @@ export default function SettingsView({ config, onSaved }: Props) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(form),
       });
-      const data = await r.json();
-      onSaved(data.config);
+      await r.json();
       toast.success("Configuración guardada");
+      router.refresh();
     } catch {
       toast.error("Error al guardar");
     } finally {

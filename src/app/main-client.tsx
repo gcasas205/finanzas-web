@@ -1,9 +1,9 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import type { AppConfig } from "@/types";
 import SetupWizard from "@/components/SetupWizard";
-import AppShell from "@/components/AppShell";
 
 interface Props {
   initialConfig: AppConfig;
@@ -11,6 +11,7 @@ interface Props {
 }
 
 export default function MainClient({ initialConfig, envReady = false }: Props) {
+  const router = useRouter();
   const [config, setConfig] = useState(initialConfig);
   const [checking, setChecking] = useState(!envReady);
   const [setupDone, setSetupDone] = useState(envReady);
@@ -42,14 +43,19 @@ export default function MainClient({ initialConfig, envReady = false }: Props) {
     return (
       <SetupWizard
         onComplete={async () => {
-          const r = await fetch("/api/config");
-          const data = await r.json();
-          setConfig(data.config);
           setSetupDone(true);
+          router.push("/dashboard");
         }}
       />
     );
   }
 
-  return <AppShell initialConfig={config} />;
+  // Si ya está configurado y llega aquí, redirigimos
+  useEffect(() => {
+    if (setupDone) {
+      router.push("/dashboard");
+    }
+  }, [setupDone, router]);
+
+  return null;
 }

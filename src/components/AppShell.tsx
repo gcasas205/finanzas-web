@@ -1,8 +1,10 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { signOut, useSession } from "next-auth/react";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
 import {
   LayoutDashboard,
   ArrowLeftRight,
@@ -16,36 +18,21 @@ import {
   PiggyBank,
 } from "lucide-react";
 import { DataProvider } from "./DataProvider";
-import Dashboard from "./views/Dashboard";
-import Transactions from "./views/Transactions";
-import Dolares from "./views/Dolares";
-import Ahorro from "./views/Ahorro";
-import Analytics from "./views/Analytics";
-import ImportView from "./views/ImportView";
-import SettingsView from "./views/SettingsView";
 import type { AppConfig } from "@/types";
 
-type View = "dashboard" | "transactions" | "dolares" | "ahorro" | "analytics" | "import" | "settings";
-
-const NAV_ITEMS: Array<{ id: View; label: string; icon: any }> = [
-  { id: "dashboard",    label: "Resumen",     icon: LayoutDashboard },
-  { id: "transactions", label: "Movimientos", icon: ArrowLeftRight },
-  { id: "dolares",      label: "Dólares",     icon: DollarSign },
-  { id: "ahorro",       label: "Ahorro",      icon: PiggyBank },
-  { id: "analytics",    label: "Análisis",    icon: TrendingUp },
-  { id: "import",       label: "Importar",    icon: Upload },
-  { id: "settings",     label: "Ajustes",     icon: Settings },
+const NAV_ITEMS = [
+  { href: "/dashboard",    label: "Resumen",     icon: LayoutDashboard },
+  { href: "/transactions", label: "Movimientos", icon: ArrowLeftRight },
+  { href: "/dolares",      label: "Dólares",     icon: DollarSign },
+  { href: "/ahorro",       label: "Ahorro",      icon: PiggyBank },
+  { href: "/analytics",    label: "Análisis",    icon: TrendingUp },
+  { href: "/import",       label: "Importar",    icon: Upload },
+  { href: "/settings",     label: "Ajustes",     icon: Settings },
 ];
 
-export default function AppShell({ initialConfig }: { initialConfig: AppConfig }) {
-  const [view, setView] = useState<View>("dashboard");
-  const [config, setConfig] = useState(initialConfig);
+export default function AppShell({ initialConfig, children }: { initialConfig: AppConfig, children: React.ReactNode }) {
+  const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
-
-  const navigate = (v: View) => {
-    setView(v);
-    setMobileOpen(false);
-  };
 
   return (
     <DataProvider>
@@ -57,11 +44,11 @@ export default function AppShell({ initialConfig }: { initialConfig: AppConfig }
             <Menu className="w-5 h-5" />
           </button>
           <h1 className="display text-lg text-paper leading-none">
-            {config.nombre || "Finanzas"}<span className="text-amber italic">.</span>
+            {initialConfig.nombre || "Finanzas"}<span className="text-amber italic">.</span>
           </h1>
         </div>
         <div className="eyebrow text-[9px]">
-          {NAV_ITEMS.find(n => n.id === view)?.label}
+          {NAV_ITEMS.find(n => pathname.startsWith(n.href))?.label}
         </div>
       </div>
 
@@ -87,7 +74,7 @@ export default function AppShell({ initialConfig }: { initialConfig: AppConfig }
                 <div>
                   <div className="eyebrow mb-1">Finanzas</div>
                   <h1 className="display text-2xl text-paper leading-none">
-                    {config.nombre || "Casas"}<span className="text-amber italic">.</span>
+                    {initialConfig.nombre || "Casas"}<span className="text-amber italic">.</span>
                   </h1>
                 </div>
                 <button onClick={() => setMobileOpen(false)} className="text-ink-300 p-1">
@@ -98,12 +85,13 @@ export default function AppShell({ initialConfig }: { initialConfig: AppConfig }
               <nav className="flex-1 px-3 space-y-1">
                 {NAV_ITEMS.map((item) => {
                   const Icon = item.icon;
-                  const isActive = view === item.id;
+                  const isActive = pathname.startsWith(item.href);
                   return (
-                    <button
-                      key={item.id}
-                      onClick={() => navigate(item.id)}
-                      className={`w-full text-left relative px-4 py-3 rounded-sm transition-all ${
+                    <Link
+                      key={item.href}
+                      href={item.href}
+                      onClick={() => setMobileOpen(false)}
+                      className={`block w-full text-left relative px-4 py-3 rounded-sm transition-all ${
                         isActive ? "text-paper bg-ink-700/50" : "text-ink-300"
                       }`}
                     >
@@ -112,7 +100,7 @@ export default function AppShell({ initialConfig }: { initialConfig: AppConfig }
                         <Icon className="w-4 h-4 shrink-0" strokeWidth={1.5} />
                         <span className="text-sm">{item.label}</span>
                       </div>
-                    </button>
+                    </Link>
                   );
                 })}
               </nav>
@@ -134,7 +122,7 @@ export default function AppShell({ initialConfig }: { initialConfig: AppConfig }
           <div className="mb-12">
             <div className="eyebrow mb-1">Finanzas</div>
             <h1 className="display text-3xl text-paper leading-none">
-              {config.nombre || "Casas"}
+              {initialConfig.nombre || "Casas"}
               <span className="text-amber italic">.</span>
             </h1>
           </div>
@@ -142,12 +130,12 @@ export default function AppShell({ initialConfig }: { initialConfig: AppConfig }
           <nav className="flex-1 space-y-1">
             {NAV_ITEMS.map((item) => {
               const Icon = item.icon;
-              const isActive = view === item.id;
+              const isActive = pathname.startsWith(item.href);
               return (
-                <button
-                  key={item.id}
-                  onClick={() => navigate(item.id)}
-                  className={`w-full text-left group relative px-3 py-2.5 transition-all ${
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  className={`block w-full text-left group relative px-3 py-2.5 transition-all ${
                     isActive ? "text-paper" : "text-ink-300 hover:text-paper"
                   }`}
                 >
@@ -162,7 +150,7 @@ export default function AppShell({ initialConfig }: { initialConfig: AppConfig }
                     <Icon className="w-4 h-4 shrink-0" strokeWidth={1.5} />
                     <span className="text-sm">{item.label}</span>
                   </div>
-                </button>
+                </Link>
               );
             })}
           </nav>
@@ -180,44 +168,29 @@ export default function AppShell({ initialConfig }: { initialConfig: AppConfig }
       <nav className="lg:hidden fixed bottom-0 left-0 right-0 bg-ink-900/95 backdrop-blur-md hairline-t z-40 flex">
         {NAV_ITEMS.map((item) => {
           const Icon = item.icon;
-          const isActive = view === item.id;
+          const isActive = pathname.startsWith(item.href);
           return (
-            <button
-              key={item.id}
-              onClick={() => navigate(item.id)}
+            <Link
+              key={item.href}
+              href={item.href}
               className={`flex-1 flex flex-col items-center gap-1 py-2.5 transition-colors ${
                 isActive ? "text-amber" : "text-ink-400"
               }`}
             >
               <Icon className="w-4 h-4" strokeWidth={1.5} />
               <span className="text-[9px] tracking-wider uppercase">{item.label}</span>
-            </button>
+            </Link>
           );
         })}
       </nav>
 
       {/* ── Main content ────────────────────────────────────── */}
       <main className="flex-1 min-w-0 pb-20 lg:pb-0">
-        {/* Views mount on first visit, then stay alive (hidden via CSS) */}
-        <LazyView visible={view === "dashboard"}><Dashboard config={config} /></LazyView>
-        <LazyView visible={view === "transactions"}><Transactions config={config} /></LazyView>
-        <LazyView visible={view === "dolares"}><Dolares /></LazyView>
-        <LazyView visible={view === "ahorro"}><Ahorro /></LazyView>
-        <LazyView visible={view === "analytics"}><Analytics config={config} /></LazyView>
-        <LazyView visible={view === "import"}><ImportView config={config} /></LazyView>
-        <LazyView visible={view === "settings"}><SettingsView config={config} onSaved={setConfig} /></LazyView>
+        {children}
       </main>
     </div>
     </DataProvider>
   );
-}
-
-/** Mounts children on first visibility, then keeps alive with CSS hidden */
-function LazyView({ visible, children }: { visible: boolean; children: React.ReactNode }) {
-  const mounted = useRef(false);
-  if (visible) mounted.current = true;
-  if (!mounted.current) return null;
-  return <div className={visible ? "" : "hidden"}>{children}</div>;
 }
 
 function UserBadge() {
