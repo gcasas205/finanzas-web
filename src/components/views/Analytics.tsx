@@ -76,7 +76,7 @@ export default function Analytics({ config }: Props) {
 
   return (
     <div className="p-4 sm:p-6 lg:p-10 max-w-[1400px]">
-      <header className="mb-10 flex items-end justify-between">
+      <header className="mb-10 flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
         <div>
           <div className="eyebrow mb-2">Análisis</div>
           <h1 className="display text-3xl sm:text-5xl text-paper">
@@ -105,12 +105,12 @@ export default function Analytics({ config }: Props) {
       </header>
 
       {/* Tabs */}
-      <div className="flex gap-0 mb-10 hairline-b">
+      <div className="flex gap-0 mb-10 hairline-b overflow-x-auto">
         {TABS.map(t => (
           <button
             key={t.id}
             onClick={() => setTab(t.id)}
-            className={`relative px-6 py-3 text-sm transition-colors ${
+            className={`relative shrink-0 whitespace-nowrap px-6 py-3 text-sm transition-colors ${
               tab === t.id ? "text-paper" : "text-ink-300 hover:text-paper"
             }`}
           >
@@ -139,8 +139,8 @@ function TendenciasTab({ evolution }: { evolution: any[] }) {
   if (!evolution.length) return <Empty />;
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 lg:gap-6">
-      <div className="surface p-8">
+    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 lg:gap-6 [&>*]:min-w-0">
+      <div className="surface p-4 sm:p-8">
         <div className="eyebrow mb-1">Flujo mensual</div>
         <h3 className="display text-2xl text-paper mb-6">Ingresos vs Gastos</h3>
         <ResponsiveContainer width="100%" height={300}>
@@ -156,7 +156,7 @@ function TendenciasTab({ evolution }: { evolution: any[] }) {
         </ResponsiveContainer>
       </div>
 
-      <div className="surface p-8">
+      <div className="surface p-4 sm:p-8">
         <div className="eyebrow mb-1">Acumulado</div>
         <h3 className="display text-2xl text-paper mb-6">Ahorro acumulado</h3>
         <ResponsiveContainer width="100%" height={300}>
@@ -178,7 +178,7 @@ function TendenciasTab({ evolution }: { evolution: any[] }) {
         </ResponsiveContainer>
       </div>
 
-      <div className="surface p-8 col-span-1 lg:col-span-2">
+      <div className="surface p-4 sm:p-8 col-span-1 lg:col-span-2">
         <div className="eyebrow mb-1">Tendencia</div>
         <h3 className="display text-2xl text-paper mb-6">Ahorro mensual</h3>
         <ResponsiveContainer width="100%" height={250}>
@@ -214,8 +214,8 @@ function CategoriasTab({ transactions, selectedMonth }: { transactions: Transact
   if (!cats.length) return <Empty />;
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 lg:gap-6">
-      <div className="col-span-1 lg:col-span-7 surface p-8">
+    <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 lg:gap-6 [&>*]:min-w-0">
+      <div className="col-span-1 lg:col-span-7 surface p-4 sm:p-8">
         <div className="eyebrow mb-1">{formatMes(selectedMonth)}</div>
         <h3 className="display text-2xl text-paper mb-6">Gastos por categoría</h3>
         <ResponsiveContainer width="100%" height={cats.length * 52 + 20}>
@@ -232,7 +232,7 @@ function CategoriasTab({ transactions, selectedMonth }: { transactions: Transact
         </ResponsiveContainer>
       </div>
 
-      <div className="col-span-1 lg:col-span-5 surface p-8">
+      <div className="col-span-1 lg:col-span-5 surface p-4 sm:p-8">
         <div className="eyebrow mb-1">Distribución</div>
         <h3 className="display text-2xl text-paper mb-6">Porcentaje</h3>
         <ResponsiveContainer width="100%" height={200}>
@@ -283,7 +283,7 @@ function MercadoPagoTab({ acumulado, tna }: { acumulado: number; tna: number }) 
   return (
     <div>
       {/* KPI row */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-6 mb-8 [&>*]:min-w-0">
         {[
           { label: "Capital en pesos", value: acumulado, color: "#8A8576" },
           { label: "Ganancia 1 mes", value: g1, color: "#6A8970" },
@@ -306,7 +306,7 @@ function MercadoPagoTab({ acumulado, tna }: { acumulado: number; tna: number }) 
         ))}
       </div>
 
-      <div className="surface p-8">
+      <div className="surface p-4 sm:p-8">
         <div className="flex items-start justify-between mb-6">
           <div>
             <div className="eyebrow mb-1">Interés compuesto</div>
@@ -377,8 +377,8 @@ function ComparativaTab({ transactions, selectedMonth }: { transactions: Transac
   if (!data.length) return <Empty message="Se necesitan al menos 2 meses de datos" />;
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 lg:gap-6">
-      <div className="surface p-8">
+    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 lg:gap-6 [&>*]:min-w-0">
+      <div className="surface p-4 sm:p-8">
         <div className="eyebrow mb-1">{formatMes(prevMonth, true)} vs {formatMes(selectedMonth, true)}</div>
         <h3 className="display text-2xl text-paper mb-6">Comparativa mensual</h3>
         <ResponsiveContainer width="100%" height={data.length * 52 + 20}>
@@ -396,7 +396,7 @@ function ComparativaTab({ transactions, selectedMonth }: { transactions: Transac
         </ResponsiveContainer>
       </div>
 
-      <div className="surface p-8">
+      <div className="surface p-4 sm:p-8">
         <div className="eyebrow mb-1">Variación</div>
         <h3 className="display text-2xl text-paper mb-6">Cambio porcentual</h3>
         <div className="space-y-4">
