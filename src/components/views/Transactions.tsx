@@ -159,7 +159,8 @@ export default function Transactions({ config }: Props) {
       {/* Table */}
       <div className="surface overflow-hidden">
         <div className="overflow-x-auto">
-        <table className="w-full">
+        {/* Desktop Table */}
+        <table className="hidden md:table w-full">
           <thead>
             <tr className="hairline-b">
               <th className="eyebrow text-left px-6 py-4">Pago</th>
@@ -207,18 +208,18 @@ export default function Transactions({ config }: Props) {
                   {tx.cuotaTotal > 1 ? `${tx.cuotaNumero}/${tx.cuotaTotal}` : "—"}
                 </td>
                 <td className="px-6 py-4 text-right">
-                  <div className="inline-flex gap-1 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
+                  <div className="inline-flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                     <button
                       onClick={() => { setEditing(tx); setShowForm(true); }}
-                      className="p-2 sm:p-1.5 text-ink-300 hover:text-paper transition-colors"
+                      className="p-1.5 text-ink-300 hover:text-paper transition-colors"
                     >
-                      <Edit2 className="w-4 h-4 sm:w-3.5 sm:h-3.5" />
+                      <Edit2 className="w-3.5 h-3.5" />
                     </button>
                     <button
                       onClick={() => handleDelete(tx.id)}
-                      className="p-2 sm:p-1.5 text-ink-300 hover:text-terra-light transition-colors"
+                      className="p-1.5 text-ink-300 hover:text-terra-light transition-colors"
                     >
-                      <Trash2 className="w-4 h-4 sm:w-3.5 sm:h-3.5" />
+                      <Trash2 className="w-3.5 h-3.5" />
                     </button>
                   </div>
                 </td>
@@ -226,6 +227,49 @@ export default function Transactions({ config }: Props) {
             ))}
           </tbody>
         </table>
+
+        {/* Mobile Cards */}
+        <div className="md:hidden flex flex-col divide-y divide-ink-600/60">
+          {loading ? (
+            <div className="text-center py-12 text-ink-300 italic">Cargando...</div>
+          ) : filtered.length === 0 ? (
+            <div className="text-center py-12 text-ink-300 italic">Sin movimientos</div>
+          ) : visibleRows.map((tx) => (
+            <div key={tx.id} className="p-4 flex flex-col gap-3">
+              <div className="flex justify-between items-start">
+                <div>
+                  <div className="text-sm text-paper font-medium mb-1">{tx.descripcion}</div>
+                  <div className="text-[10px] text-ink-400 tabular font-mono">Pago: {formatFecha(tx.fechaPago)}</div>
+                </div>
+                <div className="text-right">
+                  <div className={`font-mono tabular text-sm ${tx.tipo === "ingreso" ? "text-moss-light" : "text-terra-light"}`}>
+                    {tx.tipo === "ingreso" ? "+" : "-"}{tx.moneda === "USD" ? <UsdAmount value={tx.monto} /> : formatPesos(tx.monto)}
+                    {tx.moneda === "USD" && <span className="ml-1 text-[9px] uppercase text-amber border border-amber/40 px-1 py-0.5">USD</span>}
+                  </div>
+                  {tx.cuotaTotal > 1 && (
+                    <div className="text-[9px] text-ink-400 mt-1 uppercase tracking-wider">
+                      Cuota {tx.cuotaNumero}/{tx.cuotaTotal}
+                    </div>
+                  )}
+                </div>
+              </div>
+              <div className="flex items-center justify-between">
+                <div className="inline-flex items-center gap-1.5">
+                  <div className="w-2 h-2 rounded-full" style={{ background: getCategoryColor(tx.categoria) }} />
+                  <span className="text-[10px] uppercase tracking-wider text-ink-300">{tx.categoria}</span>
+                </div>
+                <div className="flex gap-4">
+                  <button onClick={() => { setEditing(tx); setShowForm(true); }} className="text-ink-400 hover:text-paper p-1">
+                    <Edit2 className="w-4 h-4" />
+                  </button>
+                  <button onClick={() => handleDelete(tx.id)} className="text-ink-400 hover:text-terra-light p-1">
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
         </div>
       </div>
 
@@ -352,30 +396,30 @@ function TransactionForm({ editing, config, onClose, onSaved }: FormProps) {
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      className="fixed inset-0 bg-ink-900/80 backdrop-blur-sm z-50 flex items-center justify-center p-6"
+      className="fixed inset-0 bg-ink-900/80 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center sm:p-6"
       onClick={onClose}
     >
       <motion.div
-        initial={{ opacity: 0, scale: 0.96, y: 20 }}
-        animate={{ opacity: 1, scale: 1, y: 0 }}
-        exit={{ opacity: 0, scale: 0.96, y: 20 }}
+        initial={{ opacity: 0, y: 40 }}
+        animate={{ opacity: 1, y: 0 }}
+        exit={{ opacity: 0, y: 40 }}
         transition={{ duration: 0.25 }}
-        className="surface-elevated w-full max-w-2xl p-8 max-h-[90vh] overflow-y-auto"
+        className="surface-elevated w-full sm:max-w-2xl p-5 sm:p-8 max-h-[95vh] sm:max-h-[90vh] overflow-y-auto rounded-t-2xl sm:rounded-none"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-start justify-between mb-6">
+        <div className="flex items-start justify-between mb-5 sm:mb-6">
           <div>
             <div className="eyebrow mb-1">{editing ? "Editar" : "Nueva"}</div>
-            <h2 className="display text-3xl text-paper">
+            <h2 className="display text-2xl sm:text-3xl text-paper">
               {editing ? "Modificar movimiento" : "Nuevo movimiento"}
             </h2>
           </div>
-          <button onClick={onClose} className="text-ink-300 hover:text-paper p-2">
+          <button onClick={onClose} className="text-ink-300 hover:text-paper p-2 -mr-2">
             <X className="w-5 h-5" />
           </button>
         </div>
 
-        <div className="space-y-5">
+        <div className="space-y-4 sm:space-y-5">
           {/* Tipo */}
           <div className="grid grid-cols-2 gap-3">
             {(["egreso", "ingreso"] as const).map(t => (
@@ -405,42 +449,43 @@ function TransactionForm({ editing, config, onClose, onSaved }: FormProps) {
             />
           </Field>
 
-          {/* Monto + Moneda + Fuente */}
-          <div className="grid grid-cols-2 gap-4">
-            <Field label={`Monto (${moneda})`}>
-              <div className="flex">
-                <input
-                  type="number"
-                  step="0.01"
-                  value={monto}
-                  onChange={(e) => setMonto(e.target.value)}
-                  placeholder="0.00"
-                  className="form-input tabular font-mono rounded-none"
-                />
-                <div className="flex border border-l-0 border-ink-500">
-                  {(["ARS", "USD"] as const).map(m => (
-                    <button
-                      key={m}
-                      type="button"
-                      onClick={() => setMoneda(m)}
-                      className={`px-3 text-xs font-mono transition-colors ${
-                        moneda === m ? "bg-amber text-ink-900" : "text-ink-300 hover:bg-ink-700/40"
-                      }`}
-                    >
-                      {m}
-                    </button>
-                  ))}
-                </div>
+          {/* Monto + Moneda (full width en mobile) */}
+          <Field label={`Monto (${moneda})`}>
+            <div className="flex">
+              <input
+                type="number"
+                step="0.01"
+                value={monto}
+                onChange={(e) => setMonto(e.target.value)}
+                placeholder="0.00"
+                inputMode="decimal"
+                className="form-input flex-1 tabular font-mono rounded-none text-lg sm:text-base"
+              />
+              <div className="flex border border-l-0 border-ink-500 shrink-0">
+                {(["ARS", "USD"] as const).map(m => (
+                  <button
+                    key={m}
+                    type="button"
+                    onClick={() => setMoneda(m)}
+                    className={`px-4 sm:px-3 py-3 text-xs font-mono transition-colors ${
+                      moneda === m ? "bg-amber text-ink-900" : "text-ink-300 hover:bg-ink-700/40"
+                    }`}
+                  >
+                    {m}
+                  </button>
+                ))}
               </div>
-            </Field>
-            <Field label="Fuente">
-              <select value={fuente} onChange={(e) => setFuente(e.target.value as any)} className="form-input">
-                <option value="manual">Manual / Efectivo</option>
-                <option value="tarjeta">Tarjeta de crédito</option>
-                <option value="recibo">Recibo de sueldo</option>
-              </select>
-            </Field>
-          </div>
+            </div>
+          </Field>
+
+          {/* Fuente (full width en mobile) */}
+          <Field label="Fuente">
+            <select value={fuente} onChange={(e) => setFuente(e.target.value as any)} className="form-input">
+              <option value="manual">Manual / Efectivo</option>
+              <option value="tarjeta">Tarjeta de crédito</option>
+              <option value="recibo">Recibo de sueldo</option>
+            </select>
+          </Field>
 
           {moneda === "USD" && (
             <p className="text-[11px] text-ink-400 -mt-2 leading-relaxed">
@@ -463,8 +508,8 @@ function TransactionForm({ editing, config, onClose, onSaved }: FormProps) {
             </Field>
           )}
 
-          {/* Fechas */}
-          <div className="grid grid-cols-2 gap-4">
+          {/* Fechas — stacked en mobile, side by side en desktop */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <Field label="Fecha de consumo">
               <input
                 type="date"
@@ -497,8 +542,8 @@ function TransactionForm({ editing, config, onClose, onSaved }: FormProps) {
             </Field>
           </div>
 
-          {/* Categoría */}
-          <div className="grid grid-cols-2 gap-4">
+          {/* Categoría — stacked en mobile */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <Field label="Categoría">
               <select value={categoria} onChange={(e) => setCategoria(e.target.value)} className="form-input">
                 {CATEGORIES.map(c => <option key={c.name} value={c.name}>{c.name}</option>)}
@@ -535,15 +580,16 @@ function TransactionForm({ editing, config, onClose, onSaved }: FormProps) {
           </Field>
         </div>
 
-        <div className="flex justify-end gap-3 mt-8 pt-6 hairline-t">
+        {/* Botones — full width en mobile */}
+        <div className="flex flex-col-reverse sm:flex-row justify-end gap-3 mt-6 sm:mt-8 pt-5 sm:pt-6 hairline-t">
           <button onClick={onClose}
-            className="px-5 py-2.5 text-sm text-ink-300 hover:text-paper transition-colors">
+            className="px-5 py-3 sm:py-2.5 text-sm text-ink-300 hover:text-paper transition-colors text-center">
             Cancelar
           </button>
           <button
             onClick={handleSubmit}
             disabled={saving}
-            className="px-6 py-2.5 bg-amber text-ink-900 text-sm font-medium hover:bg-amber-light disabled:opacity-50 transition-all"
+            className="px-6 py-3 sm:py-2.5 bg-amber text-ink-900 text-sm font-medium hover:bg-amber-light disabled:opacity-50 transition-all"
           >
             {saving ? "Guardando..." : "Guardar"}
           </button>
@@ -556,14 +602,20 @@ function TransactionForm({ editing, config, onClose, onSaved }: FormProps) {
           background: rgba(13, 18, 13, 0.6);
           border: 1px solid #3A3833;
           color: #F4F1EA;
-          padding: 10px 14px;
-          font-size: 14px;
+          padding: 12px 14px;
+          font-size: 16px;
           outline: none;
           transition: border-color 0.2s;
+          -webkit-appearance: none;
+          border-radius: 0;
         }
-        .form-input:focus {
-          border-color: #C9A24B;
+        @media (min-width: 640px) {
+          .form-input {
+            padding: 10px 14px;
+            font-size: 14px;
+          }
         }
+        .form-input:focus { border-color: #C9A24B; }
       `}</style>
     </motion.div>
   );

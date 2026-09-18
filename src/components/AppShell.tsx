@@ -166,19 +166,19 @@ export default function AppShell({ initialConfig, children }: { initialConfig: A
 
       {/* ── Mobile bottom nav ───────────────────────────────── */}
       <nav className="lg:hidden fixed bottom-0 left-0 right-0 bg-ink-900/95 backdrop-blur-md hairline-t z-40 flex">
-        {NAV_ITEMS.map((item) => {
+        {NAV_ITEMS.slice(0, 4).map((item) => {
           const Icon = item.icon;
           const isActive = pathname.startsWith(item.href);
           return (
             <Link
               key={item.href}
               href={item.href}
-              className={`flex-1 flex flex-col items-center gap-1 py-2.5 transition-colors ${
-                isActive ? "text-amber" : "text-ink-400"
+              className={`flex-1 flex flex-col items-center justify-center gap-1 py-3 transition-colors ${
+                isActive ? "text-amber" : "text-ink-400 hover:text-ink-300"
               }`}
             >
-              <Icon className="w-4 h-4" strokeWidth={1.5} />
-              <span className="text-[9px] tracking-wider uppercase">{item.label}</span>
+              <Icon className="w-5 h-5" strokeWidth={1.5} />
+              <span className="text-[10px] tracking-wider uppercase font-medium">{item.label}</span>
             </Link>
           );
         })}
