@@ -368,6 +368,13 @@ Algunos PDFs usan fuentes con encoding especial. La app soporta Unicode PUA pero
 
 ## Novedades
 
+### v3.3
+
+- **Fix — Resumen en blanco**: la sección Resumen volvió a renderizar. Una regresión había dejado su página devolviendo `null` en lugar del dashboard.
+- **Navegación instantánea entre secciones**: las rutas se prerenderizan estáticas y Next las prefetchea, evitando un ida y vuelta al servidor (y el cold start en Vercel) en cada cambio de solapa. Antes tardaba 1–2 s; ahora es client-side.
+- **Skeleton de carga** (`loading.tsx`): feedback inmediato mientras una sección aún no está prefetcheada, para que la UI nunca se congele sin señal.
+- **Fix — combo de mes**: el selector de mes ya no se superpone con la flecha. Se reemplazó la flecha nativa del navegador por un chevron controlado con espacio reservado, así etiquetas largas como "Septiembre 2026" entran bien. Aplicado en Resumen, Análisis, Dólares y Movimientos.
+
 ### v3.2
 
 - **Nueva solapa Ahorro**: ahorro por objetivos construido sobre tu tenencia de USD (no es plata aparte). Piso de emergencia que se llena primero, sobres de mediano plazo por % y objetivo con redistribución al completarse, y largo plazo (S&P) como USD apartados con proyección ilustrativa.
@@ -385,4 +392,4 @@ Proyecto personal. Uso libre.
 
 ---
 
-v3.2 · Gonzalo Casas
+v3.3 · Gonzalo Casas

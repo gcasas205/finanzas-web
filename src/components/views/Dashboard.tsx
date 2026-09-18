@@ -148,7 +148,7 @@ export default function Dashboard({ config }: Props) {
           <select
             value={selectedMonth}
             onChange={(e) => setSelectedMonth(e.target.value)}
-            className="bg-ink-800 border border-ink-500 text-paper px-3 py-2 text-sm focus:border-amber outline-none cursor-pointer"
+            className="select-native bg-ink-800 border border-ink-500 text-paper pl-3 pr-9 py-2 text-sm focus:border-amber outline-none cursor-pointer"
           >
             {months.map(m => (
               <option key={m} value={m}>{formatMes(m)}</option>

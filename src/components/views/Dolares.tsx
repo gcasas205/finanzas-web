@@ -148,7 +148,7 @@ export default function Dolares() {
           <select
             value={selectedMonth}
             onChange={(e) => setSelectedMonth(e.target.value)}
-            className="flex-1 sm:flex-none bg-ink-800 border border-ink-500 text-paper px-3 py-2 text-sm focus:border-amber outline-none cursor-pointer"
+            className="select-native flex-1 sm:flex-none bg-ink-800 border border-ink-500 text-paper pl-3 pr-9 py-2 text-sm focus:border-amber outline-none cursor-pointer"
           >
             <option value={ALL}>Todo el histórico</option>
             {months.map(m => <option key={m} value={m}>{formatMes(m)}</option>)}

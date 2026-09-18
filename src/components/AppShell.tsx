@@ -108,7 +108,7 @@ export default function AppShell({ initialConfig, children }: { initialConfig: A
               <div className="p-5 hairline-t space-y-3">
                 <UserBadge />
                 <div className="text-[10px] text-ink-300 tracking-widest uppercase">
-                  v3.2 · Edición Personal
+                  v3.3 · Edición Personal
                 </div>
               </div>
             </motion.aside>
@@ -158,7 +158,7 @@ export default function AppShell({ initialConfig, children }: { initialConfig: A
           <div className="pt-6 hairline-t space-y-3">
             <UserBadge />
             <div className="text-[10px] text-ink-300 tracking-widest uppercase">
-              v3.2 · Edición Personal
+              v3.3 · Edición Personal
             </div>
           </div>
         </div>

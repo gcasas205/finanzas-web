@@ -103,7 +103,7 @@ export default function Transactions({ config }: Props) {
         <select
           value={filterMonth}
           onChange={(e) => setFilterMonth(e.target.value)}
-          className="bg-ink-900/60 border border-ink-500 text-paper px-3 py-2 text-xs focus:border-amber outline-none cursor-pointer"
+          className="select-native bg-ink-900/60 border border-ink-500 text-paper pl-3 pr-9 py-2 text-xs focus:border-amber outline-none cursor-pointer"
         >
           <option value="">Todos los meses</option>
           {months.map(m => <option key={m} value={m}>{formatMes(m)}</option>)}
