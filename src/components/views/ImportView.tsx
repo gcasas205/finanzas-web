@@ -8,7 +8,6 @@ import type { AppConfig, Transaction } from "@/types";
 import { formatPesos, formatFecha, formatMes } from "@/lib/utils";
 import { CATEGORIES } from "@/lib/categories";
 import { useTransactions } from "@/components/DataProvider";
-import { useFaviconLoading } from "@/components/FaviconLoadingSignal";
 
 interface Props { config: AppConfig; }
 
@@ -25,8 +24,6 @@ export default function ImportView({ config }: Props) {
   // Lista editable de la vista previa de tarjeta
   const [editedTxs, setEditedTxs] = useState<Transaction[]>([]);
   const fileRef = useRef<HTMLInputElement>(null);
-
-  useFaviconLoading(parsing || importing);
 
   useEffect(() => {
     if (result?.type === "visa") setEditedTxs(result.transactions ?? []);

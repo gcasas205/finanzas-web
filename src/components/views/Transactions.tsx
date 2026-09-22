@@ -10,6 +10,7 @@ import { ORIGEN_LABEL } from "@/lib/ahorro-calc";
 import { CATEGORIES, autoCategorizar, getCategoryColor } from "@/lib/categories";
 import { useTransactions } from "@/components/DataProvider";
 import { UsdAmount } from "@/components/UsdAmount";
+import LogoLoader from "@/components/LogoLoader";
 
 interface Props { config: AppConfig; }
 
@@ -69,6 +70,8 @@ export default function Transactions({ config }: Props) {
       toast.error("Error al eliminar");
     }
   };
+
+  if (loading) return <LogoLoader className="min-h-[70vh]" />;
 
   return (
     <div className="p-4 sm:p-6 lg:p-10 max-w-[1400px]">
@@ -176,9 +179,7 @@ export default function Transactions({ config }: Props) {
             </tr>
           </thead>
           <tbody>
-            {loading ? (
-              <tr><td colSpan={7} className="text-center py-12 text-ink-300 italic" role="status" aria-live="polite">Cargando...</td></tr>
-            ) : filtered.length === 0 ? (
+            {filtered.length === 0 ? (
               <tr><td colSpan={7} className="text-center py-16 text-ink-300 italic">Sin movimientos para los filtros seleccionados</td></tr>
             ) : visibleRows.map((tx) => (
               <tr
@@ -235,9 +236,7 @@ export default function Transactions({ config }: Props) {
 
         {/* Mobile Cards */}
         <div className="md:hidden flex flex-col divide-y divide-ink-600/60">
-          {loading ? (
-            <div className="text-center py-12 text-ink-300 italic" role="status" aria-live="polite">Cargando...</div>
-          ) : filtered.length === 0 ? (
+          {filtered.length === 0 ? (
             <div className="text-center py-12 text-ink-300 italic">Sin movimientos</div>
           ) : visibleRows.map((tx) => (
             <div key={tx.id} className="p-4 flex flex-col gap-3">

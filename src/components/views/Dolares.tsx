@@ -19,6 +19,8 @@ import { ORIGEN_LABEL } from "@/lib/ahorro-calc";
 const ORIGENES: BucketOrigen[] = ["regla", "emergencia", "auto", "mud", "vac", "tec", "largo"];
 import { useDolar, useTransactions } from "@/components/DataProvider";
 import { UsdAmount } from "@/components/UsdAmount";
+import LogoLoader from "@/components/LogoLoader";
+import AnimatedNumber, { AnimatedUsdAmount } from "@/components/AnimatedNumber";
 
 const ALL = "__all__";
 
@@ -134,6 +136,8 @@ export default function Dolares() {
     else toast.error("Error al eliminar");
   };
 
+  if (isLoading) return <LogoLoader className="min-h-[70vh]" />;
+
   return (
     <div className="p-4 sm:p-6 lg:p-10 max-w-[1400px]">
       {/* Header */}
@@ -172,7 +176,7 @@ export default function Dolares() {
         <KPICard
           variant="hero"
           eyebrow="Tenencia en dólares"
-          value={<UsdAmount value={resumen.tenenciaUSD} />}
+          value={<AnimatedUsdAmount value={resumen.tenenciaUSD} />}
           subtitle={`Precio prom. compra ${formatPesos(resumen.precioPromedioCompra)}`}
           accent="amber"
           icon={DollarSign}
@@ -180,14 +184,14 @@ export default function Dolares() {
         />
         <KPICard
           eyebrow="Valor hoy (en pesos)"
-          value={formatPesos(valorActualARS)}
+          value={<AnimatedNumber value={valorActualARS} format={formatPesos} />}
           subtitle={precioValuacion > 0 ? `@ ${formatPesos(precioValuacion)}/USD` : "Sin cotización"}
           accent="ink"
           className="col-span-1 sm:col-span-3"
         />
         <KPICard
           eyebrow="Resultado por T.C."
-          value={formatPesos(resultadoARS)}
+          value={<AnimatedNumber value={resultadoARS} format={formatPesos} />}
           subtitle={`${resultadoARS >= 0 ? "+" : ""}${resultadoPct.toFixed(1)}% vs. costo`}
           accent={resultadoARS >= 0 ? "moss" : "terra"}
           icon={resultadoARS >= 0 ? TrendingUp : TrendingDown}
@@ -266,9 +270,7 @@ export default function Dolares() {
               </tr>
             </thead>
             <tbody>
-              {isLoading ? (
-                <tr><td colSpan={7} className="text-center py-12 text-ink-300 italic" role="status" aria-live="polite">Cargando...</td></tr>
-              ) : filas.length === 0 ? (
+              {filas.length === 0 ? (
                 <tr><td colSpan={7} className="text-center py-16 text-ink-300 italic">
                   {selectedMonth === ALL
                     ? "Todavía no registraste operaciones ni gastos en dólares"
@@ -364,7 +366,7 @@ function DesgloseCard({ icon: Icon, accent, label, usd, ars, arsLabel }: {
         <div className="eyebrow text-[9px] sm:text-[10px]" style={{ color: accent }}>{label}</div>
         <Icon className="w-3.5 h-3.5 text-ink-300" strokeWidth={1.5} />
       </div>
-      <div className="display text-xl sm:text-2xl text-paper tabular leading-none"><UsdAmount value={usd} /></div>
+      <div className="display text-xl sm:text-2xl text-paper tabular leading-none"><AnimatedUsdAmount value={usd} /></div>
       <div className="text-[10px] text-ink-300 mt-1 tabular">
         {ars !== undefined ? `${formatPesosCompact(ars)} ${arsLabel}` : arsLabel}
       </div>
@@ -396,11 +398,11 @@ function CotizacionBanner({ cot, onRefresh, refreshing }: {
         <div className="flex items-center gap-8 flex-1">
           <div>
             <div className="text-[10px] uppercase tracking-wider text-ink-400 mb-0.5">Compra</div>
-            <div className="display text-2xl text-moss-light tabular">{formatPesos(cot!.compra)}</div>
+            <div className="display text-2xl text-moss-light tabular"><AnimatedNumber value={cot!.compra} format={formatPesos} /></div>
           </div>
           <div>
             <div className="text-[10px] uppercase tracking-wider text-ink-400 mb-0.5">Venta</div>
-            <div className="display text-2xl text-terra-light tabular">{formatPesos(cot!.venta)}</div>
+            <div className="display text-2xl text-terra-light tabular"><AnimatedNumber value={cot!.venta} format={formatPesos} /></div>
           </div>
           {cot!.actualizado && (
             <div className="ml-auto text-[10px] text-ink-400 hidden sm:block">

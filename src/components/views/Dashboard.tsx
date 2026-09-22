@@ -17,7 +17,8 @@ import {
 import { getCategoryColor } from "@/lib/categories";
 import { useTransactions } from "@/components/DataProvider";
 import { resumenDolar, impactoPesosDolar } from "@/lib/dolar-calc";
-import { UsdAmount } from "@/components/UsdAmount";
+import LogoLoader from "@/components/LogoLoader";
+import AnimatedNumber, { AnimatedUsdAmount } from "@/components/AnimatedNumber";
 
 interface Props { config: AppConfig; }
 
@@ -130,7 +131,7 @@ export default function Dashboard({ config }: Props) {
       .slice(0, 6);
   }, [transactions]);
 
-  if (loading) return <SkeletonView />;
+  if (loading) return <LogoLoader className="min-h-[70vh]" />;
 
   return (
     <div className="p-4 sm:p-6 lg:p-10 max-w-[1400px]">
@@ -220,14 +221,18 @@ export default function Dashboard({ config }: Props) {
           <div className="grid grid-cols-3 gap-2 sm:gap-4">
             <div>
               <div className="text-[9px] uppercase tracking-wider text-ink-400 mb-1">Tenencia</div>
-              <div className="display text-lg sm:text-3xl text-paper tabular leading-none"><UsdAmount value={dolar.tenenciaUSD} /></div>
+              <div className="display text-lg sm:text-3xl text-paper tabular leading-none">
+                <AnimatedUsdAmount value={dolar.tenenciaUSD} />
+              </div>
               <div className="text-[10px] text-ink-300 mt-1 truncate">
                 {dolar.precioPromedioCompra > 0 ? `PPC ${formatPesosCompact(dolar.precioPromedioCompra)}` : "Sin compras"}
               </div>
             </div>
             <div>
               <div className="text-[9px] uppercase tracking-wider text-ink-400 mb-1">Valor hoy</div>
-              <div className="display text-lg sm:text-3xl text-paper tabular leading-none">{formatPesosCompact(tenenciaUSDenARS)}</div>
+              <div className="display text-lg sm:text-3xl text-paper tabular leading-none">
+                <AnimatedNumber value={tenenciaUSDenARS} format={formatPesosCompact} />
+              </div>
               <div className="text-[10px] text-ink-300 mt-1 truncate">
                 {precioValuacion > 0 ? `@ ${formatPesosCompact(precioValuacion)}` : "Sin cotización"}
               </div>
@@ -235,7 +240,7 @@ export default function Dashboard({ config }: Props) {
             <div>
               <div className="text-[9px] uppercase tracking-wider text-ink-400 mb-1">Result. T.C.</div>
               <div className={`display text-lg sm:text-3xl tabular leading-none ${resultadoTC >= 0 ? "text-moss-light" : "text-terra-light"}`}>
-                {resultadoTC >= 0 ? "+" : ""}{formatPesosCompact(resultadoTC)}
+                {resultadoTC >= 0 ? "+" : ""}<AnimatedNumber value={resultadoTC} format={formatPesosCompact} />
               </div>
               <div className="text-[10px] text-ink-300 mt-1">latente</div>
             </div>
@@ -423,7 +428,7 @@ function KPICard({ variant = "default", eyebrow, value, valueText, accent, subti
       </div>
 
       <div className={`display tabular leading-none ${isHero ? "text-3xl sm:text-5xl lg:text-6xl" : "text-2xl sm:text-3xl lg:text-4xl"} text-paper mb-1 sm:mb-2`}>
-        {valueText ?? formatPesos(value)}
+        {valueText ?? <AnimatedNumber value={value} format={formatPesos} />}
       </div>
 
       <div className="text-[9px] sm:text-[11px] text-ink-300 tracking-wide truncate">
@@ -470,19 +475,6 @@ function EmptyState({ message }: { message: string }) {
   return (
     <div className="flex items-center justify-center py-16 text-sm text-ink-300">
       <span className="italic">{message}</span>
-    </div>
-  );
-}
-
-function SkeletonView() {
-  return (
-    <div className="p-10">
-      <div className="h-16 w-64 bg-ink-700/40 mb-12 animate-pulse" />
-      <div className="grid grid-cols-12 gap-6">
-        {Array.from({ length: 5 }).map((_, i) => (
-          <div key={i} className={`${i === 0 ? "col-span-6" : "col-span-3"} h-40 bg-ink-700/30 animate-pulse`} />
-        ))}
-      </div>
     </div>
   );
 }

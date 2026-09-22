@@ -125,13 +125,9 @@ ALLOWED_EMAILS=tu-email@gmail.com
 # Google Sheets
 GOOGLE_SHEET_ID=el-id-de-tu-planilla
 GOOGLE_SHEETS_CREDS_JSON={"type":"service_account","project_id":"..."}
-
-# App Config (opcionales)
-APP_NOMBRE=Tu Nombre
-MP_TNA=27.0
-CARD_CUTOFF_DAY=23
-CARD_DUE_DAY=5
 ```
+
+Nombre, TNA de Mercado Pago y días de tarjeta **no van en variables de entorno**: se configuran desde **Ajustes** dentro de la app y quedan guardados en la hoja `Config` del Sheets (no en Vercel, que resetea el filesystem en cada deploy).
 
 > **Importante:** `GOOGLE_SHEETS_CREDS_JSON` debe ser el contenido completo del `.json` de la cuenta de servicio **en una sola línea**. Para convertirlo ejecutá:
 > ```bash
@@ -183,10 +179,8 @@ git push -u origin main
 | `ALLOWED_EMAILS` | `tu-email@gmail.com` (separar con comas si son varios) |
 | `GOOGLE_SHEET_ID` | El ID de tu planilla |
 | `GOOGLE_SHEETS_CREDS_JSON` | El JSON de credenciales **en una sola línea** |
-| `APP_NOMBRE` | Tu nombre (opcional) |
-| `MP_TNA` | `27.0` (opcional) |
-| `CARD_CUTOFF_DAY` | `23` (opcional) |
-| `CARD_DUE_DAY` | `5` (opcional) |
+
+No hay variables para nombre, TNA ni días de tarjeta — eso se configura después, desde **Ajustes** dentro de la app ya desplegada (persiste en la hoja `Config`, no en Vercel).
 
 6. Click **Deploy**
 7. Esperar ~1-2 minutos
@@ -371,7 +365,7 @@ Algunos PDFs usan fuentes con encoding especial. La app soporta Unicode PUA pero
 ### v5.1
 
 - **Favicon con logo y estado de carga**: la pestaña del navegador ahora muestra el ícono de la app (el mismo "F." ámbar del wordmark) y gira un anillo de carga mientras hay datos, un guardado o una importación de PDF en curso — en cualquier sección, no solo en la que lo disparó.
-- **Ajustes en vivo desde la hoja Config**: nombre, TNA de Mercado Pago y días de tarjeta ahora se leen y persisten en la hoja `Config` del Sheets (antes vivían en el filesystem de Vercel, que se resetea en cada deploy). Un `ConfigProvider` los mantiene sincronizados en toda la app sin recargar la página; Sheet ID y credenciales siguen viniendo de variables de entorno.
+- **Ajustes en vivo, únicamente desde la hoja Config**: nombre, TNA de Mercado Pago y días de tarjeta ahora se leen y persisten en la hoja `Config` del Sheets (antes vivían en el filesystem de Vercel, que se resetea en cada deploy) y ya no tienen variable de entorno equivalente — si existieran, se ignoran a propósito, para que la hoja sea la única fuente de verdad y no queden pisando el valor guardado. Un `ConfigProvider` los mantiene sincronizados en toda la app sin recargar la página; Sheet ID y credenciales siguen viniendo de variables de entorno (son datos de arranque, no ajustes).
 - **Refactor de accesibilidad y diseño** (todas las vistas):
   - Contraste de texto secundario corregido: el tono `ink-400`, usado en ~40 lugares, daba ~2.7:1 sobre fondo oscuro (bajo el mínimo WCAG AA de 4.5:1); ahora pasa en toda la app desde un único token.
   - Foco de teclado real en todos los inputs y selects: `outline-none` estaba pisando silenciosamente el anillo de foco por el orden de capas de Tailwind.

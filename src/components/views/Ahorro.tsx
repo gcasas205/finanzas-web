@@ -6,6 +6,8 @@ import { useAhorro } from "@/components/DataProvider";
 import { UsdAmount } from "@/components/UsdAmount";
 import { computeAhorro, type SobreResultado } from "@/lib/ahorro-calc";
 import type { SobreKey } from "@/types";
+import LogoLoader from "@/components/LogoLoader";
+import { AnimatedUsdAmount } from "@/components/AnimatedNumber";
 
 const SOBRE_COLOR: Record<SobreKey, string> = {
   auto: "var(--color-sobre-auto)",
@@ -25,13 +27,7 @@ export default function Ahorro() {
   );
 
   if (isLoading || !r || !ahorroConfig) {
-    return (
-      <div className="p-4 sm:p-6 lg:p-10 max-w-[1200px]">
-        <div className="eyebrow mb-2">Objetivos en moneda dura</div>
-        <h1 className="display text-3xl sm:text-5xl text-paper mb-8">Ahorro</h1>
-        <div className="text-ink-300 italic" role="status" aria-live="polite">Cargando tu plan de ahorro…</div>
-      </div>
-    );
+    return <LogoLoader className="min-h-[60vh]" />;
   }
 
   const { emergencia, mediano, largo } = r;
@@ -86,7 +82,7 @@ export default function Ahorro() {
           </div>
           <div className="sm:text-right">
             <div className="display text-3xl sm:text-4xl tabular" style={{ color: EMERG_COLOR }}>
-              <UsdAmount value={emergencia.balance} />
+              <AnimatedUsdAmount value={emergencia.balance} />
             </div>
             <div className="text-[11px] text-ink-300 tabular mt-0.5">
               objetivo <UsdAmount value={emergencia.objetivo} />
@@ -139,7 +135,7 @@ export default function Ahorro() {
         <div>
           <div className="eyebrow mb-2" style={{ color: LARGO_COLOR }}>USD apartados</div>
           <div className="display text-3xl sm:text-4xl tabular" style={{ color: LARGO_COLOR }}>
-            <UsdAmount value={largo.balance} />
+            <AnimatedUsdAmount value={largo.balance} />
           </div>
           <div className="text-[12px] text-ink-300 mt-2">
             promedio actual ~<UsdAmount value={largo.aporteMensualProm} />/mes en {largo.mesesConAporte}{" "}
@@ -176,7 +172,7 @@ function ReconItem({ label, value, strong }: { label: string; value: number; str
     <div className="flex items-center gap-2">
       <span className="text-[11px] text-ink-300">{label}</span>
       <span className={`tabular ${strong ? "text-paper font-medium" : "text-ink-100"} text-sm`}>
-        <UsdAmount value={value} />
+        <AnimatedUsdAmount value={value} />
       </span>
     </div>
   );
@@ -205,7 +201,7 @@ function SobreCard({ sobre, color }: { sobre: SobreResultado; color: string }) {
         <span className="text-[11px] text-ink-300 tabular">{sobre.pct}%</span>
       </div>
       <div className="text-[13px] text-ink-100 mb-2 tabular">
-        <b className="text-paper text-[15px]"><UsdAmount value={sobre.balance} /></b>
+        <b className="text-paper text-[15px]"><AnimatedUsdAmount value={sobre.balance} /></b>
         <span className="text-ink-300"> / <UsdAmount value={sobre.objetivo} /></span>
       </div>
       <ProgressBar progreso={sobre.progreso} color={color} />

@@ -7,7 +7,6 @@ import { toast } from "sonner";
 import type { AppConfig } from "@/types";
 import { useRouter } from "next/navigation";
 import { useRefreshConfig } from "@/components/ConfigProvider";
-import { useFaviconLoading } from "@/components/FaviconLoadingSignal";
 
 interface Props {
   config: AppConfig;
@@ -19,7 +18,6 @@ export default function SettingsView({ config }: Props) {
   const [form, setForm] = useState<AppConfig>({ ...config });
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
-  useFaviconLoading(saving || testing);
   const [testOk, setTestOk] = useState<boolean | null>(null);
 
   const update = (key: keyof AppConfig, value: any) => {
@@ -34,7 +32,13 @@ export default function SettingsView({ config }: Props) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(form),
       });
-      await r.json();
+      const data = await r.json();
+      if (!r.ok) {
+        // Antes esto no se chequeaba: aunque la hoja Config fallara, se mostraba
+        // "guardado" igual y el cambio se perdía sin que se notara.
+        toast.error(data.error || "Error al guardar");
+        return;
+      }
       toast.success("Configuración guardada");
       refreshConfig();  // la hoja Config ya persistió; refrescamos la config en vivo
       router.refresh();

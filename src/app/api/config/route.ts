@@ -15,9 +15,18 @@ export async function GET() {
 
 export async function POST(req: NextRequest) {
   const body = await req.json();
-  const config = await saveConfig(body);
-  // Invalidar todo el caché porque cambió la config (puede cambiar la sheet)
-  cacheClear();
-  const test = await testConnection();
-  return NextResponse.json({ config, connection: test });
+  try {
+    const config = await saveConfig(body);
+    // Invalidar todo el caché porque cambió la config (puede cambiar la sheet)
+    cacheClear();
+    const test = await testConnection();
+    return NextResponse.json({ config, connection: test });
+  } catch (e: any) {
+    // Antes esto se tragaba y respondía 200 con la config vieja: el cliente
+    // mostraba "guardado" aunque no se hubiera escrito nada en la hoja.
+    return NextResponse.json(
+      { error: e?.message || "Error al guardar en la hoja Config" },
+      { status: 500 },
+    );
+  }
 }

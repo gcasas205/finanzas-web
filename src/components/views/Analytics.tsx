@@ -2,6 +2,7 @@
 
 import { useState, useMemo } from "react";
 import { motion } from "framer-motion";
+import LogoLoader from "@/components/LogoLoader";
 import {
   BarChart, Bar, LineChart, Line, AreaChart, Area,
   XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Cell,
@@ -72,7 +73,7 @@ export default function Analytics({ config }: Props) {
     { id: "comparativa", label: "Comparativa" },
   ] as const;
 
-  if (loading) return <div className="p-10 text-ink-300 italic" role="status" aria-live="polite">Cargando datos...</div>;
+  if (loading) return <LogoLoader className="min-h-[60vh]" />;
 
   return (
     <div className="p-4 sm:p-6 lg:p-10 max-w-[1400px]">

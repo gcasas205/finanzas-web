@@ -5,10 +5,10 @@ import os from "os";
 import type { Transaction, Sueldo, AppConfig, DolarOperacion, AhorroConfig, SobreKey } from "@/types";
 
 /**
- * Config se puede cargar de:
- * 1. Variables de entorno (Vercel / producción)
- * 2. Archivo local ~/.finanzas-web/config.json (desarrollo)
- * Las env vars tienen prioridad.
+ * Config de arranque (bootstrap): SOLO Sheet ID y credenciales, para poder
+ * conectarse a Sheets. Vienen de env vars (Vercel) o del archivo local (dev).
+ * Los ajustes editables (nombre, TNA, días de tarjeta) NO se leen de env vars:
+ * viven únicamente en la hoja Config — ver loadConfig más abajo.
  */
 
 const CONFIG_FILE = path.join(os.homedir(), ".finanzas-web", "config.json");
@@ -32,8 +32,9 @@ async function ensureConfigDir() {
   }
 }
 
-/** Config bootstrap: SOLO env + archivo local. No toca la red (Sheets).
- *  La usa getSheetsClient, por eso NO puede leer de la hoja (sería recursivo). */
+/** Config bootstrap: SOLO Sheet ID + credenciales (env o archivo local). No toca
+ *  la red (Sheets) ni lee ajustes editables — eso es trabajo de loadConfig.
+ *  La usa getSheetsClient, por eso tampoco puede leer de la hoja (sería recursivo). */
 async function loadBootstrapConfig(): Promise<AppConfig> {
   // Primero intentar archivo local
   let fileConfig: Partial<AppConfig> = {};
@@ -44,14 +45,11 @@ async function loadBootstrapConfig(): Promise<AppConfig> {
     // No existe o no se puede leer (normal en Vercel)
   }
 
-  // Las env vars sobreescriben el archivo local
+  // Las env vars sobreescriben el archivo local. Solo Sheet ID y credenciales:
+  // son secretos/datos de arranque, no ajustes — esos viven solo en la hoja Config.
   const envConfig: Partial<AppConfig> = {};
   if (process.env.GOOGLE_SHEET_ID) envConfig.googleSheetId = process.env.GOOGLE_SHEET_ID;
   if (process.env.GOOGLE_CREDS_PATH) envConfig.googleCredsPath = process.env.GOOGLE_CREDS_PATH;
-  if (process.env.MP_TNA) envConfig.mpTna = parseFloat(process.env.MP_TNA);
-  if (process.env.CARD_CUTOFF_DAY) envConfig.cardCutoffDay = parseInt(process.env.CARD_CUTOFF_DAY);
-  if (process.env.CARD_DUE_DAY) envConfig.cardDueDay = parseInt(process.env.CARD_DUE_DAY);
-  if (process.env.APP_NOMBRE) envConfig.nombre = process.env.APP_NOMBRE;
 
   return { ...DEFAULT_CONFIG, ...fileConfig, ...envConfig };
 }
@@ -155,7 +153,11 @@ async function upsertConfigRows(
 /** Persiste los ajustes editables (los presentes en `partial`) en la hoja Config. */
 async function saveAppSettingsToSheet(partial: Partial<AppConfig>): Promise<void> {
   const ctx = await getSheetsClient();
-  if (!ctx) return;
+  if (!ctx) {
+    // Antes esto retornaba silenciosamente: el POST respondía "ok" sin haber
+    // guardado nada, y el cambio se perdía en el próximo request/deploy.
+    throw new Error("No se pudo conectar a Google Sheets (revisá Sheet ID y credenciales)");
+  }
   const entries: Array<[string, string]> = [];
   for (const [field, key] of APP_SETTING_MAP) {
     const v = partial[field];
@@ -170,14 +172,12 @@ export async function saveConfig(config: Partial<AppConfig>): Promise<AppConfig>
   const current = await loadConfig();
   const merged = { ...current, ...config };
 
-  // 1) Fuente de verdad: la hoja Config (persiste de verdad, también en Vercel).
-  try {
-    await saveAppSettingsToSheet(config);
-  } catch (e) {
-    console.error("No se pudo guardar ajustes en la hoja Config:", e);
-  }
+  // Fuente de verdad: la hoja Config. Si esto falla, el cambio no persiste de
+  // verdad (en Vercel el filesystem es efímero) — hay que propagar el error
+  // en vez de tragarlo, para no responder "guardado" cuando no se guardó nada.
+  await saveAppSettingsToSheet(config);
 
-  // 2) Dev local: además a disco (incluye sheetId/creds para bootstrap sin env).
+  // Dev local: además a disco (incluye sheetId/creds para bootstrap sin env).
   try {
     await ensureConfigDir();
     const bootstrap = await loadBootstrapConfig();
