@@ -194,14 +194,14 @@ function StageHeader({ n, titulo, sub, rate, locked }: {
 }) {
   return (
     <div className="mb-4">
-      <div className="flex items-center gap-3 mb-2">
-        <StageBadge n={n} />
-        {locked && <div className="eyebrow">Se activa al completar el piso</div>}
-      </div>
       <div className="flex items-baseline justify-between gap-4 flex-wrap">
-        <h2 className="display text-2xl sm:text-3xl text-paper">{titulo}</h2>
+        <div className="flex items-center gap-3">
+          <StageBadge n={n} />
+          <h2 className="display text-2xl sm:text-3xl text-paper">{titulo}</h2>
+        </div>
         <div className="text-[12px] text-ink-300">{rate}</div>
       </div>
+      {locked && <div className="eyebrow mt-1.5">Se activa al completar el piso</div>}
       <p className="text-[12.5px] text-ink-300 mt-1 max-w-2xl leading-relaxed">{sub}</p>
     </div>
   );
