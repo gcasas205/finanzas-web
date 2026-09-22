@@ -11,6 +11,7 @@ import { CATEGORIES, autoCategorizar, getCategoryColor } from "@/lib/categories"
 import { useTransactions } from "@/components/DataProvider";
 import { UsdAmount } from "@/components/UsdAmount";
 import LogoLoader from "@/components/LogoLoader";
+import AnimatedNumber, { AnimatedUsdAmount } from "@/components/AnimatedNumber";
 
 interface Props { config: AppConfig; }
 
@@ -140,23 +141,27 @@ export default function Transactions({ config }: Props) {
       </div>
 
       {/* Summary */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 mb-6">
-        <div className="surface p-4">
-          <div className="eyebrow text-moss-light mb-1">Ingresos</div>
-          <div className="display text-2xl text-paper tabular">{formatPesos(totals.ingresos)}</div>
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-6 mb-6">
+        <div className="surface p-4 sm:p-6">
+          <div className="eyebrow text-moss-light mb-1 sm:mb-2">Ingresos</div>
+          <div className="display text-2xl sm:text-3xl lg:text-4xl text-paper tabular leading-none">
+            <AnimatedNumber value={totals.ingresos} format={formatPesos} />
+          </div>
         </div>
-        <div className="surface p-4">
-          <div className="eyebrow text-terra-light mb-1">Gastos</div>
-          <div className="display text-2xl text-paper tabular">{formatPesos(totals.egresos)}</div>
+        <div className="surface p-4 sm:p-6">
+          <div className="eyebrow text-terra-light mb-1 sm:mb-2">Gastos</div>
+          <div className="display text-2xl sm:text-3xl lg:text-4xl text-paper tabular leading-none">
+            <AnimatedNumber value={totals.egresos} format={formatPesos} />
+          </div>
         </div>
-        <div className="surface p-4">
-          <div className="eyebrow text-amber mb-1">Balance</div>
-          <div className={`display text-2xl tabular ${totals.balance >= 0 ? "text-moss-light" : "text-terra-light"}`}>
-            {formatPesos(totals.balance)}
+        <div className="surface p-4 sm:p-6">
+          <div className="eyebrow text-amber mb-1 sm:mb-2">Balance</div>
+          <div className={`display text-2xl sm:text-3xl lg:text-4xl tabular leading-none ${totals.balance >= 0 ? "text-moss-light" : "text-terra-light"}`}>
+            <AnimatedNumber value={totals.balance} format={formatPesos} />
           </div>
           {totals.hayUSD && (
-            <div className={`text-sm tabular font-mono mt-1 ${totals.usdBalance >= 0 ? "text-moss-light" : "text-terra-light"}`}>
-              <UsdAmount value={totals.usdBalance} /> <span className="text-ink-400 text-[10px]">en dólares</span>
+            <div className={`text-sm tabular font-mono mt-2 ${totals.usdBalance >= 0 ? "text-moss-light" : "text-terra-light"}`}>
+              <AnimatedUsdAmount value={totals.usdBalance} /> <span className="text-ink-400 text-[10px]">en dólares</span>
             </div>
           )}
         </div>

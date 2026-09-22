@@ -68,7 +68,8 @@ export default function Ahorro() {
 
       {/* ── Nivel 1: Piso de emergencia ─────────────────────────────── */}
       <div className="flex items-center gap-3 mb-3">
-        <div className="eyebrow text-amber">Nivel 1 · Base</div>
+        <StageBadge n={1} />
+        <div className="eyebrow text-amber">Base</div>
         <span className="text-[9px] uppercase tracking-widest px-2 py-0.5 border border-amber/50 text-amber">
           Se llena primero
         </span>
@@ -104,7 +105,7 @@ export default function Ahorro() {
 
       {/* ── Nivel 2: Mediano plazo ──────────────────────────────────── */}
       <StageHeader
-        n="Nivel 2"
+        n={2}
         titulo="Mediano plazo"
         sub="El pozo se reparte entre los sobres por los % de la config. Si uno se completa, el excedente pasa a los que faltan."
         rate={<>saldo <b className="text-paper font-medium"><UsdAmount value={mediano.balance} /></b></>}
@@ -125,7 +126,7 @@ export default function Ahorro() {
 
       {/* ── Nivel 3: Largo plazo ────────────────────────────────────── */}
       <StageHeader
-        n="Nivel 3"
+        n={3}
         titulo="Largo plazo"
         sub="USD apartados dentro de tu tenencia (no se valúa el S&P acá). La proyección es ilustrativa."
         rate={<>destino S&amp;P 500 · 15–20 años</>}
@@ -178,12 +179,25 @@ function ReconItem({ label, value, strong }: { label: string; value: number; str
   );
 }
 
+/** Círculo numerado que identifica el nivel (1/2/3), como en un stepper —
+ *  más escaneable de un vistazo que el texto "Nivel N" que tenía antes. */
+function StageBadge({ n }: { n: number }) {
+  return (
+    <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-amber text-ink-900 text-[12px] font-bold shrink-0">
+      {n}
+    </span>
+  );
+}
+
 function StageHeader({ n, titulo, sub, rate, locked }: {
-  n: string; titulo: string; sub: string; rate: React.ReactNode; locked: boolean;
+  n: number; titulo: string; sub: string; rate: React.ReactNode; locked: boolean;
 }) {
   return (
     <div className="mb-4">
-      <div className="eyebrow mb-2">{n}{locked ? " · se activa al completar el piso" : ""}</div>
+      <div className="flex items-center gap-3 mb-2">
+        <StageBadge n={n} />
+        {locked && <div className="eyebrow">Se activa al completar el piso</div>}
+      </div>
       <div className="flex items-baseline justify-between gap-4 flex-wrap">
         <h2 className="display text-2xl sm:text-3xl text-paper">{titulo}</h2>
         <div className="text-[12px] text-ink-300">{rate}</div>
