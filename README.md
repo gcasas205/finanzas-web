@@ -368,6 +368,12 @@ Algunos PDFs usan fuentes con encoding especial. La app soporta Unicode PUA pero
 
 ## Novedades
 
+### v4.1
+
+- **Accesibilidad**: foco de teclado visible en toda la app (antes los controles usaban `outline-none` y no mostraban señal de foco), y soporte de `prefers-reduced-motion` para quienes reducen animaciones en su sistema.
+- **Consistencia de UI**: padding mobile-first en las tarjetas de gráficos (Resumen y Análisis) y chevron de los `<select>` unificado en color ámbar en toda la app.
+- **Análisis mobile**: se corrigió el desborde horizontal en la sección Análisis (los gráficos ya no fuerzan un ancho mayor al de la pantalla).
+
 ### v3.3
 
 - **Fix — Resumen en blanco**: la sección Resumen volvió a renderizar. Una regresión había dejado su página devolviendo `null` en lugar del dashboard.
@@ -392,4 +398,4 @@ Proyecto personal. Uso libre.
 
 ---
 
-v3.3 · Gonzalo Casas
+v4.1 · Gonzalo Casas

@@ -40,6 +40,26 @@
     font-variant-numeric: tabular-nums;
   }
 
+  /* Accesibilidad — foco de teclado visible.
+     Reemplaza el patrón `outline-none` + solo cambio de borde, que dejaba a
+     usuarios de teclado sin señal de foco (falla WCAG 2.4.7). Solo aparece con
+     teclado (:focus-visible), no al hacer click, así no ensucia el mouse. */
+  :focus-visible {
+    outline: 2px solid #C9A24B;
+    outline-offset: 2px;
+    border-radius: 2px;
+  }
+
+  /* Accesibilidad — respetar "reducir movimiento" del sistema operativo. */
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+
   /* Custom scrollbar */
   ::-webkit-scrollbar {
     width: 10px;
@@ -99,7 +119,7 @@
     -webkit-appearance: none;
     -moz-appearance: none;
     appearance: none;
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%238A8576' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23C9A24B' stroke-width='1.75' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
     background-repeat: no-repeat;
     background-position: right 0.625rem center;
     background-size: 1rem;

@@ -255,7 +255,7 @@ export default function Dashboard({ config }: Props) {
       {/* Charts row */}
       <div className="grid grid-cols-2 sm:grid-cols-12 gap-3 sm:gap-6 mb-8 lg:mb-12">
         {/* Bar chart - evolution */}
-        <div className="col-span-2 sm:col-span-8 surface p-8">
+        <div className="col-span-2 sm:col-span-8 surface p-4 sm:p-8">
           <div className="flex items-start justify-between mb-6">
             <div>
               <div className="eyebrow mb-1">Evolución</div>
@@ -290,7 +290,7 @@ export default function Dashboard({ config }: Props) {
         </div>
 
         {/* Categories pie */}
-        <div className="col-span-2 sm:col-span-4 surface p-8">
+        <div className="col-span-2 sm:col-span-4 surface p-4 sm:p-8">
           <div className="eyebrow mb-1">Distribución</div>
           <h2 className="display text-2xl text-paper mb-6">Por categoría</h2>
 
@@ -339,7 +339,7 @@ export default function Dashboard({ config }: Props) {
       </div>
 
       {/* Upcoming payments */}
-      <div className="surface p-8">
+      <div className="surface p-4 sm:p-8">
         <div className="flex items-end justify-between mb-6">
           <div>
             <div className="eyebrow mb-1">Próximos vencimientos</div>
