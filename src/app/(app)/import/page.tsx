@@ -1,7 +1,8 @@
-import { loadConfig } from "@/lib/sheets";
-import ImportView from "@/components/views/ImportView";
+"use client";
 
-export default async function ImportPage() {
-  const config = await loadConfig();
-  return <ImportView config={config} />;
+import ImportView from "@/components/views/ImportView";
+import { useConfig } from "@/components/ConfigProvider";
+
+export default function ImportPage() {
+  return <ImportView config={useConfig()} />;
 }

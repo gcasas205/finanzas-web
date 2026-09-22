@@ -8,13 +8,13 @@ import { computeAhorro, type SobreResultado } from "@/lib/ahorro-calc";
 import type { SobreKey } from "@/types";
 
 const SOBRE_COLOR: Record<SobreKey, string> = {
-  auto: "#A04A2F",
-  mud: "#6A8970",
-  vac: "#D4886E",
-  tec: "#E8C982",
+  auto: "var(--color-sobre-auto)",
+  mud: "var(--color-sobre-mud)",
+  vac: "var(--color-sobre-vac)",
+  tec: "var(--color-sobre-tec)",
 };
-const EMERG_COLOR = "#C9A24B";
-const LARGO_COLOR = "#4E7A6B";
+const EMERG_COLOR = "var(--color-piso)";
+const LARGO_COLOR = "var(--color-largo)";
 
 export default function Ahorro() {
   const { dolarOps, transactions, ahorroConfig, isLoading } = useAhorro();
@@ -29,7 +29,7 @@ export default function Ahorro() {
       <div className="p-4 sm:p-6 lg:p-10 max-w-[1200px]">
         <div className="eyebrow mb-2">Objetivos en moneda dura</div>
         <h1 className="display text-3xl sm:text-5xl text-paper mb-8">Ahorro</h1>
-        <div className="text-ink-300 italic">Cargando tu plan de ahorro…</div>
+        <div className="text-ink-300 italic" role="status" aria-live="polite">Cargando tu plan de ahorro…</div>
       </div>
     );
   }

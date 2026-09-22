@@ -368,6 +368,18 @@ Algunos PDFs usan fuentes con encoding especial. La app soporta Unicode PUA pero
 
 ## Novedades
 
+### v5.1
+
+- **Favicon con logo y estado de carga**: la pestaña del navegador ahora muestra el ícono de la app (el mismo "F." ámbar del wordmark) y gira un anillo de carga mientras hay datos, un guardado o una importación de PDF en curso — en cualquier sección, no solo en la que lo disparó.
+- **Ajustes en vivo desde la hoja Config**: nombre, TNA de Mercado Pago y días de tarjeta ahora se leen y persisten en la hoja `Config` del Sheets (antes vivían en el filesystem de Vercel, que se resetea en cada deploy). Un `ConfigProvider` los mantiene sincronizados en toda la app sin recargar la página; Sheet ID y credenciales siguen viniendo de variables de entorno.
+- **Refactor de accesibilidad y diseño** (todas las vistas):
+  - Contraste de texto secundario corregido: el tono `ink-400`, usado en ~40 lugares, daba ~2.7:1 sobre fondo oscuro (bajo el mínimo WCAG AA de 4.5:1); ahora pasa en toda la app desde un único token.
+  - Foco de teclado real en todos los inputs y selects: `outline-none` estaba pisando silenciosamente el anillo de foco por el orden de capas de Tailwind.
+  - Botones de editar/borrar de las tablas ya no quedan invisibles para navegación por teclado (antes solo aparecían con `hover` del mouse).
+  - Objetivos táctiles ampliados a ~44px en botones de ícono en mobile (tarjetas de Movimientos, menú, cerrar modales).
+  - Modales cierran con `Escape` y tienen roles ARIA correctos; el selector de PDF es operable por teclado; toggles y tabs exponen su estado (`aria-pressed`, `aria-selected`) a lectores de pantalla.
+  - Estados de "Cargando…" ahora se anuncian (`aria-live`) en vez de ser invisibles para lectores de pantalla.
+
 ### v4.1
 
 - **Accesibilidad**: foco de teclado visible en toda la app (antes los controles usaban `outline-none` y no mostraban señal de foco), y soporte de `prefers-reduced-motion` para quienes reducen animaciones en su sistema.
@@ -398,4 +410,4 @@ Proyecto personal. Uso libre.
 
 ---
 
-v4.1 · Gonzalo Casas
+v5.1 · Gonzalo Casas

@@ -72,7 +72,7 @@ export default function Analytics({ config }: Props) {
     { id: "comparativa", label: "Comparativa" },
   ] as const;
 
-  if (loading) return <div className="p-10 text-ink-300 italic">Cargando datos...</div>;
+  if (loading) return <div className="p-10 text-ink-300 italic" role="status" aria-live="polite">Cargando datos...</div>;
 
   return (
     <div className="p-4 sm:p-6 lg:p-10 max-w-[1400px]">
@@ -90,11 +90,12 @@ export default function Analytics({ config }: Props) {
         {/* Month selector - visible for tabs that use it */}
         {(tab === "categorias" || tab === "comparativa") && (
           <div className="flex items-center gap-3">
-            <label className="eyebrow">Mes</label>
+            <label htmlFor="analytics-mes" className="eyebrow">Mes</label>
             <select
+              id="analytics-mes"
               value={selectedMonth}
               onChange={(e) => setSelectedMonth(e.target.value)}
-              className="select-native bg-ink-800 border border-ink-500 text-paper pl-4 pr-9 py-2 text-sm focus:border-amber outline-none cursor-pointer hover:border-ink-400 transition-colors"
+              className="select-native bg-ink-800 border border-ink-500 text-paper pl-4 pr-9 py-2 text-sm focus:border-amber cursor-pointer hover:border-ink-400 transition-colors"
             >
               {months.map(m => (
                 <option key={m} value={m}>{formatMes(m)}</option>
@@ -105,10 +106,12 @@ export default function Analytics({ config }: Props) {
       </header>
 
       {/* Tabs */}
-      <div className="flex gap-0 mb-10 hairline-b overflow-x-auto">
+      <div className="flex gap-0 mb-10 hairline-b overflow-x-auto" role="tablist" aria-label="Secciones de análisis">
         {TABS.map(t => (
           <button
             key={t.id}
+            role="tab"
+            aria-selected={tab === t.id}
             onClick={() => setTab(t.id)}
             className={`relative shrink-0 whitespace-nowrap px-6 py-3 text-sm transition-colors ${
               tab === t.id ? "text-paper" : "text-ink-300 hover:text-paper"

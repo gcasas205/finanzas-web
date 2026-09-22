@@ -148,7 +148,8 @@ export default function Dolares() {
           <select
             value={selectedMonth}
             onChange={(e) => setSelectedMonth(e.target.value)}
-            className="select-native flex-1 sm:flex-none bg-ink-800 border border-ink-500 text-paper pl-3 pr-9 py-2 text-sm focus:border-amber outline-none cursor-pointer"
+            aria-label="Filtrar por mes"
+            className="select-native flex-1 sm:flex-none bg-ink-800 border border-ink-500 text-paper pl-3 pr-9 py-2 text-sm focus:border-amber cursor-pointer"
           >
             <option value={ALL}>Todo el histórico</option>
             {months.map(m => <option key={m} value={m}>{formatMes(m)}</option>)}
@@ -266,7 +267,7 @@ export default function Dolares() {
             </thead>
             <tbody>
               {isLoading ? (
-                <tr><td colSpan={7} className="text-center py-12 text-ink-300 italic">Cargando...</td></tr>
+                <tr><td colSpan={7} className="text-center py-12 text-ink-300 italic" role="status" aria-live="polite">Cargando...</td></tr>
               ) : filas.length === 0 ? (
                 <tr><td colSpan={7} className="text-center py-16 text-ink-300 italic">
                   {selectedMonth === ALL
@@ -296,13 +297,15 @@ export default function Dolares() {
                   <td className="px-2 py-4 text-xs text-ink-300 max-w-[160px] truncate">{f.notas || "—"}</td>
                   <td className="px-6 py-4 text-right">
                     {f.kind === "op" ? (
-                      <div className="inline-flex gap-1 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
+                      <div className="inline-flex gap-1 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100 transition-opacity">
                         <button onClick={() => { setEditing(f.raw as DolarOperacion); setShowForm(true); }}
-                          className="p-2 sm:p-1.5 text-ink-300 hover:text-paper transition-colors">
+                          className="p-3.5 sm:p-1.5 text-ink-300 hover:text-paper transition-colors"
+                          aria-label="Editar operación">
                           <Edit2 className="w-4 h-4 sm:w-3.5 sm:h-3.5" />
                         </button>
                         <button onClick={() => handleDelete(f.id)}
-                          className="p-2 sm:p-1.5 text-ink-300 hover:text-terra-light transition-colors">
+                          className="p-3.5 sm:p-1.5 text-ink-300 hover:text-terra-light transition-colors"
+                          aria-label="Eliminar operación">
                           <Trash2 className="w-4 h-4 sm:w-3.5 sm:h-3.5" />
                         </button>
                       </div>
@@ -496,6 +499,13 @@ function DolarForm({ editing, cotizacion, onClose, onSaved }: {
   const precio = parseFloat(precioARS) || 0;
   const totalARS = usd * precio;
 
+  // Cerrar con Escape: el modal solo se cerraba clickeando afuera o en Cancelar.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
   const handleSubmit = async () => {
     if (!montoUSD || !precioARS || !fecha) {
       toast.error("Completá fecha, monto en USD y precio");
@@ -533,6 +543,9 @@ function DolarForm({ editing, cotizacion, onClose, onSaved }: {
         transition={{ duration: 0.25 }}
         className="surface-elevated w-full max-w-xl p-8 max-h-[90vh] overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        aria-label={editing ? "Modificar operación" : "Comprar o vender USD"}
       >
         <div className="flex items-start justify-between mb-6">
           <div>
@@ -541,13 +554,14 @@ function DolarForm({ editing, cotizacion, onClose, onSaved }: {
               {editing ? "Modificar operación" : "Comprar / Vender USD"}
             </h2>
           </div>
-          <button onClick={onClose} className="text-ink-300 hover:text-paper p-2"><X className="w-5 h-5" /></button>
+          <button onClick={onClose} className="text-ink-300 hover:text-paper p-3 -m-1" aria-label="Cerrar"><X className="w-5 h-5" /></button>
         </div>
 
         <div className="space-y-5">
           <div className="grid grid-cols-2 gap-3">
             {(["compra", "venta"] as const).map(t => (
               <button key={t} onClick={() => { setTipo(t); setPrecioAuto(true); }}
+                aria-pressed={tipo === t}
                 className={`py-3 border text-sm transition-all ${
                   tipo === t
                     ? t === "compra" ? "border-moss bg-moss/10 text-moss-light" : "border-terra bg-terra/10 text-terra-light"

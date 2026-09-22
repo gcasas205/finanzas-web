@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { signOut, useSession } from "next-auth/react";
 import Link from "next/link";
@@ -18,6 +18,7 @@ import {
   PiggyBank,
 } from "lucide-react";
 import { DataProvider } from "./DataProvider";
+import { useConfig } from "./ConfigProvider";
 import type { AppConfig } from "@/types";
 
 const NAV_ITEMS = [
@@ -33,6 +34,16 @@ const NAV_ITEMS = [
 export default function AppShell({ initialConfig, children }: { initialConfig: AppConfig, children: React.ReactNode }) {
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
+  // Nombre en vivo (Ajustes lo persiste en la hoja Config); fallback al del SSR.
+  const nombre = useConfig().nombre || initialConfig.nombre;
+
+  // Cerrar el drawer mobile con Escape: antes solo se cerraba con el botón X o tocando afuera.
+  useEffect(() => {
+    if (!mobileOpen) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setMobileOpen(false); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [mobileOpen]);
 
   return (
     <DataProvider>
@@ -40,11 +51,11 @@ export default function AppShell({ initialConfig, children }: { initialConfig: A
       {/* ── Mobile top bar ──────────────────────────────────── */}
       <div className="lg:hidden flex items-center justify-between px-4 py-3 hairline-b bg-ink-900/80 backdrop-blur-md sticky top-0 z-40">
         <div className="flex items-center gap-3">
-          <button onClick={() => setMobileOpen(true)} className="text-ink-200 p-1">
+          <button onClick={() => setMobileOpen(true)} className="text-ink-200 p-3 -m-3" aria-label="Abrir menú">
             <Menu className="w-5 h-5" />
           </button>
           <h1 className="display text-lg text-paper leading-none">
-            {initialConfig.nombre || "Finanzas"}<span className="text-amber italic">.</span>
+            {nombre || "Finanzas"}<span className="text-amber italic">.</span>
           </h1>
         </div>
         <div className="eyebrow text-[9px]">
@@ -69,15 +80,18 @@ export default function AppShell({ initialConfig, children }: { initialConfig: A
               exit={{ x: -280 }}
               transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
               className="fixed top-0 left-0 bottom-0 w-[270px] bg-ink-900 border-r border-ink-600/60 z-50 lg:hidden flex flex-col"
+              role="dialog"
+              aria-modal="true"
+              aria-label="Menú de navegación"
             >
               <div className="flex items-center justify-between p-6 pb-4">
                 <div>
                   <div className="eyebrow mb-1">Finanzas</div>
                   <h1 className="display text-2xl text-paper leading-none">
-                    {initialConfig.nombre || "Casas"}<span className="text-amber italic">.</span>
+                    {nombre || "Casas"}<span className="text-amber italic">.</span>
                   </h1>
                 </div>
-                <button onClick={() => setMobileOpen(false)} className="text-ink-300 p-1">
+                <button onClick={() => setMobileOpen(false)} className="text-ink-300 p-3 -m-3" aria-label="Cerrar menú">
                   <X className="w-5 h-5" />
                 </button>
               </div>
@@ -108,7 +122,7 @@ export default function AppShell({ initialConfig, children }: { initialConfig: A
               <div className="p-5 hairline-t space-y-3">
                 <UserBadge />
                 <div className="text-[10px] text-ink-300 tracking-widest uppercase">
-                  v4.1 · Edición Personal
+                  v5.1 · Edición Personal
                 </div>
               </div>
             </motion.aside>
@@ -122,7 +136,7 @@ export default function AppShell({ initialConfig, children }: { initialConfig: A
           <div className="mb-12">
             <div className="eyebrow mb-1">Finanzas</div>
             <h1 className="display text-3xl text-paper leading-none">
-              {initialConfig.nombre || "Casas"}
+              {nombre || "Casas"}
               <span className="text-amber italic">.</span>
             </h1>
           </div>
@@ -158,7 +172,7 @@ export default function AppShell({ initialConfig, children }: { initialConfig: A
           <div className="pt-6 hairline-t space-y-3">
             <UserBadge />
             <div className="text-[10px] text-ink-300 tracking-widest uppercase">
-              v4.1 · Edición Personal
+              v5.1 · Edición Personal
             </div>
           </div>
         </div>
@@ -215,8 +229,9 @@ function UserBadge() {
       </div>
       <button
         onClick={() => signOut({ callbackUrl: "/login" })}
-        className="text-ink-400 hover:text-terra-light transition-colors p-1"
+        className="text-ink-400 hover:text-terra-light transition-colors p-3 -m-2"
         title="Cerrar sesión"
+        aria-label="Cerrar sesión"
       >
         <LogOut className="w-3.5 h-3.5" />
       </button>

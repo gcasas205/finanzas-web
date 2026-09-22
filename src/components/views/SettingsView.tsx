@@ -6,6 +6,8 @@ import { Check, Loader2, ExternalLink, AlertCircle } from "lucide-react";
 import { toast } from "sonner";
 import type { AppConfig } from "@/types";
 import { useRouter } from "next/navigation";
+import { useRefreshConfig } from "@/components/ConfigProvider";
+import { useFaviconLoading } from "@/components/FaviconLoadingSignal";
 
 interface Props {
   config: AppConfig;
@@ -13,9 +15,11 @@ interface Props {
 
 export default function SettingsView({ config }: Props) {
   const router = useRouter();
+  const refreshConfig = useRefreshConfig();
   const [form, setForm] = useState<AppConfig>({ ...config });
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
+  useFaviconLoading(saving || testing);
   const [testOk, setTestOk] = useState<boolean | null>(null);
 
   const update = (key: keyof AppConfig, value: any) => {
@@ -32,6 +36,7 @@ export default function SettingsView({ config }: Props) {
       });
       await r.json();
       toast.success("Configuración guardada");
+      refreshConfig();  // la hoja Config ya persistió; refrescamos la config en vivo
       router.refresh();
     } catch {
       toast.error("Error al guardar");
@@ -90,8 +95,18 @@ export default function SettingsView({ config }: Props) {
               placeholder="C:\Users\...\credenciales.json"
               className="form-input font-mono text-xs" />
           </Field>
+          <div className="flex items-start gap-2 text-[10px] text-ink-300 leading-relaxed border-l border-ink-500 pl-3">
+            <AlertCircle className="w-3 h-3 text-amber mt-0.5 shrink-0" strokeWidth={1.75} />
+            <span>
+              El <span className="text-ink-200">Sheet ID</span> y las
+              <span className="text-ink-200"> credenciales</span> son datos de arranque:
+              en Vercel se toman de las variables de entorno y editarlos acá no persiste
+              (harían falta para poder leer la propia hoja). El resto de los ajustes
+              —nombre, TNA y los días de tarjeta— sí se guardan en la hoja Config e impactan al instante.
+            </span>
+          </div>
           <div className="flex items-center gap-3 mt-2">
-            <button onClick={handleTest} disabled={testing}
+            <button onClick={handleTest} disabled={testing} aria-busy={testing}
               className="inline-flex items-center gap-2 text-xs text-amber border border-amber/40 px-4 py-2 hover:bg-amber/5 transition-all disabled:opacity-50">
               {testing ? <Loader2 className="w-3 h-3 animate-spin" /> : null}
               Probar conexión
@@ -137,7 +152,7 @@ export default function SettingsView({ config }: Props) {
 
         {/* Save */}
         <div className="pt-6 hairline-t flex justify-end">
-          <button onClick={handleSave} disabled={saving}
+          <button onClick={handleSave} disabled={saving} aria-busy={saving}
             className="inline-flex items-center gap-2 bg-amber text-ink-900 px-6 py-3 text-sm font-medium hover:bg-amber-light disabled:opacity-50 transition-all">
             {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
             Guardar configuración

@@ -6,6 +6,16 @@
   --font-display: 'Fraunces', 'Times New Roman', serif;
   --font-sans: 'JetBrains Mono', 'IBM Plex Sans', system-ui, sans-serif;
   --font-mono: 'JetBrains Mono', 'Courier New', monospace;
+
+  /* Colores de identidad de los sobres de Ahorro (no son marca ni estado:
+     identifican un bucket puntual, aunque reusan tonos de la paleta general
+     como firma visual). Token único en vez de hex sueltos repetidos en Ahorro.tsx. */
+  --color-piso: #C9A24B;   /* = amber, el piso de emergencia se destaca con la marca */
+  --color-largo: #4E7A6B;  /* verde apagado, distinto del moss de estado positivo */
+  --color-sobre-auto: #A04A2F;  /* = terra */
+  --color-sobre-mud:  #6A8970;  /* = moss-light */
+  --color-sobre-vac:  #D4886E;  /* = terra-light */
+  --color-sobre-tec:  #E8C982;  /* = amber-light */
 }
 
 @layer base {
@@ -158,9 +168,13 @@
     transform: scaleX(1);
   }
 
-  /* Shared input/select styling */
+  /* Shared input/select styling.
+     Sin outline-none: la utilidad de Tailwind (`outline: 2px solid transparent`)
+     vive en @layer utilities, que en el CSS compilado siempre queda después de
+     @layer base — así pisaría el anillo de :focus-visible definido arriba y
+     dejaría el foco de teclado invisible en todos estos campos. */
   .form-input {
-    @apply w-full bg-ink-800 border border-ink-500 text-paper px-3 py-2 text-sm focus:border-amber outline-none cursor-pointer transition-colors;
+    @apply w-full bg-ink-800 border border-ink-500 text-paper px-3 py-2 text-sm focus:border-amber cursor-pointer transition-colors;
   }
 }
 

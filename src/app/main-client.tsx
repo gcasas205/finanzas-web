@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import type { AppConfig } from "@/types";
 import SetupWizard from "@/components/SetupWizard";
+import { useFaviconLoading } from "@/components/FaviconLoadingSignal";
 
 interface Props {
   initialConfig: AppConfig;
@@ -15,6 +16,7 @@ export default function MainClient({ initialConfig, envReady = false }: Props) {
   const [config, setConfig] = useState(initialConfig);
   const [checking, setChecking] = useState(!envReady);
   const [setupDone, setSetupDone] = useState(envReady);
+  useFaviconLoading(checking);
 
   // Double-check via API if server prop says not ready
   useEffect(() => {
@@ -34,7 +36,7 @@ export default function MainClient({ initialConfig, envReady = false }: Props) {
   if (checking) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <div className="text-ink-300 text-sm animate-pulse">Verificando configuración...</div>
+        <div className="text-ink-300 text-sm animate-pulse" role="status" aria-live="polite">Verificando configuración...</div>
       </div>
     );
   }

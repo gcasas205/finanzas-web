@@ -109,7 +109,7 @@ export default function SetupWizard({ onComplete }: SetupWizardProps) {
                   onChange={(e) => setConfig({ ...config, nombre: e.target.value })}
                   placeholder="Tu nombre"
                   autoFocus
-                  className="w-full bg-transparent border-0 border-b border-ink-500 text-paper text-2xl py-3 px-0 outline-none focus:border-amber transition-colors display"
+                  className="w-full bg-transparent border-0 border-b border-ink-500 text-paper text-2xl py-3 px-0 focus:border-amber transition-colors display"
                 />
               </>
             )}
@@ -132,7 +132,7 @@ export default function SetupWizard({ onComplete }: SetupWizardProps) {
                       value={config.googleSheetId}
                       onChange={(e) => setConfig({ ...config, googleSheetId: e.target.value })}
                       placeholder="1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgVE2upms"
-                      className="w-full bg-ink-900/60 border border-ink-500 text-paper px-4 py-3 outline-none focus:border-amber transition-colors text-sm font-mono"
+                      className="w-full bg-ink-900/60 border border-ink-500 text-paper px-4 py-3 focus:border-amber transition-colors text-sm font-mono"
                     />
                     <p className="text-[11px] text-ink-300 mt-1">
                       Lo encontrás en la URL: docs.google.com/spreadsheets/d/<span className="text-amber">[ID]</span>/edit
@@ -146,7 +146,7 @@ export default function SetupWizard({ onComplete }: SetupWizardProps) {
                       value={config.googleCredsPath}
                       onChange={(e) => setConfig({ ...config, googleCredsPath: e.target.value })}
                       placeholder="C:\Users\Gonzalo\credenciales.json"
-                      className="w-full bg-ink-900/60 border border-ink-500 text-paper px-4 py-3 outline-none focus:border-amber transition-colors text-sm font-mono"
+                      className="w-full bg-ink-900/60 border border-ink-500 text-paper px-4 py-3 focus:border-amber transition-colors text-sm font-mono"
                     />
                   </div>
 
@@ -201,7 +201,7 @@ export default function SetupWizard({ onComplete }: SetupWizardProps) {
                       max={31}
                       value={config.cardCutoffDay}
                       onChange={(e) => setConfig({ ...config, cardCutoffDay: parseInt(e.target.value) || 1 })}
-                      className="w-full bg-ink-900/60 border border-ink-500 text-paper px-4 py-3 outline-none focus:border-amber font-mono"
+                      className="w-full bg-ink-900/60 border border-ink-500 text-paper px-4 py-3 focus:border-amber font-mono"
                     />
                   </div>
                   <div>
@@ -212,7 +212,7 @@ export default function SetupWizard({ onComplete }: SetupWizardProps) {
                       max={31}
                       value={config.cardDueDay}
                       onChange={(e) => setConfig({ ...config, cardDueDay: parseInt(e.target.value) || 1 })}
-                      className="w-full bg-ink-900/60 border border-ink-500 text-paper px-4 py-3 outline-none focus:border-amber font-mono"
+                      className="w-full bg-ink-900/60 border border-ink-500 text-paper px-4 py-3 focus:border-amber font-mono"
                     />
                   </div>
                   <div className="col-span-2">
@@ -222,7 +222,7 @@ export default function SetupWizard({ onComplete }: SetupWizardProps) {
                       step="0.1"
                       value={config.mpTna}
                       onChange={(e) => setConfig({ ...config, mpTna: parseFloat(e.target.value) || 0 })}
-                      className="w-full bg-ink-900/60 border border-ink-500 text-paper px-4 py-3 outline-none focus:border-amber font-mono"
+                      className="w-full bg-ink-900/60 border border-ink-500 text-paper px-4 py-3 focus:border-amber font-mono"
                     />
                     <p className="text-[11px] text-ink-300 mt-1">
                       Tasa actual ~24-27%. Lo podés actualizar después en Ajustes.

@@ -1,7 +1,8 @@
-import { loadConfig } from "@/lib/sheets";
-import Transactions from "@/components/views/Transactions";
+"use client";
 
-export default async function TransactionsPage() {
-  const config = await loadConfig();
-  return <Transactions config={config} />;
+import Transactions from "@/components/views/Transactions";
+import { useConfig } from "@/components/ConfigProvider";
+
+export default function TransactionsPage() {
+  return <Transactions config={useConfig()} />;
 }

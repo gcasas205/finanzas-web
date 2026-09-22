@@ -2,7 +2,9 @@
 // Con las rutas ya estáticas y prefetcheadas la transición es casi instantánea,
 // así que este skeleton actúa sobre todo como red de seguridad (primer acceso a
 // una sección aún no prefetcheada) y evita que la UI se "congele" sin feedback.
-// Server Component: no necesita interactividad.
+// Server Component: no necesita interactividad (salvo el favicon, ver abajo).
+
+import FaviconLoadingSignal from "@/components/FaviconLoadingSignal";
 
 function Block({ className = "" }: { className?: string }) {
   return <div className={`animate-pulse rounded-sm bg-ink-700/60 ${className}`} />;
@@ -22,6 +24,7 @@ export default function Loading() {
   return (
     <div className="p-4 sm:p-6 lg:p-10 max-w-[1400px]" aria-busy="true" aria-live="polite">
       <span className="sr-only">Cargando sección…</span>
+      <FaviconLoadingSignal active />
 
       {/* Header: eyebrow + título */}
       <header className="mb-6 lg:mb-12 flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">

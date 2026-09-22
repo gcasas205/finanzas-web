@@ -3,6 +3,7 @@
 import { createContext, useContext, useCallback } from "react";
 import useSWR from "swr";
 import type { Transaction, DolarOperacion, Cotizacion, AhorroConfig } from "@/types";
+import { useFaviconLoading } from "@/components/FaviconLoadingSignal";
 
 const fetcher = (url: string) => fetch(url).then(r => r.json());
 
@@ -47,6 +48,10 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     refreshInterval: 15 * 60 * 1000,
   });
   const ahorro = useSWR("/api/ahorro/config", fetcher, SWR_OPTS);
+
+  // El favicon gira mientras se resuelve la carga inicial de datos, sea cual
+  // sea la vista que esté montada (Resumen, Movimientos, Dólares, Ahorro, Análisis).
+  useFaviconLoading(tx.isLoading);
 
   const refresh = useCallback(() => {
     tx.mutate();

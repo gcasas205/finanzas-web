@@ -32,7 +32,9 @@ async function ensureConfigDir() {
   }
 }
 
-export async function loadConfig(): Promise<AppConfig> {
+/** Config bootstrap: SOLO env + archivo local. No toca la red (Sheets).
+ *  La usa getSheetsClient, por eso NO puede leer de la hoja (sería recursivo). */
+async function loadBootstrapConfig(): Promise<AppConfig> {
   // Primero intentar archivo local
   let fileConfig: Partial<AppConfig> = {};
   try {
@@ -54,16 +56,136 @@ export async function loadConfig(): Promise<AppConfig> {
   return { ...DEFAULT_CONFIG, ...fileConfig, ...envConfig };
 }
 
+/** Ajustes editables por el usuario ↔ claves en la hoja Config (clave/valor).
+ *  NO incluye googleSheetId ni googleCredsPath: son bootstrap/secretos y no se
+ *  pueden guardar dentro de la propia hoja que hace falta para alcanzarla. */
+const APP_SETTING_MAP: Array<[keyof AppConfig, string]> = [
+  ["nombre", "app_nombre"],
+  ["mpTna", "mp_tna"],
+  ["cardCutoffDay", "card_cutoff_day"],
+  ["cardDueDay", "card_due_day"],
+  ["salaryPaymentOffsetMonths", "salary_offset_months"],
+];
+
+/** Lee los ajustes editables de la hoja Config. Devuelve {} si no hay hoja aún. */
+async function readAppSettingsFromSheet(): Promise<Partial<AppConfig>> {
+  const ctx = await getSheetsClient();
+  if (!ctx) return {};
+  try {
+    const r = await ctx.client.spreadsheets.values.get({
+      spreadsheetId: ctx.sheetId,
+      range: "Config!A2:B",
+    });
+    const map: Record<string, string> = {};
+    for (const row of r.data.values ?? []) {
+      const k = String(row[0] ?? "").trim();
+      if (k) map[k] = String(row[1] ?? "");
+    }
+    const out: Partial<AppConfig> = {};
+    for (const [field, key] of APP_SETTING_MAP) {
+      const raw = map[key];
+      if (raw === undefined || raw === "") continue;
+      if (field === "nombre") {
+        out.nombre = raw;
+      } else {
+        const n = field === "mpTna" ? parseFloat(raw.replace(",", ".")) : parseInt(raw, 10);
+        if (isFinite(n)) (out as Record<string, unknown>)[field] = n;
+      }
+    }
+    return out;
+  } catch {
+    // La hoja Config puede no existir todavía: usamos defaults/env.
+    return {};
+  }
+}
+
+/** Config efectiva = bootstrap (env/archivo) + ajustes editables de la hoja Config.
+ *  La hoja es la fuente de verdad de los ajustes editables; sheetId y credenciales
+ *  siempre vienen de env/archivo. */
+export async function loadConfig(): Promise<AppConfig> {
+  const bootstrap = await loadBootstrapConfig();
+  const sheetSettings = await readAppSettingsFromSheet();
+  return {
+    ...bootstrap,
+    ...sheetSettings,
+    googleSheetId: bootstrap.googleSheetId,
+    googleCredsPath: bootstrap.googleCredsPath,
+  };
+}
+
+/** Upsert clave/valor en la hoja Config sin tocar las demás filas (ej. las de Ahorro). */
+async function upsertConfigRows(
+  client: sheets_v4.Sheets,
+  sheetId: string,
+  entries: Array<[string, string]>,
+): Promise<void> {
+  const r = await client.spreadsheets.values.get({ spreadsheetId: sheetId, range: "Config!A2:B" });
+  const rows = r.data.values ?? [];
+  const keyToRow = new Map<string, number>();
+  rows.forEach((row, i) => {
+    const k = String(row[0] ?? "").trim();
+    if (k) keyToRow.set(k, i + 2); // A2 => fila 2
+  });
+
+  const updates: Array<{ range: string; values: string[][] }> = [];
+  const appends: string[][] = [];
+  for (const [key, value] of entries) {
+    const rowNum = keyToRow.get(key);
+    if (rowNum) updates.push({ range: `Config!A${rowNum}:B${rowNum}`, values: [[key, value]] });
+    else appends.push([key, value]);
+  }
+
+  if (updates.length) {
+    await client.spreadsheets.values.batchUpdate({
+      spreadsheetId: sheetId,
+      requestBody: { valueInputOption: "RAW", data: updates },
+    });
+  }
+  if (appends.length) {
+    await client.spreadsheets.values.append({
+      spreadsheetId: sheetId,
+      range: "Config!A:B",
+      valueInputOption: "RAW",
+      insertDataOption: "INSERT_ROWS",
+      requestBody: { values: appends },
+    });
+  }
+}
+
+/** Persiste los ajustes editables (los presentes en `partial`) en la hoja Config. */
+async function saveAppSettingsToSheet(partial: Partial<AppConfig>): Promise<void> {
+  const ctx = await getSheetsClient();
+  if (!ctx) return;
+  const entries: Array<[string, string]> = [];
+  for (const [field, key] of APP_SETTING_MAP) {
+    const v = partial[field];
+    if (v !== undefined) entries.push([key, String(v)]);
+  }
+  if (!entries.length) return;
+  await ensureSheets(ctx.client, ctx.sheetId);
+  await upsertConfigRows(ctx.client, ctx.sheetId, entries);
+}
+
 export async function saveConfig(config: Partial<AppConfig>): Promise<AppConfig> {
   const current = await loadConfig();
   const merged = { ...current, ...config };
+
+  // 1) Fuente de verdad: la hoja Config (persiste de verdad, también en Vercel).
+  try {
+    await saveAppSettingsToSheet(config);
+  } catch (e) {
+    console.error("No se pudo guardar ajustes en la hoja Config:", e);
+  }
+
+  // 2) Dev local: además a disco (incluye sheetId/creds para bootstrap sin env).
   try {
     await ensureConfigDir();
-    await fs.writeFile(CONFIG_FILE, JSON.stringify(merged, null, 2), "utf-8");
+    const bootstrap = await loadBootstrapConfig();
+    await fs.writeFile(CONFIG_FILE, JSON.stringify({ ...bootstrap, ...config }, null, 2), "utf-8");
   } catch {
-    // En Vercel no se puede escribir, los cambios viven solo en memoria
-    console.warn("No se pudo guardar config en disco (normal en Vercel)");
+    // En Vercel el filesystem es read-only; los ajustes ya persistieron en la hoja.
   }
+
   return merged;
 }
 
@@ -74,7 +196,7 @@ export async function saveConfig(config: Partial<AppConfig>): Promise<AppConfig>
  * 2. Archivo .json local (ruta en config.googleCredsPath)
  */
 async function getSheetsClient(): Promise<{ client: sheets_v4.Sheets; sheetId: string } | null> {
-  const config = await loadConfig();
+  const config = await loadBootstrapConfig();
   if (!config.googleSheetId) return null;
 
   try {
@@ -578,7 +700,7 @@ export async function getAhorroConfig(): Promise<AhorroConfig> {
 }
 
 export async function testConnection(): Promise<{ ok: boolean; error?: string }> {
-  const config = await loadConfig();
+  const config = await loadBootstrapConfig();
   if (!config.googleSheetId) return { ok: false, error: "Sheet ID no configurado" };
   if (!config.googleCredsPath) return { ok: false, error: "Credenciales no configuradas" };
 

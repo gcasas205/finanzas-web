@@ -8,6 +8,7 @@ import type { AppConfig, Transaction } from "@/types";
 import { formatPesos, formatFecha, formatMes } from "@/lib/utils";
 import { CATEGORIES } from "@/lib/categories";
 import { useTransactions } from "@/components/DataProvider";
+import { useFaviconLoading } from "@/components/FaviconLoadingSignal";
 
 interface Props { config: AppConfig; }
 
@@ -24,6 +25,8 @@ export default function ImportView({ config }: Props) {
   // Lista editable de la vista previa de tarjeta
   const [editedTxs, setEditedTxs] = useState<Transaction[]>([]);
   const fileRef = useRef<HTMLInputElement>(null);
+
+  useFaviconLoading(parsing || importing);
 
   useEffect(() => {
     if (result?.type === "visa") setEditedTxs(result.transactions ?? []);
@@ -116,7 +119,10 @@ export default function ImportView({ config }: Props) {
 
       {/* Drop zone */}
       <div
+        role="button"
+        tabIndex={0}
         onClick={() => fileRef.current?.click()}
+        onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); fileRef.current?.click(); } }}
         className={`surface p-8 sm:p-12 text-center cursor-pointer transition-all hover:bg-ink-700/30 group ${
           parsing ? "pointer-events-none opacity-70" : ""
         }`}
@@ -124,7 +130,7 @@ export default function ImportView({ config }: Props) {
         <input ref={fileRef} type="file" accept=".pdf" className="hidden"
           onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFileSelect(f); }} />
         {parsing ? (
-          <div className="flex flex-col items-center gap-3">
+          <div className="flex flex-col items-center gap-3" role="status" aria-live="polite">
             <Loader2 className="w-8 h-8 text-amber animate-spin" />
             <p className="text-sm text-ink-200">Analizando PDF...</p>
           </div>
@@ -165,6 +171,7 @@ export default function ImportView({ config }: Props) {
               <button
                 onClick={handleImport}
                 disabled={importing || (docType === "tarjeta" && editedTxs.length === 0)}
+                aria-busy={importing}
                 className="inline-flex items-center justify-center gap-2 bg-moss text-paper px-6 py-2.5 text-sm font-medium hover:bg-moss-light disabled:opacity-50 transition-all order-1 sm:order-2"
               >
                 {importing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
@@ -249,14 +256,14 @@ function VisaPreview({ result, txs, onChange }: {
                   <input
                     value={tx.descripcion}
                     onChange={(e) => update(i, { descripcion: e.target.value })}
-                    className="w-full bg-transparent border-b border-transparent hover:border-ink-500 focus:border-amber text-sm text-paper py-1 outline-none transition-colors"
+                    className="w-full bg-transparent border-b border-transparent hover:border-ink-500 focus:border-amber text-sm text-paper py-1 transition-colors"
                   />
                 </td>
                 <td className="px-2 py-2">
                   <select
                     value={tx.categoria}
                     onChange={(e) => update(i, { categoria: e.target.value })}
-                    className="bg-ink-800 border border-ink-500 text-xs text-ink-100 px-2 py-1 focus:border-amber outline-none cursor-pointer max-w-[130px]"
+                    className="bg-ink-800 border border-ink-500 text-xs text-ink-100 px-2 py-1 focus:border-amber cursor-pointer max-w-[130px]"
                   >
                     {CATEGORIES.map(c => <option key={c.name} value={c.name}>{c.name}</option>)}
                   </select>
@@ -265,7 +272,7 @@ function VisaPreview({ result, txs, onChange }: {
                   <input
                     type="number" step="0.01" value={tx.monto}
                     onChange={(e) => update(i, { monto: parseFloat(e.target.value) || 0 })}
-                    className="w-24 bg-transparent border-b border-transparent hover:border-ink-500 focus:border-amber text-sm text-right font-mono tabular text-terra-light py-1 outline-none transition-colors"
+                    className="w-24 bg-transparent border-b border-transparent hover:border-ink-500 focus:border-amber text-sm text-right font-mono tabular text-terra-light py-1 transition-colors"
                   />
                 </td>
                 <td className="px-2 py-2 text-right">

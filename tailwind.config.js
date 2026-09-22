@@ -18,7 +18,9 @@ module.exports = {
           100: '#E8E2D2',
           200: '#C9C1AE',
           300: '#8A8576',
-          400: '#5A574E',
+          // #5A574E daba ~2.7:1 sobre ink-900/800 (falla WCAG AA, mínimo 4.5:1 para texto
+          // normal) pese a usarse como color de texto secundario en toda la app.
+          400: '#84807A',
           500: '#3A3833',
           600: '#252420',
           700: '#1A1916',

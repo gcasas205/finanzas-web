@@ -96,24 +96,27 @@ export default function Transactions({ config }: Props) {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Buscar descripción o categoría..."
-            className="flex-1 bg-transparent text-sm text-paper outline-none placeholder:text-ink-400"
+            aria-label="Buscar por descripción o categoría"
+            className="flex-1 bg-transparent text-sm text-paper placeholder:text-ink-400"
           />
         </div>
 
         <select
           value={filterMonth}
           onChange={(e) => setFilterMonth(e.target.value)}
-          className="select-native bg-ink-900/60 border border-ink-500 text-paper pl-3 pr-9 py-2 text-xs focus:border-amber outline-none cursor-pointer"
+          aria-label="Filtrar por mes"
+          className="select-native bg-ink-900/60 border border-ink-500 text-paper pl-3 pr-9 py-2 text-xs focus:border-amber cursor-pointer"
         >
           <option value="">Todos los meses</option>
           {months.map(m => <option key={m} value={m}>{formatMes(m)}</option>)}
         </select>
 
-        <div className="flex border border-ink-500">
+        <div className="flex border border-ink-500" role="group" aria-label="Filtrar por tipo">
           {(["todos", "ingreso", "egreso"] as const).map(t => (
             <button
               key={t}
               onClick={() => setFilterType(t)}
+              aria-pressed={filterType === t}
               className={`px-3 py-2 text-[11px] uppercase tracking-wider transition-colors ${
                 filterType === t ? "bg-amber text-ink-900" : "text-ink-200 hover:bg-ink-700/40"
               }`}
@@ -174,7 +177,7 @@ export default function Transactions({ config }: Props) {
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan={7} className="text-center py-12 text-ink-300 italic">Cargando...</td></tr>
+              <tr><td colSpan={7} className="text-center py-12 text-ink-300 italic" role="status" aria-live="polite">Cargando...</td></tr>
             ) : filtered.length === 0 ? (
               <tr><td colSpan={7} className="text-center py-16 text-ink-300 italic">Sin movimientos para los filtros seleccionados</td></tr>
             ) : visibleRows.map((tx) => (
@@ -208,16 +211,18 @@ export default function Transactions({ config }: Props) {
                   {tx.cuotaTotal > 1 ? `${tx.cuotaNumero}/${tx.cuotaTotal}` : "—"}
                 </td>
                 <td className="px-6 py-4 text-right">
-                  <div className="inline-flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <div className="inline-flex gap-1 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity">
                     <button
                       onClick={() => { setEditing(tx); setShowForm(true); }}
                       className="p-1.5 text-ink-300 hover:text-paper transition-colors"
+                      aria-label={`Editar ${tx.descripcion}`}
                     >
                       <Edit2 className="w-3.5 h-3.5" />
                     </button>
                     <button
                       onClick={() => handleDelete(tx.id)}
                       className="p-1.5 text-ink-300 hover:text-terra-light transition-colors"
+                      aria-label={`Eliminar ${tx.descripcion}`}
                     >
                       <Trash2 className="w-3.5 h-3.5" />
                     </button>
@@ -231,7 +236,7 @@ export default function Transactions({ config }: Props) {
         {/* Mobile Cards */}
         <div className="md:hidden flex flex-col divide-y divide-ink-600/60">
           {loading ? (
-            <div className="text-center py-12 text-ink-300 italic">Cargando...</div>
+            <div className="text-center py-12 text-ink-300 italic" role="status" aria-live="polite">Cargando...</div>
           ) : filtered.length === 0 ? (
             <div className="text-center py-12 text-ink-300 italic">Sin movimientos</div>
           ) : visibleRows.map((tx) => (
@@ -258,11 +263,19 @@ export default function Transactions({ config }: Props) {
                   <div className="w-2 h-2 rounded-full" style={{ background: getCategoryColor(tx.categoria) }} />
                   <span className="text-[10px] uppercase tracking-wider text-ink-300">{tx.categoria}</span>
                 </div>
-                <div className="flex gap-4">
-                  <button onClick={() => { setEditing(tx); setShowForm(true); }} className="text-ink-400 hover:text-paper p-1">
+                <div className="flex gap-2 -mr-3.5">
+                  <button
+                    onClick={() => { setEditing(tx); setShowForm(true); }}
+                    className="text-ink-400 hover:text-paper p-3.5"
+                    aria-label={`Editar ${tx.descripcion}`}
+                  >
                     <Edit2 className="w-4 h-4" />
                   </button>
-                  <button onClick={() => handleDelete(tx.id)} className="text-ink-400 hover:text-terra-light p-1">
+                  <button
+                    onClick={() => handleDelete(tx.id)}
+                    className="text-ink-400 hover:text-terra-light p-3.5"
+                    aria-label={`Eliminar ${tx.descripcion}`}
+                  >
                     <Trash2 className="w-4 h-4" />
                   </button>
                 </div>
@@ -331,6 +344,13 @@ function TransactionForm({ editing, config, onClose, onSaved }: FormProps) {
 
   const ORIGENES: BucketOrigen[] = ["regla", "emergencia", "auto", "mud", "vac", "tec", "largo"];
   const subcategories = CATEGORIES.find(c => c.name === categoria)?.subcategories || ["Sin categoría"];
+
+  // Cerrar con Escape: el modal solo se cerraba clickeando afuera o en Cancelar.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
 
   // Auto-categorize on description change (only for new)
   useEffect(() => {
@@ -406,6 +426,9 @@ function TransactionForm({ editing, config, onClose, onSaved }: FormProps) {
         transition={{ duration: 0.25 }}
         className="surface-elevated w-full sm:max-w-2xl p-5 sm:p-8 max-h-[95vh] sm:max-h-[90vh] overflow-y-auto rounded-t-2xl sm:rounded-none"
         onClick={(e) => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        aria-label={editing ? "Editar movimiento" : "Nuevo movimiento"}
       >
         <div className="flex items-start justify-between mb-5 sm:mb-6">
           <div>
@@ -414,7 +437,7 @@ function TransactionForm({ editing, config, onClose, onSaved }: FormProps) {
               {editing ? "Modificar movimiento" : "Nuevo movimiento"}
             </h2>
           </div>
-          <button onClick={onClose} className="text-ink-300 hover:text-paper p-2 -mr-2">
+          <button onClick={onClose} className="text-ink-300 hover:text-paper p-3 -mr-3 -mt-1" aria-label="Cerrar">
             <X className="w-5 h-5" />
           </button>
         </div>
@@ -426,6 +449,7 @@ function TransactionForm({ editing, config, onClose, onSaved }: FormProps) {
               <button
                 key={t}
                 onClick={() => setTipo(t)}
+                aria-pressed={tipo === t}
                 className={`py-3 border text-sm transition-all ${
                   tipo === t
                     ? t === "ingreso" ? "border-moss bg-moss/10 text-moss-light" : "border-terra bg-terra/10 text-terra-light"
@@ -467,6 +491,7 @@ function TransactionForm({ editing, config, onClose, onSaved }: FormProps) {
                     key={m}
                     type="button"
                     onClick={() => setMoneda(m)}
+                    aria-pressed={moneda === m}
                     className={`px-4 sm:px-3 py-3 text-xs font-mono transition-colors ${
                       moneda === m ? "bg-amber text-ink-900" : "text-ink-300 hover:bg-ink-700/40"
                     }`}

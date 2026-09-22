@@ -4,12 +4,14 @@ import { signIn, useSession } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, Suspense } from "react";
 import { motion } from "framer-motion";
+import { useFaviconLoading } from "@/components/FaviconLoadingSignal";
 
 function LoginContent() {
   const { data: session, status } = useSession();
   const router = useRouter();
   const searchParams = useSearchParams();
   const error = searchParams.get("error");
+  useFaviconLoading(status === "loading");
 
   useEffect(() => {
     if (status === "authenticated") {
@@ -20,7 +22,7 @@ function LoginContent() {
   if (status === "loading") {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <div className="text-ink-300 text-sm">Verificando sesión...</div>
+        <div className="text-ink-300 text-sm" role="status" aria-live="polite">Verificando sesión...</div>
       </div>
     );
   }
@@ -106,7 +108,7 @@ export default function LoginPage() {
     <Suspense
       fallback={
         <div className="min-h-screen flex items-center justify-center">
-          <div className="text-ink-300 text-sm">Cargando...</div>
+          <div className="text-ink-300 text-sm" role="status" aria-live="polite">Cargando...</div>
         </div>
       }
     >

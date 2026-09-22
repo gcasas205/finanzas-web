@@ -1,7 +1,8 @@
-import { loadConfig } from "@/lib/sheets";
-import Analytics from "@/components/views/Analytics";
+"use client";
 
-export default async function AnalyticsPage() {
-  const config = await loadConfig();
-  return <Analytics config={config} />;
+import Analytics from "@/components/views/Analytics";
+import { useConfig } from "@/components/ConfigProvider";
+
+export default function AnalyticsPage() {
+  return <Analytics config={useConfig()} />;
 }
