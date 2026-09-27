@@ -9,7 +9,7 @@ Formato: **hallazgo → por qué importa → corrección propuesta**. Prioridad:
 > Decisiones tomadas donde la auditoría dejaba opciones:
 > - **B12 (caché):** se documentó el límite en `lib/cache.ts`; los errores ya no se cachean. No se migró a `revalidateTag`.
 > - **B13 (montos):** redondeo único a centavos (`roundMoney`) en los schemas y al derivar totales, en vez de pasar a enteros.
-> - **D5:** montos de ingresos/gastos en neutro con signo; verde/rojo sólo para balance y resultados.
+> - **D5:** se probó dejar los montos en neutro, pero se volvió a verde (entra) / rojo (sale) a pedido: el color marca la dirección de la plata, siempre con signo o flecha.
 > - **D1:** además de filtros y títulos, salieron del ámbar las series de gráficos (ahorro, tenencia, capital),
 >   el color del piso de emergencia y los círculos 1/2/3 de Ahorro (ahora neutros).
 > Reglas vigentes en `DESIGN.md`. Tests: `npm test` (Vitest). Typecheck estricto: `npm run typecheck`.

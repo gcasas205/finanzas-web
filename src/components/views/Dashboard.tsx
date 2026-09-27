@@ -222,9 +222,9 @@ export default function Dashboard({ config }: Props) {
           transition={{ duration: 0.26, delay: 0.12, ease: [0.16, 1, 0.3, 1] }}
           className="surface p-4 sm:p-7 relative overflow-hidden col-span-2 sm:col-span-8"
         >
-          <div className="absolute top-0 left-0 right-0 h-px bg-ink-300" />
+          <div className="absolute top-0 left-0 right-0 h-px bg-moss" />
           <div className="flex items-center justify-between mb-4">
-            <div className="eyebrow">Posición en dólares</div>
+            <div className="eyebrow text-moss-light">Posición en dólares</div>
             <DollarSign className="w-4 h-4 text-ink-300 hidden sm:block" strokeWidth={1.5} />
           </div>
           <div className="grid grid-cols-3 gap-2 sm:gap-4">
@@ -382,8 +382,8 @@ export default function Dashboard({ config }: Props) {
                     )}
                   </div>
                 </div>
-                <div className="text-sm font-mono tabular text-paper ml-4 whitespace-nowrap">
-                  <span className="text-ink-300" aria-hidden="true">−</span>{formatPesos(tx.monto)}
+                <div className="text-sm font-mono tabular text-terra-light ml-4 whitespace-nowrap">
+                  <span aria-hidden="true">−</span>{formatPesos(tx.monto)}
                 </div>
               </motion.div>
             ))}

@@ -25,7 +25,8 @@ Reglas con nombre, para citar en un review:
 - **El semáforo habla de estado y de dirección de la plata.** Verde = entra / suma (ingreso, compra de USD,
   balance positivo); rojo = sale / resta (gasto, venta de USD, balance negativo). Se usa en el tipo elegido de
   los formularios (Gasto/Ingreso, Compro/Vendo), en los chips y totales de Dólares, en la cotización
-  (compra/venta) y en balances y resultados. Los montos de la lista de Movimientos van en `paper` con signo.
+  (compra/venta), en los montos de ingresos y gastos (listas, vencimientos, importación), en los botones que
+  confirman algo que suma (`Button variant="exito"`: Importar, Empezar) y en balances y resultados.
   Siempre con texto, flecha o signo al lado (nunca sólo color).
 - **Series de gráficos:** ingresos `PALETTE.positivo`, gastos `PALETTE.negativo`, ahorro/tenencia/capital
   `PALETTE.serie` (neutro), período anterior `PALETTE.serieSecundaria`. Las categorías usan su color propio
@@ -112,7 +113,7 @@ Reglas con nombre, para citar en un review:
 ## Do / Don't
 
 - ✅ `bg-seleccion text-seleccion-tinta` para lo elegido · ❌ `bg-amber` en un filtro.
-- ✅ `<Monto>` en `paper` con signo en la lista · ✅ `tone` en `Segmented` para Gasto/Ingreso y Compro/Vendo.
+- ✅ `<Monto>` verde (+) o rojo (−) con signo · ✅ `tone` en `Segmented` para Gasto/Ingreso y Compro/Vendo.
 - ✅ Campos numéricos sin flechitas; la rueda del mouse no cambia el valor.
 - ✅ `PALETTE.serie` en un gráfico · ❌ `"#C9A24B"` suelto en un componente.
 - ✅ `text-xs` (13px) · ❌ `text-[10px]`.

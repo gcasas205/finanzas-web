@@ -174,6 +174,7 @@ export default function ImportView({ config }: Props) {
                 Cancelar
               </Button>
               <Button
+                variant="exito"
                 onClick={handleImport}
                 isLoading={importing}
                 disabled={docType === "tarjeta" && editedTxs.length === 0}
@@ -237,8 +238,8 @@ function VisaPreview({ result, txs, onChange }: {
           </p>
         </div>
         <div className="text-left sm:text-right shrink-0">
-          <div className="eyebrow mb-1">Total</div>
-          <div className="display text-2xl text-paper tabular">{formatPesos(total)}</div>
+          <div className="eyebrow text-terra-light mb-1">Total</div>
+          <div className="display text-2xl text-terra-light tabular">{formatPesos(total)}</div>
         </div>
       </div>
 
@@ -284,7 +285,7 @@ function VisaPreview({ result, txs, onChange }: {
                     type="number" step="0.01" value={tx.monto}
                     onChange={(e) => update(i, { monto: parseFloat(e.target.value) || 0 })}
                     aria-label={`Monto de ${tx.descripcion}`}
-                    className="w-28 bg-transparent border-b border-control/60 hover:border-control focus:border-amber text-sm text-right font-mono tabular text-paper py-1 transition-colors"
+                    className="w-28 bg-transparent border-b border-control/60 hover:border-control focus:border-amber text-sm text-right font-mono tabular text-terra-light py-1 transition-colors"
                   />
                 </td>
                 <td className="px-2 py-2 text-right">
@@ -333,12 +334,12 @@ function SueldoPreview({ result }: { result: SueldoParsedResult }) {
         <div className="col-span-1 sm:col-span-2 hairline-t mt-2 pt-4" />
         <div className="col-span-1 sm:col-span-2 flex items-end justify-between">
           <div>
-            <div className="eyebrow mb-1">Total neto</div>
-            <div className="display text-4xl text-paper tabular">{formatPesos(s.neto)}</div>
+            <div className="eyebrow text-moss-light mb-1">Total neto</div>
+            <div className="display text-4xl text-moss-light tabular">{formatPesos(s.neto)}</div>
           </div>
           {s.neto > 0 && (
-            <div className="flex items-center gap-2 text-xs text-ink-200">
-              <Check className="w-4 h-4 text-moss-light" aria-hidden="true" />
+            <div className="flex items-center gap-2 text-xs text-moss-light">
+              <Check className="w-4 h-4" aria-hidden="true" />
               Ingreso en {s.periodoPago ? formatMes(s.periodoPago) : "—"}
             </div>
           )}
