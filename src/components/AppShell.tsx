@@ -31,6 +31,9 @@ interface NavItem {
   icon: LucideIcon;
 }
 
+/** Versión visible en la app (actualizar junto con package.json y "Novedades" del README). */
+const APP_VERSION = "v6.0";
+
 const NAV_ITEMS: NavItem[] = [
   { href: "/dashboard",    label: "Resumen",     short: "Resumen", icon: LayoutDashboard },
   { href: "/transactions", label: "Movimientos", short: "Movim.",  icon: ArrowLeftRight },
@@ -115,7 +118,7 @@ export default function AppShell({ initialConfig, children }: { initialConfig: A
 
           <div className="pt-6 hairline-t space-y-3">
             <UserBadge />
-            <div className="text-xs text-ink-300">v5.1 · Edición personal</div>
+            <div className="text-xs text-ink-300">{APP_VERSION} · Edición personal</div>
           </div>
         </div>
       </aside>
@@ -164,8 +167,9 @@ export default function AppShell({ initialConfig, children }: { initialConfig: A
             );
           })}
         </nav>
-        <div className="mt-6 pt-5 hairline-t">
+        <div className="mt-6 pt-5 hairline-t space-y-3">
           <UserBadge />
+          <div className="text-xs text-ink-300">{APP_VERSION} · Edición personal</div>
         </div>
       </Dialog>
 
