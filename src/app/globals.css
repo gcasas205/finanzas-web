@@ -15,7 +15,8 @@
   /* Colores de identidad de los sobres de Ahorro (no son marca ni estado:
      identifican un bucket puntual, aunque reusan tonos de la paleta general
      como firma visual). Token único en vez de hex sueltos repetidos en Ahorro.tsx. */
-  --color-piso: #C9A24B;   /* = amber, el piso de emergencia se destaca con la marca */
+  /* El piso usa papel (ink-100), no el ámbar: la marca no reporta datos. */
+  --color-piso: theme('colors.ink.100');
   --color-largo: #4E7A6B;  /* verde apagado, distinto del moss de estado positivo */
   --color-sobre-auto: #A04A2F;  /* = terra */
   --color-sobre-mud:  #6A8970;  /* = moss-light */

@@ -30,7 +30,7 @@ function LoginContent() {
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
+        transition={{ duration: 0.26, ease: [0.16, 1, 0.3, 1] }}
         className="w-full max-w-md text-center"
       >
         {/* Logo */}
@@ -93,7 +93,7 @@ function LoginContent() {
           </button>
         </div>
 
-        <p className="text-[10px] text-ink-400 mt-8 tracking-wider uppercase">
+        <p className="text-xs text-ink-300 mt-8">
           Autenticación segura vía Google OAuth 2.0
         </p>
       </motion.div>

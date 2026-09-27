@@ -3,7 +3,7 @@
 import { useState, useMemo, useEffect, useRef } from "react";
 import {
   Plus, Edit2, Trash2, X, RefreshCw, TrendingUp, TrendingDown,
-  DollarSign, ArrowDownRight, ArrowUpRight, ShoppingCart, Banknote,
+  DollarSign, ArrowDownRight, ArrowUpRight, ShoppingCart, Banknote, type LucideIcon,
 } from "lucide-react";
 import {
   BarChart, Bar, ComposedChart, Line, XAxis, YAxis, Tooltip,
@@ -28,6 +28,7 @@ import { Field, focusFirstInvalid } from "@/components/ui/Field";
 import { Button } from "@/components/ui/Button";
 import { Segmented } from "@/components/ui/Segmented";
 import { EmptyState } from "@/components/ui/States";
+import { PALETTE } from "@/lib/palette";
 
 const ALL = "__all__";
 
@@ -195,7 +196,7 @@ export default function Dolares() {
           eyebrow="Tenencia en dólares"
           value={<AnimatedUsdAmount value={resumen.tenenciaUSD} />}
           subtitle={`Precio prom. compra ${formatPesos(resumen.precioPromedioCompra)}`}
-          accent="amber"
+          accent="ink"
           icon={DollarSign}
           className="col-span-2 sm:col-span-6"
         />
@@ -223,19 +224,19 @@ export default function Dolares() {
         </div>
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-6">
           <DesgloseCard
-            icon={ShoppingCart} accent="#6A8970" label="Comprado"
+            icon={ShoppingCart} label="Comprado"
             usd={desglose.compraUSD} ars={desglose.compraARS} arsLabel="pagados"
           />
           <DesgloseCard
-            icon={Banknote} accent="#D4886E" label="Vendido"
+            icon={Banknote} label="Vendido"
             usd={desglose.ventaUSD} ars={desglose.ventaARS} arsLabel="recibidos"
           />
           <DesgloseCard
-            icon={ArrowUpRight} accent="#A04A2F" label="Gastos en USD"
+            icon={ArrowUpRight} label="Gastos en USD"
             usd={desglose.gastoUSD} arsLabel="desde tenencia"
           />
           <DesgloseCard
-            icon={ArrowDownRight} accent="#C9A24B" label="Ingresos en USD"
+            icon={ArrowDownRight} label="Ingresos en USD"
             usd={desglose.ingresoUSD} arsLabel="a tenencia"
           />
         </div>
@@ -249,23 +250,23 @@ export default function Dolares() {
               <div className="eyebrow mb-1">Evolución</div>
               <h2 className="display text-2xl text-paper">Tenencia y flujo mensual</h2>
             </div>
-            <div className="flex gap-4 text-[11px]">
-              <LegendDot color="#6A8970" label="Compras" />
-              <LegendDot color="#A04A2F" label="Salidas" />
-              <LegendDot color="#C9A24B" label="Tenencia" />
+            <div className="flex gap-4 text-xs">
+              <LegendDot color={PALETTE.positivo} label="Compras" />
+              <LegendDot color={PALETTE.negativo} label="Salidas" />
+              <LegendDot color={PALETTE.serie} label="Tenencia" />
             </div>
           </div>
           <ResponsiveContainer width="100%" height={300}>
             <ComposedChart data={evolucion}>
-              <CartesianGrid stroke="#252420" strokeDasharray="2 4" vertical={false} />
-              <XAxis dataKey="label" stroke="#8A8576" fontSize={10} tickLine={false} axisLine={false} />
-              <YAxis stroke="#8A8576" fontSize={10} tickLine={false} axisLine={false}
+              <CartesianGrid stroke={PALETTE.grilla} strokeDasharray="2 4" vertical={false} />
+              <XAxis dataKey="label" stroke={PALETTE.eje} fontSize={13} tickLine={false} axisLine={false} />
+              <YAxis stroke={PALETTE.eje} fontSize={13} tickLine={false} axisLine={false}
                 tickFormatter={(v) => `${Math.abs(v)}`} />
-              <Tooltip content={<UsdTooltip />} cursor={{ fill: "rgba(244,241,234,0.03)" }} />
-              <Bar dataKey="compra" name="Compras" fill="#6A8970" radius={[2, 2, 0, 0]} stackId="flujo" />
-              <Bar dataKey="venta" name="Salidas" fill="#A04A2F" radius={[0, 0, 2, 2]} stackId="flujo" />
-              <Line type="monotone" dataKey="tenencia" name="Tenencia" stroke="#C9A24B"
-                strokeWidth={2} dot={{ fill: "#C9A24B", r: 3 }} />
+              <Tooltip content={<UsdTooltip />} cursor={{ fill: PALETTE.cursor }} />
+              <Bar dataKey="compra" name="Compras" fill={PALETTE.positivo} radius={[2, 2, 0, 0]} stackId="flujo" />
+              <Bar dataKey="venta" name="Salidas" fill={PALETTE.negativo} radius={[0, 0, 2, 2]} stackId="flujo" />
+              <Line type="monotone" dataKey="tenencia" name="Tenencia" stroke={PALETTE.serie}
+                strokeWidth={2} dot={{ fill: PALETTE.serie, r: 3 }} />
             </ComposedChart>
           </ResponsiveContainer>
         </div>
@@ -305,7 +306,7 @@ export default function Dolares() {
                 <tr key={f.id} className="hairline-b last:border-0 hover:bg-ink-700/20 transition-colors group">
                   <td className="px-6 py-4 text-sm text-paper tabular font-mono">
                     {formatFecha(f.fecha)}
-                    <div className="text-[10px] text-ink-400">{formatMes(fechaToMes(f.fecha), true)}</div>
+                    <div className="text-xs text-ink-400">{formatMes(fechaToMes(f.fecha), true)}</div>
                   </td>
                   <td className="px-2 py-4"><ConceptoBadge tipo={f.tipo} /></td>
                   <td className="px-2 py-4 text-right tabular font-mono text-sm text-paper">
@@ -316,8 +317,10 @@ export default function Dolares() {
                   </td>
                   <td className="px-2 py-4 text-right tabular font-mono text-sm">
                     {f.kind === "op" ? (
-                      <span className={f.tipo === "compra" ? "text-terra-light" : "text-moss-light"}>
-                        {f.tipo === "compra" ? "-" : "+"}{formatPesos(f.totalARS)}
+                      <span className="text-paper whitespace-nowrap">
+                        <span className="text-ink-300" aria-hidden="true">{f.tipo === "compra" ? "−" : "+"}</span>
+                        <span className="sr-only">{f.tipo === "compra" ? "pagaste " : "recibiste "}</span>
+                        {formatPesos(f.totalARS)}
                       </span>
                     ) : <span className="text-ink-400">—</span>}
                   </td>
@@ -337,7 +340,7 @@ export default function Dolares() {
                         </button>
                       </div>
                     ) : (
-                      <span className="text-[10px] text-ink-500 italic">en Movimientos</span>
+                      <span className="text-xs text-ink-300 italic">en Movimientos</span>
                     )}
                   </td>
                 </tr>
@@ -347,7 +350,7 @@ export default function Dolares() {
         </div>
       </div>
 
-      <p className="mt-4 text-[11px] text-ink-400 leading-relaxed max-w-2xl">
+      <p className="mt-4 text-xs text-ink-400 leading-relaxed max-w-2xl">
         Las compras y ventas se cargan acá. Los gastos e ingresos en dólares se cargan en la pestaña
         Movimientos (eligiendo USD) y aparecen listados acá porque afectan tu tenencia.
       </p>
@@ -368,29 +371,30 @@ export default function Dolares() {
 
 function ConceptoBadge({ tipo }: { tipo: string }) {
   const map: Record<string, { label: string; cls: string }> = {
-    compra:      { label: "↓ Compra",  cls: "border-moss/40 text-moss-light bg-moss/5" },
-    venta:       { label: "↑ Venta",   cls: "border-terra/40 text-terra-light bg-terra/5" },
-    gasto:       { label: "⤴ Gasto USD", cls: "border-terra/40 text-terra-light bg-terra/5" },
-    ingresoUSD:  { label: "⤵ Ingreso USD", cls: "border-moss/40 text-moss-light bg-moss/5" },
+    // Chips neutros: compra/venta son operaciones, no un estado bueno o malo.
+    compra:      { label: "↓ Compra",  cls: "border-control text-paper" },
+    venta:       { label: "↑ Venta",   cls: "border-control text-paper" },
+    gasto:       { label: "⤴ Gasto USD", cls: "border-control text-ink-200" },
+    ingresoUSD:  { label: "⤵ Ingreso USD", cls: "border-control text-ink-200" },
   };
-  const b = map[tipo] ?? { label: tipo, cls: "border-ink-500 text-ink-300" };
+  const b = map[tipo] ?? { label: tipo, cls: "border-control text-ink-300" };
   return <span className={`inline-flex items-center gap-1.5 text-xs px-2 py-1 border ${b.cls}`}>{b.label}</span>;
 }
 
 // ── Desglose card ─────────────────────────────────────────────────────────────
 
-function DesgloseCard({ icon: Icon, accent, label, usd, ars, arsLabel }: {
-  icon: any; accent: string; label: string; usd: number; ars?: number; arsLabel: string;
+function DesgloseCard({ icon: Icon, label, usd, ars, arsLabel }: {
+  icon: LucideIcon; label: string; usd: number; ars?: number; arsLabel: string;
 }) {
   return (
     <div className="surface p-4 sm:p-5 relative overflow-hidden">
-      <div className="absolute top-0 left-0 right-0 h-px" style={{ background: accent }} />
+      <div className="absolute top-0 left-0 right-0 h-px bg-ink-300" />
       <div className="flex items-center justify-between mb-2">
-        <div className="eyebrow text-[9px] sm:text-[10px]" style={{ color: accent }}>{label}</div>
-        <Icon className="w-3.5 h-3.5 text-ink-300" strokeWidth={1.5} />
+        <div className="eyebrow">{label}</div>
+        <Icon className="w-4 h-4 text-ink-300" strokeWidth={1.5} aria-hidden="true" />
       </div>
       <div className="display text-xl sm:text-2xl text-paper tabular leading-none"><AnimatedUsdAmount value={usd} /></div>
-      <div className="text-[10px] text-ink-300 mt-1 tabular">
+      <div className="text-xs text-ink-300 mt-1 tabular">
         {ars !== undefined ? `${formatPesosCompact(ars)} ${arsLabel}` : arsLabel}
       </div>
     </div>
@@ -406,11 +410,11 @@ function CotizacionBanner({ cot, onRefresh, refreshing }: {
   return (
     <div className="surface p-5 mb-6 flex flex-col sm:flex-row sm:items-center gap-4 sm:gap-8">
       <div className="flex items-center gap-3">
-        <div className="eyebrow text-amber">Dólar oficial · dolarhoy</div>
-        <button onClick={onRefresh} disabled={refreshing}
-          className="text-ink-300 hover:text-amber transition-colors disabled:opacity-50"
-          title="Actualizar cotización">
-          <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? "animate-spin" : ""}`} />
+        <div className="eyebrow">Dólar oficial · dolarhoy</div>
+        <button type="button" onClick={onRefresh} disabled={refreshing}
+          className="p-2.5 -m-2.5 text-ink-300 hover:text-paper transition-colors disabled:opacity-50"
+          aria-label="Actualizar cotización">
+          <RefreshCw className={`w-4 h-4 ${refreshing ? "animate-spin" : ""}`} aria-hidden="true" />
         </button>
       </div>
       {noData ? (
@@ -420,15 +424,15 @@ function CotizacionBanner({ cot, onRefresh, refreshing }: {
       ) : (
         <div className="flex items-center gap-8 flex-1">
           <div>
-            <div className="text-[10px] uppercase tracking-wider text-ink-400 mb-0.5">Compra</div>
-            <div className="display text-2xl text-moss-light tabular"><AnimatedNumber value={cot!.compra} format={formatPesos} /></div>
+            <div className="text-xs uppercase tracking-wider text-ink-400 mb-0.5">Compra</div>
+            <div className="display text-2xl text-paper tabular"><AnimatedNumber value={cot!.compra} format={formatPesos} /></div>
           </div>
           <div>
-            <div className="text-[10px] uppercase tracking-wider text-ink-400 mb-0.5">Venta</div>
-            <div className="display text-2xl text-terra-light tabular"><AnimatedNumber value={cot!.venta} format={formatPesos} /></div>
+            <div className="text-xs uppercase tracking-wider text-ink-400 mb-0.5">Venta</div>
+            <div className="display text-2xl text-paper tabular"><AnimatedNumber value={cot!.venta} format={formatPesos} /></div>
           </div>
           {cot!.actualizado && (
-            <div className="ml-auto text-[10px] text-ink-400 hidden sm:block">
+            <div className="ml-auto text-xs text-ink-400 hidden sm:block">
               Actualizado {cot!.actualizado}
             </div>
           )}
@@ -442,23 +446,23 @@ function CotizacionBanner({ cot, onRefresh, refreshing }: {
 
 function KPICard({ variant = "default", eyebrow, value, accent, subtitle, icon: Icon, className = "" }: {
   variant?: "hero" | "default";
-  eyebrow: string; value: React.ReactNode; accent: "moss" | "terra" | "amber" | "ink";
+  eyebrow: string; value: React.ReactNode; accent: "moss" | "terra" | "ink";
   subtitle: string; icon?: any; className?: string;
 }) {
-  const accentColors = { moss: "#6A8970", terra: "#D4886E", amber: "#C9A24B", ink: "#8A8576" };
+  const accentColors = { moss: PALETTE.positivo, terra: PALETTE.negativoTexto, ink: PALETTE.eje };
   const color = accentColors[accent];
   const isHero = variant === "hero";
   return (
     <div className={`surface p-4 sm:p-7 relative overflow-hidden ${className}`}>
       <div className="absolute top-0 left-0 right-0 h-px" style={{ background: color }} />
       <div className="flex items-start justify-between mb-2 sm:mb-4">
-        <div className="eyebrow text-[8px] sm:text-[10px]" style={{ color }}>{eyebrow}</div>
+        <div className="eyebrow text-xs" style={{ color }}>{eyebrow}</div>
         {Icon && <Icon className="w-3 h-3 sm:w-4 sm:h-4 text-ink-300 hidden sm:block" strokeWidth={1.5} />}
       </div>
       <div className={`display tabular leading-none ${isHero ? "text-3xl sm:text-5xl lg:text-6xl" : "text-2xl sm:text-3xl lg:text-4xl"} text-paper mb-1 sm:mb-2`}>
         {value}
       </div>
-      <div className="text-[9px] sm:text-[11px] text-ink-300 tracking-wide truncate">{subtitle}</div>
+      <div className="text-xs text-ink-300 tracking-wide truncate">{subtitle}</div>
     </div>
   );
 }
@@ -467,7 +471,7 @@ function LegendDot({ color, label }: { color: string; label: string }) {
   return (
     <div className="flex items-center gap-2 text-ink-200">
       <div className="w-2 h-2 rounded-full" style={{ background: color }} />
-      <span className="font-mono uppercase tracking-wider">{label}</span>
+      <span className="font-mono">{label}</span>
     </div>
   );
 }
@@ -476,7 +480,7 @@ function UsdTooltip({ active, payload, label }: any) {
   if (!active || !payload?.length) return null;
   return (
     <div className="bg-ink-800/95 backdrop-blur-md border border-ink-500 rounded-sm shadow-2xl px-4 py-3 min-w-[160px]">
-      {label && <div className="text-[10px] uppercase tracking-widest text-ink-300 mb-2 font-mono">{label}</div>}
+      {label && <div className="text-xs uppercase tracking-widest text-ink-300 mb-2 font-mono">{label}</div>}
       {payload.map((e: any, i: number) => (
         <div key={i} className="flex items-center justify-between gap-4 text-xs py-0.5">
           <div className="flex items-center gap-2">
