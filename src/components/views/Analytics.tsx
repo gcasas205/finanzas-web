@@ -17,6 +17,7 @@ import { useTransactions } from "@/components/DataProvider";
 import { impactoPesosDolar } from "@/lib/dolar-calc";
 import { PALETTE } from "@/lib/palette";
 import { EmptyState } from "@/components/ui/States";
+import type { ChartTooltipProps } from "@/components/ui/chart";
 
 interface Props { config: AppConfig; }
 
@@ -146,7 +147,16 @@ export default function Analytics({ config }: Props) {
 
 // ── Tendencias ───────────────────────────────────────────────────────────────
 
-function TendenciasTab({ evolution }: { evolution: any[] }) {
+interface EvolucionMes {
+  mes: string;
+  label: string;
+  ingresos: number;
+  egresos: number;
+  ahorro: number;
+  acumulado: number;
+}
+
+function TendenciasTab({ evolution }: { evolution: EvolucionMes[] }) {
   if (!evolution.length) return <Empty />;
 
   return (
@@ -440,18 +450,18 @@ function ComparativaTab({ transactions, selectedMonth }: { transactions: Transac
 
 // ── Shared ───────────────────────────────────────────────────────────────────
 
-function ChartTooltip({ active, payload, label }: any) {
+function ChartTooltip({ active, payload, label }: ChartTooltipProps) {
   if (!active || !payload?.length) return null;
   return (
     <div className="bg-ink-800/95 backdrop-blur-md border border-ink-500 rounded-sm shadow-2xl px-4 py-3">
       {label && <div className="text-xs uppercase tracking-widest text-ink-300 mb-2 font-mono">{label}</div>}
-      {payload.map((e: any, i: number) => (
+      {payload.map((e, i) => (
         <div key={i} className="flex items-center justify-between gap-6 text-xs py-0.5">
           <div className="flex items-center gap-2">
             <div className="w-2 h-2 rounded-full" style={{ background: e.color }} />
             <span className="text-ink-200">{e.name || e.payload?.name}</span>
           </div>
-          <span className="text-paper tabular font-mono">{formatPesos(e.value)}</span>
+          <span className="text-paper tabular font-mono">{formatPesos(Number(e.value ?? 0))}</span>
         </div>
       ))}
     </div>

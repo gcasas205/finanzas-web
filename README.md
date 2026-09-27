@@ -282,7 +282,11 @@ npm install
 npm run dev        # http://localhost:3000
 npm run build      # Build de producción
 npm start          # Servir build de producción
+npm test           # Tests (Vitest): cálculos, validaciones, errores de la API
+npm run typecheck  # TypeScript en modo estricto
 ```
+
+Sistema de diseño y reglas de color/tipografía: ver [`DESIGN.md`](DESIGN.md).
 
 ### Estructura del proyecto
 

@@ -5,6 +5,15 @@ Criterio: `backend-engineer`, `frontend-engineer` y `webapp-designer` (`.claude/
 
 Formato: **hallazgo → por qué importa → corrección propuesta**. Prioridad: 🔴 alta · 🟠 media · 🟡 baja. Esfuerzo: S / M / L.
 
+> **Estado (2026-09-27): los 33 hallazgos están implementados** en la rama `claude/busy-feynman-r5ndmy`.
+> Decisiones tomadas donde la auditoría dejaba opciones:
+> - **B12 (caché):** se documentó el límite en `lib/cache.ts`; los errores ya no se cachean. No se migró a `revalidateTag`.
+> - **B13 (montos):** redondeo único a centavos (`roundMoney`) en los schemas y al derivar totales, en vez de pasar a enteros.
+> - **D5:** montos de ingresos/gastos en neutro con signo; verde/rojo sólo para balance y resultados.
+> - **D1:** además de filtros y títulos, salieron del ámbar las series de gráficos (ahorro, tenencia, capital),
+>   el color del piso de emergencia y los círculos 1/2/3 de Ahorro (ahora neutros).
+> Reglas vigentes en `DESIGN.md`. Tests: `npm test` (Vitest). Typecheck estricto: `npm run typecheck`.
+
 ---
 
 ## 1. Backend / API

@@ -201,7 +201,8 @@ async function getSheetsClient(): Promise<{ client: sheets_v4.Sheets; sheetId: s
   if (!config.googleSheetId) return null;
 
   try {
-    let creds: any;
+    // Forma mínima de un JSON de cuenta de servicio (GoogleAuth valida el resto).
+    let creds: { client_email?: string; private_key?: string; [k: string]: unknown };
 
     // Opción 1: credenciales como env var (Vercel)
     if (process.env.GOOGLE_SHEETS_CREDS_JSON) {
@@ -274,7 +275,7 @@ async function ensureSheets(client: sheets_v4.Sheets, sheetId: string) {
   const existing = meta.data.sheets?.map(s => s.properties?.title) ?? [];
 
   // seedRows: filas de datos a sembrar al crear la hoja (además del header)
-  const required: Array<{ name: string; headers: string[]; seedRows?: any[][] }> = [
+  const required: Array<{ name: string; headers: string[]; seedRows?: Array<Array<string | number>> }> = [
     { name: "Transacciones", headers: TX_HEADERS },
     { name: "Sueldos", headers: SUELDO_HEADERS },
     { name: "Dolares", headers: DOLAR_HEADERS },
@@ -315,28 +316,48 @@ async function ensureSheets(client: sheets_v4.Sheets, sheetId: string) {
   }
 }
 
+/** Una celda/fila tal como la devuelve la API de Sheets. */
+type SheetCell = string | number | boolean | null | undefined;
+type SheetRow = SheetCell[];
+
+/** Texto de una celda; `def` si está vacía. */
+function str(v: SheetCell, def = ""): string {
+  return v === undefined || v === null || v === "" ? def : String(v);
+}
+
+/** Número de una celda (acepta coma decimal); 0 si no es numérica. */
+function num(v: SheetCell): number {
+  const n = parseFloat(String(v ?? "").replace(",", "."));
+  return Number.isFinite(n) ? n : 0;
+}
+
+/** Número opcional: undefined si la celda está vacía. */
+function optNum(v: SheetCell): number | undefined {
+  return v === undefined || v === null || v === "" ? undefined : num(v);
+}
+
 /** Convierte una fila plana a Transaction */
-function rowToTransaction(row: any[]): Transaction {
+function rowToTransaction(row: SheetRow): Transaction {
   return {
-    id: row[0] ?? "",
-    fechaConsumo: row[1] ?? "",
-    fechaPago: row[2] ?? "",
-    tipo: (row[3] ?? "egreso") as Transaction["tipo"],
-    descripcion: row[4] ?? "",
-    monto: parseFloat(row[5]) || 0,
-    moneda: (row[6] ?? "ARS") as Transaction["moneda"],
-    categoria: row[7] ?? "Otros",
-    subcategoria: row[8] ?? "Sin categoría",
-    fuente: (row[9] ?? "manual") as Transaction["fuente"],
-    cuotaTotal: parseInt(row[10]) || 1,
-    cuotaNumero: parseInt(row[11]) || 1,
-    notas: row[12] ?? "",
-    createdAt: row[13] ?? new Date().toISOString(),
-    origen: (row[14] || undefined) as Transaction["origen"],
+    id: str(row[0]),
+    fechaConsumo: str(row[1]),
+    fechaPago: str(row[2]),
+    tipo: str(row[3], "egreso") as Transaction["tipo"],
+    descripcion: str(row[4]),
+    monto: num(row[5]),
+    moneda: str(row[6], "ARS") as Transaction["moneda"],
+    categoria: str(row[7], "Otros"),
+    subcategoria: str(row[8], "Sin categoría"),
+    fuente: str(row[9], "manual") as Transaction["fuente"],
+    cuotaTotal: Math.trunc(num(row[10])) || 1,
+    cuotaNumero: Math.trunc(num(row[11])) || 1,
+    notas: str(row[12]),
+    createdAt: str(row[13], new Date().toISOString()),
+    origen: (str(row[14]) || undefined) as Transaction["origen"],
   };
 }
 
-function transactionToRow(t: Transaction): any[] {
+function transactionToRow(t: Transaction): SheetRow {
   return [
     t.id, t.fechaConsumo, t.fechaPago, t.tipo, t.descripcion, t.monto,
     t.moneda, t.categoria, t.subcategoria, t.fuente, t.cuotaTotal,
@@ -344,25 +365,25 @@ function transactionToRow(t: Transaction): any[] {
   ];
 }
 
-function rowToSueldo(row: any[]): Sueldo {
+function rowToSueldo(row: SheetRow): Sueldo {
   return {
-    id: row[0] ?? "",
-    periodoTrabajado: row[1] ?? "",
-    periodoPago: row[2] ?? "",
-    empresa: row[3] ?? "",
-    cargo: row[4] ?? "",
-    bruto: parseFloat(row[5]) || 0,
-    neto: parseFloat(row[6]) || 0,
-    jubilacion: parseFloat(row[7]) || 0,
-    obraSocial: parseFloat(row[8]) || 0,
-    ley19032: parseFloat(row[9]) || 0,
-    otrosDescuentos: parseFloat(row[10]) || 0,
-    fechaPago: row[11] ?? "",
-    createdAt: row[12] ?? new Date().toISOString(),
+    id: str(row[0]),
+    periodoTrabajado: str(row[1]),
+    periodoPago: str(row[2]),
+    empresa: str(row[3]),
+    cargo: str(row[4]),
+    bruto: num(row[5]),
+    neto: num(row[6]),
+    jubilacion: num(row[7]),
+    obraSocial: num(row[8]),
+    ley19032: num(row[9]),
+    otrosDescuentos: num(row[10]),
+    fechaPago: str(row[11]),
+    createdAt: str(row[12], new Date().toISOString()),
   };
 }
 
-function sueldoToRow(s: Sueldo): any[] {
+function sueldoToRow(s: Sueldo): SheetRow {
   return [
     s.id, s.periodoTrabajado, s.periodoPago, s.empresa, s.cargo,
     s.bruto, s.neto, s.jubilacion, s.obraSocial, s.ley19032,
@@ -370,26 +391,26 @@ function sueldoToRow(s: Sueldo): any[] {
   ];
 }
 
-function rowToDolar(row: any[]): DolarOperacion {
-  const montoUSD = parseFloat(row[3]) || 0;
-  const precioARS = parseFloat(row[4]) || 0;
+function rowToDolar(row: SheetRow): DolarOperacion {
+  const montoUSD = num(row[3]);
+  const precioARS = num(row[4]);
   return {
-    id: row[0] ?? "",
-    fecha: row[1] ?? "",
-    tipo: (row[2] ?? "compra") as DolarOperacion["tipo"],
+    id: str(row[0]),
+    fecha: str(row[1]),
+    tipo: str(row[2], "compra") as DolarOperacion["tipo"],
     montoUSD,
     precioARS,
     // Recalcula por las dudas para que totalARS nunca quede inconsistente
-    totalARS: parseFloat(row[5]) || montoUSD * precioARS,
-    notas: row[6] ?? "",
-    createdAt: row[7] ?? new Date().toISOString(),
-    asigMediano: row[8] !== undefined && row[8] !== "" ? parseFloat(row[8]) || 0 : undefined,
-    asigLargo: row[9] !== undefined && row[9] !== "" ? parseFloat(row[9]) || 0 : undefined,
-    origen: (row[10] || undefined) as DolarOperacion["origen"],
+    totalARS: num(row[5]) || montoUSD * precioARS,
+    notas: str(row[6]),
+    createdAt: str(row[7], new Date().toISOString()),
+    asigMediano: optNum(row[8]),
+    asigLargo: optNum(row[9]),
+    origen: (str(row[10]) || undefined) as DolarOperacion["origen"],
   };
 }
 
-function dolarToRow(d: DolarOperacion): any[] {
+function dolarToRow(d: DolarOperacion): SheetRow {
   return [
     d.id, d.fecha, d.tipo, d.montoUSD, d.precioARS, d.totalARS, d.notas, d.createdAt,
     d.asigMediano ?? "", d.asigLargo ?? "", d.origen ?? ""
@@ -442,7 +463,7 @@ async function findRowNumber(ctx: SheetsCtx, tab: string, id: string): Promise<n
   return idx === -1 ? null : idx + 2; // A2 => fila 2
 }
 
-async function updateRowById(tab: string, lastCol: string, id: string, row: unknown[]): Promise<boolean> {
+async function updateRowById(tab: string, lastCol: string, id: string, row: SheetRow): Promise<boolean> {
   return sheetsCall(`actualizar fila en ${tab}`, async (ctx) => {
     const rowNumber = await findRowNumber(ctx, tab, id);
     if (rowNumber === null) return false;
@@ -480,7 +501,7 @@ async function deleteRowById(tab: string, id: string): Promise<boolean> {
   });
 }
 
-async function appendRows(tab: string, lastCol: string, rows: unknown[][]): Promise<void> {
+async function appendRows(tab: string, lastCol: string, rows: SheetRow[]): Promise<void> {
   if (!rows.length) return;
   await sheetsCall(`agregar filas en ${tab}`, async (ctx) => {
     await ensureSheetsOnce(ctx);
@@ -493,11 +514,11 @@ async function appendRows(tab: string, lastCol: string, rows: unknown[][]): Prom
   });
 }
 
-async function readRows(tab: string, range: string): Promise<unknown[][]> {
+async function readRows(tab: string, range: string): Promise<SheetRow[]> {
   return sheetsCall(`leer ${tab}`, async (ctx) => {
     await ensureSheetsOnce(ctx);
     const r = await ctx.client.spreadsheets.values.get({ spreadsheetId: ctx.sheetId, range: `${tab}!${range}` });
-    return (r.data.values ?? []).filter((row) => row[0]);
+    return ((r.data.values ?? []) as SheetRow[]).filter((row) => row[0]);
   });
 }
 

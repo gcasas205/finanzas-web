@@ -5,6 +5,7 @@ import { motion } from "framer-motion";
 import {
   TrendingUp, TrendingDown, Wallet, Zap,
   Calendar, Info, DollarSign,
+  type LucideIcon,
 } from "lucide-react";
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
@@ -22,6 +23,7 @@ import { ErrorState, StaleDataBanner } from "@/components/ui/States";
 import AnimatedNumber, { AnimatedUsdAmount } from "@/components/AnimatedNumber";
 import { PALETTE } from "@/lib/palette";
 import { EmptyState } from "@/components/ui/States";
+import type { ChartTooltipProps } from "@/components/ui/chart";
 
 interface Props { config: AppConfig; }
 
@@ -404,7 +406,7 @@ interface KPICardProps {
   valueText?: string;
   accent: "moss" | "terra" | "ink";
   subtitle: string;
-  icon?: any;
+  icon?: LucideIcon;
   delay?: number;
   className?: string;
 }
@@ -453,7 +455,7 @@ function LegendDot({ color, label }: { color: string; label: string }) {
   );
 }
 
-function EditorialTooltip({ active, payload, label }: any) {
+function EditorialTooltip({ active, payload, label }: ChartTooltipProps) {
   if (!active || !payload?.length) return null;
   return (
     <div className="bg-ink-800/95 backdrop-blur-md border border-ink-500 rounded-sm shadow-2xl px-4 py-3 min-w-[160px]">
@@ -462,14 +464,14 @@ function EditorialTooltip({ active, payload, label }: any) {
           {label}
         </div>
       )}
-      {payload.map((entry: any, i: number) => (
+      {payload.map((entry, i) => (
         <div key={i} className="flex items-center justify-between gap-4 text-xs py-0.5">
           <div className="flex items-center gap-2">
             <div className="w-2 h-2 rounded-full" style={{ background: entry.color }} />
             <span className="text-ink-200 capitalize">{entry.name || entry.payload?.name}</span>
           </div>
           <span className="text-paper tabular font-mono">
-            {formatPesos(entry.value)}
+            {formatPesos(Number(entry.value ?? 0))}
           </span>
         </div>
       ))}
