@@ -1,22 +1,30 @@
 "use client";
 
-import { useState, useMemo, useEffect } from "react";
-import { motion, AnimatePresence } from "framer-motion";
-import { Plus, Search, Edit2, Trash2, X, Filter } from "lucide-react";
+import { useState, useMemo, useEffect, useRef } from "react";
+import { Plus, Search, Edit2, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
-import type { Transaction, AppConfig, BucketOrigen } from "@/types";
+import type { Transaction, AppConfig, BucketOrigen, TransactionSource } from "@/types";
 import { formatPesos, formatFecha, fechaToMes, formatMes, uniqueMonths, calcularFechaPagoTarjeta, hoyLocal } from "@/lib/utils";
 import { ORIGEN_LABEL } from "@/lib/ahorro-calc";
 import { CATEGORIES, autoCategorizar, getCategoryColor } from "@/lib/categories";
 import { useTransactions } from "@/components/DataProvider";
 import { UsdAmount } from "@/components/UsdAmount";
 import LogoLoader from "@/components/LogoLoader";
+import { ErrorState, StaleDataBanner } from "@/components/ui/States";
 import AnimatedNumber, { AnimatedUsdAmount } from "@/components/AnimatedNumber";
+import { transactionsApi, ApiError, errorMessage, type TransactionPayload } from "@/lib/api";
+import { Dialog, DialogActions } from "@/components/ui/Dialog";
+import { useConfirm } from "@/components/ui/ConfirmDialog";
+import { Field, focusFirstInvalid } from "@/components/ui/Field";
+import { Button, buttonClasses } from "@/components/ui/Button";
+import { Segmented } from "@/components/ui/Segmented";
+import { EmptyState } from "@/components/ui/States";
+import { useSearchParams, useRouter } from "next/navigation";
 
 interface Props { config: AppConfig; }
 
 export default function Transactions({ config }: Props) {
-  const { transactions, isLoading: loading, refresh } = useTransactions();
+  const { transactions, isLoading: loading, error, refresh } = useTransactions();
   const [filterMonth, setFilterMonth] = useState("");
   const [filterType, setFilterType] = useState<"todos" | "ingreso" | "egreso">("todos");
   const [search, setSearch] = useState("");
@@ -24,6 +32,22 @@ export default function Transactions({ config }: Props) {
   const [showForm, setShowForm] = useState(false);
 
   const [visibleCount, setVisibleCount] = useState(50);
+  const { confirm, dialog: confirmDialog } = useConfirm();
+
+  // `/transactions?nuevo=1` abre el alta directo (lo usan los estados vacíos de otras vistas).
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  useEffect(() => {
+    if (searchParams.get("nuevo") === "1") {
+      setEditing(null);
+      setShowForm(true);
+      router.replace("/transactions");
+    }
+  }, [searchParams, router]);
+
+  const openNew = () => { setEditing(null); setShowForm(true); };
+  const hasFilters = Boolean(search || filterMonth || filterType !== "todos");
+  const clearFilters = () => { setSearch(""); setFilterMonth(""); setFilterType("todos"); };
   const months = useMemo(() => uniqueMonths(transactions), [transactions]);
 
   const filtered = useMemo(() => {
@@ -56,52 +80,58 @@ export default function Transactions({ config }: Props) {
     };
   }, [filtered]);
 
-  const handleDelete = async (id: string) => {
-    if (!confirm("¿Eliminar esta transacción?")) return;
-    const r = await fetch("/api/transactions", {
-      method: "DELETE",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id }),
+  const handleDelete = async (tx: Transaction) => {
+    const ok = await confirm({
+      title: "Eliminar movimiento",
+      description: (
+        <>
+          Vas a eliminar <strong className="text-paper">{tx.descripcion}</strong> (
+          {tx.moneda === "USD" ? <UsdAmount value={tx.monto} /> : formatPesos(tx.monto)}). No se puede deshacer.
+        </>
+      ),
     });
-    const d = await r.json();
-    if (d.ok) {
-      toast.success("Eliminada");
+    if (!ok) return;
+    try {
+      await transactionsApi.remove(tx.id);
+      toast.success(`"${tx.descripcion}" eliminado`);
       refresh();
-    } else {
-      toast.error("Error al eliminar");
+    } catch (e) {
+      toast.error(errorMessage(e, "No se pudo eliminar el movimiento"), { duration: 7000 });
     }
   };
 
   if (loading) return <LogoLoader className="min-h-[70vh]" />;
+  if (error && transactions.length === 0) {
+    return <ErrorState message={error} onRetry={refresh} className="min-h-[70vh]" />;
+  }
 
   return (
     <div className="p-4 sm:p-6 lg:p-10 max-w-[1400px]">
+      {error && <StaleDataBanner message={error} onRetry={refresh} />}
       <header className="mb-10 flex items-end justify-between">
         <div>
           <div className="eyebrow mb-2">Movimientos</div>
           <h1 className="display text-3xl sm:text-5xl text-paper">
-            Cada <em className="italic text-amber">peso</em>
+            Cada <em className="italic">peso</em>
           </h1>
         </div>
-        <button
-          onClick={() => { setEditing(null); setShowForm(true); }}
-          className="inline-flex items-center gap-2 bg-amber text-ink-900 px-5 py-2.5 text-sm font-medium hover:bg-amber-light transition-all"
-        >
-          <Plus className="w-4 h-4" />
-          Nueva
-        </button>
+        <Button onClick={openNew}>
+          <Plus className="w-4 h-4" aria-hidden="true" />
+          Nuevo
+        </Button>
       </header>
 
       {/* Filters */}
       <div className="surface p-3 sm:p-5 mb-4 sm:mb-6 flex flex-wrap gap-3 sm:gap-4 items-center">
         <div className="flex items-center gap-2 flex-1 min-w-[200px]">
-          <Search className="w-4 h-4 text-ink-300" />
+          <Search className="w-4 h-4 text-ink-300" aria-hidden="true" />
           <input
+            type="search"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Buscar descripción o categoría..."
+            placeholder="Buscar descripción o categoría…"
             aria-label="Buscar por descripción o categoría"
-            className="flex-1 bg-transparent text-sm text-paper placeholder:text-ink-400"
+            className="min-h-11 flex-1 bg-transparent text-sm text-paper placeholder:text-ink-400"
           />
         </div>
 
@@ -109,33 +139,32 @@ export default function Transactions({ config }: Props) {
           value={filterMonth}
           onChange={(e) => setFilterMonth(e.target.value)}
           aria-label="Filtrar por mes"
-          className="select-native bg-ink-900/60 border border-ink-500 text-paper pl-3 pr-9 py-2 text-xs focus:border-amber cursor-pointer"
+          className="select-native min-h-11 bg-ink-900/60 border border-control text-paper pl-3 pr-9 py-2 text-sm focus:border-amber cursor-pointer"
         >
           <option value="">Todos los meses</option>
           {months.map(m => <option key={m} value={m}>{formatMes(m)}</option>)}
         </select>
 
-        <div className="flex border border-ink-500" role="group" aria-label="Filtrar por tipo">
-          {(["todos", "ingreso", "egreso"] as const).map(t => (
-            <button
-              key={t}
-              onClick={() => setFilterType(t)}
-              aria-pressed={filterType === t}
-              className={`px-3 py-2 text-[11px] uppercase tracking-wider transition-colors ${
-                filterType === t ? "bg-amber text-ink-900" : "text-ink-200 hover:bg-ink-700/40"
-              }`}
-            >
-              {t === "todos" ? "Todos" : t === "ingreso" ? "Ingresos" : "Gastos"}
-            </button>
-          ))}
-        </div>
+        <Segmented
+          label="Filtrar por tipo"
+          size="sm"
+          className="w-auto"
+          value={filterType}
+          onChange={setFilterType}
+          options={[
+            { value: "todos", label: "Todos" },
+            { value: "ingreso", label: "Ingresos" },
+            { value: "egreso", label: "Gastos" },
+          ]}
+        />
 
-        {(search || filterMonth || filterType !== "todos") && (
+        {hasFilters && (
           <button
-            onClick={() => { setSearch(""); setFilterMonth(""); setFilterType("todos"); }}
-            className="text-ink-300 hover:text-paper text-xs flex items-center gap-1"
+            type="button"
+            onClick={clearFilters}
+            className="min-h-11 text-ink-300 hover:text-paper text-sm flex items-center gap-1"
           >
-            <X className="w-3 h-3" /> Limpiar
+            <X className="w-4 h-4" aria-hidden="true" /> Limpiar
           </button>
         )}
       </div>
@@ -143,25 +172,25 @@ export default function Transactions({ config }: Props) {
       {/* Summary */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-6 mb-6">
         <div className="surface p-4 sm:p-6">
-          <div className="eyebrow text-moss-light mb-1 sm:mb-2">Ingresos</div>
+          <div className="eyebrow mb-1 sm:mb-2">Ingresos</div>
           <div className="display text-2xl sm:text-3xl lg:text-4xl text-paper tabular leading-none">
             <AnimatedNumber value={totals.ingresos} format={formatPesos} />
           </div>
         </div>
         <div className="surface p-4 sm:p-6">
-          <div className="eyebrow text-terra-light mb-1 sm:mb-2">Gastos</div>
+          <div className="eyebrow mb-1 sm:mb-2">Gastos</div>
           <div className="display text-2xl sm:text-3xl lg:text-4xl text-paper tabular leading-none">
             <AnimatedNumber value={totals.egresos} format={formatPesos} />
           </div>
         </div>
         <div className="surface p-4 sm:p-6">
-          <div className="eyebrow text-amber mb-1 sm:mb-2">Balance</div>
+          <div className="eyebrow mb-1 sm:mb-2">Balance</div>
           <div className={`display text-2xl sm:text-3xl lg:text-4xl tabular leading-none ${totals.balance >= 0 ? "text-moss-light" : "text-terra-light"}`}>
             <AnimatedNumber value={totals.balance} format={formatPesos} />
           </div>
           {totals.hayUSD && (
             <div className={`text-sm tabular font-mono mt-2 ${totals.usdBalance >= 0 ? "text-moss-light" : "text-terra-light"}`}>
-              <AnimatedUsdAmount value={totals.usdBalance} /> <span className="text-ink-400 text-[10px]">en dólares</span>
+              <AnimatedUsdAmount value={totals.usdBalance} /> <span className="text-ink-300 text-xs">en dólares</span>
             </div>
           )}
         </div>
@@ -172,20 +201,23 @@ export default function Transactions({ config }: Props) {
         <div className="overflow-x-auto">
         {/* Desktop Table */}
         <table className="hidden md:table w-full">
+          <caption className="sr-only">Movimientos</caption>
           <thead>
             <tr className="hairline-b">
-              <th className="eyebrow text-left px-6 py-4">Pago</th>
-              <th className="eyebrow text-left px-2 py-4">Consumo</th>
-              <th className="eyebrow text-left px-2 py-4">Descripción</th>
-              <th className="eyebrow text-left px-2 py-4">Categoría</th>
-              <th className="eyebrow text-right px-2 py-4">Monto</th>
-              <th className="eyebrow text-center px-2 py-4">Cuota</th>
-              <th className="eyebrow text-right px-6 py-4 w-24">Acciones</th>
+              <th scope="col" className="eyebrow text-left px-6 py-4">Pago</th>
+              <th scope="col" className="eyebrow text-left px-2 py-4">Consumo</th>
+              <th scope="col" className="eyebrow text-left px-2 py-4">Descripción</th>
+              <th scope="col" className="eyebrow text-left px-2 py-4">Categoría</th>
+              <th scope="col" className="eyebrow text-right px-2 py-4">Monto</th>
+              <th scope="col" className="eyebrow text-center px-2 py-4">Cuota</th>
+              <th scope="col" className="eyebrow text-right px-6 py-4 w-24">Acciones</th>
             </tr>
           </thead>
           <tbody>
             {filtered.length === 0 ? (
-              <tr><td colSpan={7} className="text-center py-16 text-ink-300 italic">Sin movimientos para los filtros seleccionados</td></tr>
+              <tr><td colSpan={7}>
+                <ListEmpty hasFilters={hasFilters} onClear={clearFilters} onNew={openNew} />
+              </td></tr>
             ) : visibleRows.map((tx) => (
               <tr
                 key={tx.id}
@@ -197,7 +229,7 @@ export default function Transactions({ config }: Props) {
                 </td>
                 <td className="px-2 py-4">
                   <div className="text-sm text-paper">{tx.descripcion}</div>
-                  {tx.notas && <div className="text-[10px] text-ink-400 mt-0.5">{tx.notas}</div>}
+                  {tx.notas && <div className="text-xs text-ink-300 mt-0.5">{tx.notas}</div>}
                 </td>
                 <td className="px-2 py-4">
                   <div className="inline-flex items-center gap-2">
@@ -206,12 +238,7 @@ export default function Transactions({ config }: Props) {
                   </div>
                 </td>
                 <td className="px-2 py-4 text-right">
-                  <span className={`tabular font-mono text-sm ${tx.tipo === "ingreso" ? "text-moss-light" : "text-terra-light"}`}>
-                    {tx.tipo === "ingreso" ? "+" : "-"}{tx.moneda === "USD" ? <UsdAmount value={tx.monto} /> : formatPesos(tx.monto)}
-                  </span>
-                  {tx.moneda === "USD" && (
-                    <span className="ml-1.5 text-[9px] uppercase tracking-wider text-amber border border-amber/40 px-1 py-0.5">USD</span>
-                  )}
+                  <Monto tx={tx} />
                 </td>
                 <td className="px-2 py-4 text-center text-xs text-ink-300 tabular">
                   {tx.cuotaTotal > 1 ? `${tx.cuotaNumero}/${tx.cuotaTotal}` : "—"}
@@ -220,17 +247,17 @@ export default function Transactions({ config }: Props) {
                   <div className="inline-flex gap-1 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity">
                     <button
                       onClick={() => { setEditing(tx); setShowForm(true); }}
-                      className="p-1.5 text-ink-300 hover:text-paper transition-colors"
+                      className="p-2.5 text-ink-300 hover:text-paper transition-colors"
                       aria-label={`Editar ${tx.descripcion}`}
                     >
-                      <Edit2 className="w-3.5 h-3.5" />
+                      <Edit2 className="w-4 h-4" />
                     </button>
                     <button
-                      onClick={() => handleDelete(tx.id)}
-                      className="p-1.5 text-ink-300 hover:text-terra-light transition-colors"
+                      onClick={() => handleDelete(tx)}
+                      className="p-2.5 text-ink-300 hover:text-terra-light transition-colors"
                       aria-label={`Eliminar ${tx.descripcion}`}
                     >
-                      <Trash2 className="w-3.5 h-3.5" />
+                      <Trash2 className="w-4 h-4" />
                     </button>
                   </div>
                 </td>
@@ -242,21 +269,18 @@ export default function Transactions({ config }: Props) {
         {/* Mobile Cards */}
         <div className="md:hidden flex flex-col divide-y divide-ink-600/60">
           {filtered.length === 0 ? (
-            <div className="text-center py-12 text-ink-300 italic">Sin movimientos</div>
+            <ListEmpty hasFilters={hasFilters} onClear={clearFilters} onNew={openNew} />
           ) : visibleRows.map((tx) => (
             <div key={tx.id} className="p-4 flex flex-col gap-3">
               <div className="flex justify-between items-start">
                 <div>
                   <div className="text-sm text-paper font-medium mb-1">{tx.descripcion}</div>
-                  <div className="text-[10px] text-ink-400 tabular font-mono">Pago: {formatFecha(tx.fechaPago)}</div>
+                  <div className="text-xs text-ink-300 tabular font-mono">Pago: {formatFecha(tx.fechaPago)}</div>
                 </div>
                 <div className="text-right">
-                  <div className={`font-mono tabular text-sm ${tx.tipo === "ingreso" ? "text-moss-light" : "text-terra-light"}`}>
-                    {tx.tipo === "ingreso" ? "+" : "-"}{tx.moneda === "USD" ? <UsdAmount value={tx.monto} /> : formatPesos(tx.monto)}
-                    {tx.moneda === "USD" && <span className="ml-1 text-[9px] uppercase text-amber border border-amber/40 px-1 py-0.5">USD</span>}
-                  </div>
+                  <Monto tx={tx} />
                   {tx.cuotaTotal > 1 && (
-                    <div className="text-[9px] text-ink-400 mt-1 uppercase tracking-wider">
+                    <div className="text-xs text-ink-300 mt-1">
                       Cuota {tx.cuotaNumero}/{tx.cuotaTotal}
                     </div>
                   )}
@@ -265,19 +289,19 @@ export default function Transactions({ config }: Props) {
               <div className="flex items-center justify-between">
                 <div className="inline-flex items-center gap-1.5">
                   <div className="w-2 h-2 rounded-full" style={{ background: getCategoryColor(tx.categoria) }} />
-                  <span className="text-[10px] uppercase tracking-wider text-ink-300">{tx.categoria}</span>
+                  <span className="text-xs text-ink-300">{tx.categoria}</span>
                 </div>
                 <div className="flex gap-2 -mr-3.5">
                   <button
                     onClick={() => { setEditing(tx); setShowForm(true); }}
-                    className="text-ink-400 hover:text-paper p-3.5"
+                    className="text-ink-300 hover:text-paper p-3.5"
                     aria-label={`Editar ${tx.descripcion}`}
                   >
                     <Edit2 className="w-4 h-4" />
                   </button>
                   <button
-                    onClick={() => handleDelete(tx.id)}
-                    className="text-ink-400 hover:text-terra-light p-3.5"
+                    onClick={() => handleDelete(tx)}
+                    className="text-ink-300 hover:text-terra-light p-3.5"
                     aria-label={`Eliminar ${tx.descripcion}`}
                   >
                     <Trash2 className="w-4 h-4" />
@@ -294,41 +318,83 @@ export default function Transactions({ config }: Props) {
       {hasMore && (
         <div className="mt-4 text-center">
           <button
+            type="button"
             onClick={() => setVisibleCount(prev => prev + 50)}
-            className="text-xs text-amber border border-amber/30 px-6 py-2 hover:bg-amber/5 transition-all"
+            className={buttonClasses("secundario")}
           >
             Mostrar más ({filtered.length - visibleCount} restantes)
           </button>
         </div>
       )}
-      <div className="mt-3 text-center text-[10px] text-ink-400">
+      <div className="mt-3 text-center text-xs text-ink-300">
         Mostrando {Math.min(visibleCount, filtered.length)} de {filtered.length} movimientos
       </div>
-      <AnimatePresence>
-        {showForm && (
-          <TransactionForm
-            editing={editing}
-            config={config}
-            onClose={() => setShowForm(false)}
-            onSaved={() => { setShowForm(false); refresh(); }}
-          />
-        )}
-      </AnimatePresence>
+      <TransactionForm
+        open={showForm}
+        editing={editing}
+        config={config}
+        onClose={() => setShowForm(false)}
+        onSaved={() => { setShowForm(false); refresh(); }}
+      />
+      {confirmDialog}
     </div>
+  );
+}
+
+// ── Piezas de la lista ───────────────────────────────────────────────────────
+
+/** Monto en neutro con signo: el verde/rojo queda para el balance (estado). */
+function Monto({ tx }: { tx: Transaction }) {
+  const signo = tx.tipo === "ingreso" ? "+" : "−";
+  return (
+    <span className="tabular font-mono text-sm text-paper whitespace-nowrap">
+      <span className="sr-only">{tx.tipo === "ingreso" ? "Ingreso de " : "Gasto de "}</span>
+      <span aria-hidden="true" className="text-ink-300">{signo}</span>
+      {tx.moneda === "USD" ? <UsdAmount value={tx.monto} /> : formatPesos(tx.monto)}
+    </span>
+  );
+}
+
+function ListEmpty({ hasFilters, onClear, onNew }: { hasFilters: boolean; onClear: () => void; onNew: () => void }) {
+  return hasFilters ? (
+    <EmptyState message="Sin movimientos para los filtros elegidos" action={{ label: "Limpiar filtros", onClick: onClear }} />
+  ) : (
+    <EmptyState message="Todavía no cargaste movimientos" action={{ label: "Cargar el primero", onClick: onNew }} />
   );
 }
 
 // ── Form modal ───────────────────────────────────────────────────────────────
 
 interface FormProps {
+  open: boolean;
   editing: Transaction | null;
   config: AppConfig;
   onClose: () => void;
   onSaved: () => void;
 }
 
-function TransactionForm({ editing, config, onClose, onSaved }: FormProps) {
+type Errors = Partial<Record<string, string>>;
+
+const ORIGENES: BucketOrigen[] = ["regla", "emergencia", "auto", "mud", "vac", "tec", "largo"];
+
+function TransactionForm({ open, editing, config, onClose, onSaved }: FormProps) {
+  return (
+    <Dialog
+      open={open}
+      onClose={onClose}
+      eyebrow={editing ? "Editar" : "Nuevo"}
+      title={editing ? "Modificar movimiento" : "Nuevo movimiento"}
+      size="lg"
+    >
+      {/* key: cada apertura arranca con el estado del registro elegido */}
+      <TransactionFormBody key={editing?.id ?? "nuevo"} editing={editing} config={config} onClose={onClose} onSaved={onSaved} />
+    </Dialog>
+  );
+}
+
+function TransactionFormBody({ editing, config, onClose, onSaved }: Omit<FormProps, "open">) {
   const today = hoyLocal();
+  const formRef = useRef<HTMLFormElement>(null);
 
   const [tipo, setTipo] = useState<"ingreso" | "egreso">(editing?.tipo || "egreso");
   const [fechaConsumo, setFechaConsumo] = useState(editing?.fechaConsumo || today);
@@ -339,22 +405,18 @@ function TransactionForm({ editing, config, onClose, onSaved }: FormProps) {
   const [moneda, setMoneda] = useState<"ARS" | "USD">(editing?.moneda || "ARS");
   const [categoria, setCategoria] = useState(editing?.categoria || "Otros");
   const [subcategoria, setSubcategoria] = useState(editing?.subcategoria || "Sin categoría");
-  const [fuente, setFuente] = useState<"manual" | "tarjeta" | "recibo">(editing?.fuente || "manual");
+  const [fuente, setFuente] = useState<TransactionSource>(editing?.fuente || "manual");
   const [cuotaTotal, setCuotaTotal] = useState(editing?.cuotaTotal?.toString() || "1");
   const [cuotaNumero, setCuotaNumero] = useState(editing?.cuotaNumero?.toString() || "1");
   const [notas, setNotas] = useState(editing?.notas || "");
   const [origen, setOrigen] = useState<BucketOrigen>(editing?.origen ?? "regla");
   const [saving, setSaving] = useState(false);
+  const [errors, setErrors] = useState<Errors>({});
 
-  const ORIGENES: BucketOrigen[] = ["regla", "emergencia", "auto", "mud", "vac", "tec", "largo"];
   const subcategories = CATEGORIES.find(c => c.name === categoria)?.subcategories || ["Sin categoría"];
 
-  // Cerrar con Escape: el modal solo se cerraba clickeando afuera o en Cancelar.
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
+  /** Editar un campo limpia su error. */
+  const clear = (field: string) => setErrors(prev => (prev[field] ? { ...prev, [field]: undefined } : prev));
 
   // Auto-categorize on description change (only for new)
   useEffect(() => {
@@ -374,287 +436,250 @@ function TransactionForm({ editing, config, onClose, onSaved }: FormProps) {
     }
   }, [fechaConsumo, fuente, tipo, fechaPagoAuto, config.cardCutoffDay, config.cardDueDay]);
 
-  const handleSubmit = async () => {
-    if (!descripcion || !monto) {
-      toast.error("Completá descripción y monto");
+  /** Obligatorios y formato, antes de ir al servidor (que valida lo mismo). */
+  const validate = (): Errors => {
+    const e: Errors = {};
+    if (descripcion.trim().length < 2) e.descripcion = "Poné una descripción (mínimo 2 caracteres)";
+    const n = parseFloat(monto);
+    if (!monto) e.monto = "Poné el monto";
+    else if (!(n > 0)) e.monto = "El monto tiene que ser mayor a 0";
+    if (!fechaConsumo) e.fechaConsumo = "Indicá la fecha de consumo";
+    if (!fechaPago) e.fechaPago = "Indicá la fecha de pago";
+    if (fuente === "tarjeta") {
+      const tot = parseInt(cuotaTotal, 10), num = parseInt(cuotaNumero, 10);
+      if (!(tot >= 1)) e.cuotaTotal = "Mínimo 1 cuota";
+      if (!(num >= 1)) e.cuotaNumero = "La cuota empieza en 1";
+      else if (tot >= 1 && num > tot) e.cuotaNumero = "No puede superar el total de cuotas";
+    }
+    return e;
+  };
+
+  const handleSubmit = async (ev: React.FormEvent) => {
+    ev.preventDefault();
+    const found = validate();
+    if (Object.keys(found).length) {
+      setErrors(found);
+      focusFirstInvalid(formRef.current);
       return;
     }
     setSaving(true);
 
-    const payload = {
+    const esTarjeta = fuente === "tarjeta";
+    const payload: TransactionPayload = {
       ...(editing ? { id: editing.id, createdAt: editing.createdAt } : {}),
       tipo,
       fechaConsumo,
       fechaPago,
-      descripcion,
+      descripcion: descripcion.trim(),
       monto: parseFloat(monto),
       moneda,
       categoria,
       subcategoria,
       fuente,
-      cuotaTotal: parseInt(cuotaTotal),
-      cuotaNumero: parseInt(cuotaNumero),
+      cuotaTotal: esTarjeta ? parseInt(cuotaTotal, 10) : 1,
+      cuotaNumero: esTarjeta ? parseInt(cuotaNumero, 10) : 1,
       notas,
       origen,
     };
 
-    const method = editing ? "PUT" : "POST";
-    const r = await fetch("/api/transactions", {
-      method,
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-    const d = await r.json();
-
-    if (d.ok || d.transaction) {
-      toast.success(editing ? "Actualizada" : "Creada");
+    try {
+      if (editing) await transactionsApi.update({ ...payload, id: editing.id });
+      else await transactionsApi.create(payload);
+      toast.success(editing ? `"${payload.descripcion}" actualizado` : `"${payload.descripcion}" guardado`);
       onSaved();
-    } else {
-      toast.error("Error al guardar");
+    } catch (e) {
+      // El error del servidor marca su campo; si no tiene campo, va al aviso.
+      if (e instanceof ApiError && e.field) {
+        setErrors({ [e.field]: e.message });
+        focusFirstInvalid(formRef.current);
+      } else {
+        toast.error(errorMessage(e, "No se pudo guardar el movimiento"), { duration: 7000 });
+      }
+    } finally {
+      setSaving(false);
     }
-    setSaving(false);
   };
 
   return (
-    <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      className="fixed inset-0 bg-ink-900/80 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center sm:p-6"
-      onClick={onClose}
-    >
-      <motion.div
-        initial={{ opacity: 0, y: 40 }}
-        animate={{ opacity: 1, y: 0 }}
-        exit={{ opacity: 0, y: 40 }}
-        transition={{ duration: 0.25 }}
-        className="surface-elevated w-full sm:max-w-2xl p-5 sm:p-8 max-h-[95vh] sm:max-h-[90vh] overflow-y-auto rounded-t-2xl sm:rounded-none"
-        onClick={(e) => e.stopPropagation()}
-        role="dialog"
-        aria-modal="true"
-        aria-label={editing ? "Editar movimiento" : "Nuevo movimiento"}
-      >
-        <div className="flex items-start justify-between mb-5 sm:mb-6">
-          <div>
-            <div className="eyebrow mb-1">{editing ? "Editar" : "Nueva"}</div>
-            <h2 className="display text-2xl sm:text-3xl text-paper">
-              {editing ? "Modificar movimiento" : "Nuevo movimiento"}
-            </h2>
-          </div>
-          <button onClick={onClose} className="text-ink-300 hover:text-paper p-3 -mr-3 -mt-1" aria-label="Cerrar">
-            <X className="w-5 h-5" />
-          </button>
-        </div>
+    <form ref={formRef} onSubmit={handleSubmit} noValidate>
+      <div className="space-y-4 sm:space-y-5">
+        {/* Tipo */}
+        <Segmented
+          label="Tipo de movimiento"
+          value={tipo}
+          onChange={setTipo}
+          options={[
+            { value: "egreso", label: "↓ Gasto" },
+            { value: "ingreso", label: "↑ Ingreso" },
+          ]}
+        />
 
-        <div className="space-y-4 sm:space-y-5">
-          {/* Tipo */}
-          <div className="grid grid-cols-2 gap-3">
-            {(["egreso", "ingreso"] as const).map(t => (
-              <button
-                key={t}
-                onClick={() => setTipo(t)}
-                aria-pressed={tipo === t}
-                className={`py-3 border text-sm transition-all ${
-                  tipo === t
-                    ? t === "ingreso" ? "border-moss bg-moss/10 text-moss-light" : "border-terra bg-terra/10 text-terra-light"
-                    : "border-ink-500 text-ink-300 hover:border-ink-400"
-                }`}
-              >
-                {t === "ingreso" ? "↑ Ingreso" : "↓ Gasto"}
-              </button>
-            ))}
-          </div>
-
-          {/* Descripcion */}
-          <Field label="Descripción">
+        <Field label="Descripción" required error={errors.descripcion}>
+          {(c) => (
             <input
+              {...c}
               type="text"
               value={descripcion}
-              onChange={(e) => setDescripcion(e.target.value)}
+              onChange={(e) => { setDescripcion(e.target.value); clear("descripcion"); }}
               placeholder="Ej: Supermercado Coto"
+              maxLength={100}
               className="form-input"
-              autoFocus
+              data-autofocus
             />
-          </Field>
+          )}
+        </Field>
 
-          {/* Monto + Moneda (full width en mobile) */}
-          <Field label={`Monto (${moneda})`}>
+        {/* Monto + Moneda */}
+        <Field label={`Monto (${moneda})`} required error={errors.monto}>
+          {(c) => (
             <div className="flex">
               <input
+                {...c}
                 type="number"
                 step="0.01"
+                min="0"
                 value={monto}
-                onChange={(e) => setMonto(e.target.value)}
-                placeholder="0.00"
+                onChange={(e) => { setMonto(e.target.value); clear("monto"); }}
+                placeholder="0,00"
                 inputMode="decimal"
-                className="form-input flex-1 tabular font-mono rounded-none text-lg sm:text-base"
+                className="form-input flex-1 tabular font-mono text-lg sm:text-base"
               />
-              <div className="flex border border-l-0 border-ink-500 shrink-0">
-                {(["ARS", "USD"] as const).map(m => (
-                  <button
-                    key={m}
-                    type="button"
-                    onClick={() => setMoneda(m)}
-                    aria-pressed={moneda === m}
-                    className={`px-4 sm:px-3 py-3 text-xs font-mono transition-colors ${
-                      moneda === m ? "bg-amber text-ink-900" : "text-ink-300 hover:bg-ink-700/40"
-                    }`}
-                  >
-                    {m}
-                  </button>
-                ))}
-              </div>
+              <Segmented
+                label="Moneda"
+                value={moneda}
+                onChange={setMoneda}
+                attached
+                options={[{ value: "ARS", label: "ARS" }, { value: "USD", label: "USD" }]}
+              />
             </div>
-          </Field>
+          )}
+        </Field>
 
-          {/* Fuente (full width en mobile) */}
-          <Field label="Fuente">
-            <select value={fuente} onChange={(e) => setFuente(e.target.value as any)} className="form-input">
+        <Field label="Fuente">
+          {(c) => (
+            <select {...c} value={fuente} onChange={(e) => setFuente(e.target.value as TransactionSource)} className="form-input">
               <option value="manual">Manual / Efectivo</option>
               <option value="tarjeta">Tarjeta de crédito</option>
               <option value="recibo">Recibo de sueldo</option>
             </select>
-          </Field>
-
-          {moneda === "USD" && (
-            <p className="text-[11px] text-ink-400 -mt-2 leading-relaxed">
-              {tipo === "egreso"
-                ? "Gasto en dólares: se descuenta de tu tenencia de USD y no afecta tu saldo en pesos."
-                : "Ingreso en dólares: suma a tu tenencia de USD y no afecta tu saldo en pesos."}
-            </p>
           )}
+        </Field>
 
-          {moneda === "USD" && tipo === "egreso" && (
-            <Field label="Origen del gasto (ahorro)">
-              <select value={origen} onChange={(e) => setOrigen(e.target.value as BucketOrigen)}
-                className="form-input">
+        {moneda === "USD" && (
+          <p className="-mt-2 text-xs leading-relaxed text-ink-300">
+            {tipo === "egreso"
+              ? "Gasto en dólares: se descuenta de tu tenencia de USD y no afecta tu saldo en pesos."
+              : "Ingreso en dólares: suma a tu tenencia de USD y no afecta tu saldo en pesos."}
+          </p>
+        )}
+
+        {moneda === "USD" && tipo === "egreso" && (
+          <Field
+            label="Origen del gasto (ahorro)"
+            hint={<>De qué bucket sale este gasto. &quot;Automático&quot; usa la regla (mediano → largo → piso); o elegí un sobre puntual.</>}
+          >
+            {(c) => (
+              <select {...c} value={origen} onChange={(e) => setOrigen(e.target.value as BucketOrigen)} className="form-input">
                 {ORIGENES.map(o => <option key={o} value={o}>{ORIGEN_LABEL[o]}</option>)}
               </select>
-              <p className="text-[10px] text-ink-400 mt-1">
-                De qué bucket sale este gasto. &quot;Automático&quot; usa la regla (mediano → largo → piso);
-                o elegí un sobre puntual (ej. usar solo los de Tecnología).
-              </p>
-            </Field>
-          )}
+            )}
+          </Field>
+        )}
 
-          {/* Fechas — stacked en mobile, side by side en desktop */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <Field label="Fecha de consumo">
+        {/* Fechas */}
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <Field label="Fecha de consumo" required error={errors.fechaConsumo}>
+            {(c) => (
               <input
+                {...c}
                 type="date"
                 value={fechaConsumo}
-                onChange={(e) => setFechaConsumo(e.target.value)}
+                onChange={(e) => { setFechaConsumo(e.target.value); clear("fechaConsumo"); }}
                 className="form-input tabular"
               />
-            </Field>
-            <Field label={
-              <span className="flex items-center gap-2">
-                Fecha de pago real
-                <label className="flex items-center gap-1 text-[10px] cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={fechaPagoAuto}
-                    onChange={(e) => setFechaPagoAuto(e.target.checked)}
-                    className="accent-amber"
-                  />
-                  <span>Auto</span>
-                </label>
-              </span>
-            }>
+            )}
+          </Field>
+          <Field
+            label="Fecha de pago real"
+            required
+            error={errors.fechaPago}
+            extra={
+              <label className="flex min-h-11 cursor-pointer items-center gap-2 text-xs text-ink-200">
+                <input
+                  type="checkbox"
+                  checked={fechaPagoAuto}
+                  onChange={(e) => setFechaPagoAuto(e.target.checked)}
+                  className="h-4 w-4 accent-amber"
+                />
+                Automática
+              </label>
+            }
+          >
+            {(c) => (
               <input
+                {...c}
                 type="date"
                 value={fechaPago}
-                onChange={(e) => { setFechaPago(e.target.value); setFechaPagoAuto(false); }}
+                onChange={(e) => { setFechaPago(e.target.value); setFechaPagoAuto(false); clear("fechaPago"); }}
                 disabled={fechaPagoAuto}
-                className="form-input tabular disabled:opacity-60"
+                className="form-input tabular"
               />
-            </Field>
-          </div>
-
-          {/* Categoría — stacked en mobile */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <Field label="Categoría">
-              <select value={categoria} onChange={(e) => setCategoria(e.target.value)} className="form-input">
-                {CATEGORIES.map(c => <option key={c.name} value={c.name}>{c.name}</option>)}
-              </select>
-            </Field>
-            <Field label="Subcategoría">
-              <select value={subcategoria} onChange={(e) => setSubcategoria(e.target.value)} className="form-input">
-                {subcategories.map(s => <option key={s} value={s}>{s}</option>)}
-              </select>
-            </Field>
-          </div>
-
-          {/* Cuotas */}
-          {fuente === "tarjeta" && (
-            <div className="grid grid-cols-2 gap-4">
-              <Field label="Cuotas totales">
-                <input type="number" min={1} value={cuotaTotal}
-                  onChange={(e) => setCuotaTotal(e.target.value)}
-                  className="form-input tabular font-mono" />
-              </Field>
-              <Field label="Cuota número">
-                <input type="number" min={1} value={cuotaNumero}
-                  onChange={(e) => setCuotaNumero(e.target.value)}
-                  className="form-input tabular font-mono" />
-              </Field>
-            </div>
-          )}
-
-          {/* Notas */}
-          <Field label="Notas (opcional)">
-            <input type="text" value={notas} onChange={(e) => setNotas(e.target.value)}
-              placeholder="Detalle adicional..."
-              className="form-input" />
+            )}
           </Field>
         </div>
 
-        {/* Botones — full width en mobile */}
-        <div className="flex flex-col-reverse sm:flex-row justify-end gap-3 mt-6 sm:mt-8 pt-5 sm:pt-6 hairline-t">
-          <button onClick={onClose}
-            className="px-5 py-3 sm:py-2.5 text-sm text-ink-300 hover:text-paper transition-colors text-center">
-            Cancelar
-          </button>
-          <button
-            onClick={handleSubmit}
-            disabled={saving}
-            className="px-6 py-3 sm:py-2.5 bg-amber text-ink-900 text-sm font-medium hover:bg-amber-light disabled:opacity-50 transition-all"
-          >
-            {saving ? "Guardando..." : "Guardar"}
-          </button>
+        {/* Categoría */}
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <Field label="Categoría" error={errors.categoria}>
+            {(c) => (
+              <select {...c} value={categoria} onChange={(e) => { setCategoria(e.target.value); clear("categoria"); }} className="form-input">
+                {CATEGORIES.map(cat => <option key={cat.name} value={cat.name}>{cat.name}</option>)}
+              </select>
+            )}
+          </Field>
+          <Field label="Subcategoría" error={errors.subcategoria}>
+            {(c) => (
+              <select {...c} value={subcategoria} onChange={(e) => { setSubcategoria(e.target.value); clear("subcategoria"); }} className="form-input">
+                {subcategories.map(sc => <option key={sc} value={sc}>{sc}</option>)}
+              </select>
+            )}
+          </Field>
         </div>
-      </motion.div>
 
-      <style jsx global>{`
-        .form-input {
-          width: 100%;
-          background: rgba(13, 18, 13, 0.6);
-          border: 1px solid #3A3833;
-          color: #F4F1EA;
-          padding: 12px 14px;
-          font-size: 16px;
-          outline: none;
-          transition: border-color 0.2s;
-          -webkit-appearance: none;
-          border-radius: 0;
-        }
-        @media (min-width: 640px) {
-          .form-input {
-            padding: 10px 14px;
-            font-size: 14px;
-          }
-        }
-        .form-input:focus { border-color: #C9A24B; }
-      `}</style>
-    </motion.div>
-  );
-}
+        {/* Cuotas */}
+        {fuente === "tarjeta" && (
+          <div className="grid grid-cols-2 gap-4">
+            <Field label="Cuotas totales" error={errors.cuotaTotal}>
+              {(c) => (
+                <input {...c} type="number" min={1} value={cuotaTotal} inputMode="numeric"
+                  onChange={(e) => { setCuotaTotal(e.target.value); clear("cuotaTotal"); clear("cuotaNumero"); }}
+                  className="form-input tabular font-mono" />
+              )}
+            </Field>
+            <Field label="Cuota número" error={errors.cuotaNumero}>
+              {(c) => (
+                <input {...c} type="number" min={1} value={cuotaNumero} inputMode="numeric"
+                  onChange={(e) => { setCuotaNumero(e.target.value); clear("cuotaNumero"); }}
+                  className="form-input tabular font-mono" />
+              )}
+            </Field>
+          </div>
+        )}
 
-function Field({ label, children }: { label: React.ReactNode; children: React.ReactNode }) {
-  return (
-    <div>
-      <label className="eyebrow block mb-2">{label}</label>
-      {children}
-    </div>
+        <Field label="Notas (opcional)" error={errors.notas}>
+          {(c) => (
+            <input {...c} type="text" value={notas} maxLength={500}
+              onChange={(e) => { setNotas(e.target.value); clear("notas"); }}
+              placeholder="Detalle adicional…"
+              className="form-input" />
+          )}
+        </Field>
+      </div>
+
+      <DialogActions>
+        <Button variant="fantasma" onClick={onClose}>Cancelar</Button>
+        <Button type="submit" isLoading={saving}>{saving ? "Guardando…" : "Guardar"}</Button>
+      </DialogActions>
+    </form>
   );
 }

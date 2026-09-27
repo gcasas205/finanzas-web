@@ -7,6 +7,7 @@ import { UsdAmount } from "@/components/UsdAmount";
 import { computeAhorro, type SobreResultado } from "@/lib/ahorro-calc";
 import type { SobreKey } from "@/types";
 import LogoLoader from "@/components/LogoLoader";
+import { ErrorState, StaleDataBanner } from "@/components/ui/States";
 import { AnimatedUsdAmount } from "@/components/AnimatedNumber";
 
 const SOBRE_COLOR: Record<SobreKey, string> = {
@@ -19,13 +20,16 @@ const EMERG_COLOR = "var(--color-piso)";
 const LARGO_COLOR = "var(--color-largo)";
 
 export default function Ahorro() {
-  const { dolarOps, transactions, ahorroConfig, isLoading } = useAhorro();
+  const { dolarOps, transactions, ahorroConfig, isLoading, error, refresh } = useAhorro();
 
   const r = useMemo(
     () => (ahorroConfig ? computeAhorro(dolarOps, transactions, ahorroConfig) : null),
     [dolarOps, transactions, ahorroConfig],
   );
 
+  if (error && (!ahorroConfig || (dolarOps.length === 0 && transactions.length === 0))) {
+    return <ErrorState message={error} onRetry={refresh} className="min-h-[60vh]" />;
+  }
   if (isLoading || !r || !ahorroConfig) {
     return <LogoLoader className="min-h-[60vh]" />;
   }
@@ -36,6 +40,7 @@ export default function Ahorro() {
 
   return (
     <div className="p-4 sm:p-6 lg:p-10 max-w-[1200px]">
+      {error && <StaleDataBanner message={error} onRetry={refresh} />}
       {/* Header */}
       <header className="mb-8">
         <div className="eyebrow mb-2 flex items-center gap-2">

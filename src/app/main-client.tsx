@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import type { AppConfig } from "@/types";
 import SetupWizard from "@/components/SetupWizard";
 import LogoLoader from "@/components/LogoLoader";
+import { configApi } from "@/lib/api";
 
 interface Props {
   initialConfig: AppConfig;
@@ -13,7 +14,6 @@ interface Props {
 
 export default function MainClient({ initialConfig, envReady = false }: Props) {
   const router = useRouter();
-  const [config, setConfig] = useState(initialConfig);
   const [checking, setChecking] = useState(!envReady);
   const [setupDone, setSetupDone] = useState(envReady);
 
@@ -21,8 +21,8 @@ export default function MainClient({ initialConfig, envReady = false }: Props) {
   useEffect(() => {
     if (envReady) return; // Already ready from server prop
 
-    fetch("/api/health")
-      .then(r => r.json())
+    configApi
+      .health()
       .then(data => {
         if (data.envReady) {
           setSetupDone(true);
@@ -32,6 +32,12 @@ export default function MainClient({ initialConfig, envReady = false }: Props) {
       .catch(() => setChecking(false));
   }, [envReady]);
 
+  // Si ya está configurado, vamos al resumen. (Antes este efecto estaba después
+  // de los return condicionales: violaba las reglas de los hooks.)
+  useEffect(() => {
+    if (setupDone) router.push("/dashboard");
+  }, [setupDone, router]);
+
   if (checking) {
     return <LogoLoader className="min-h-screen" label="Verificando configuración…" />;
   }
@@ -39,20 +45,10 @@ export default function MainClient({ initialConfig, envReady = false }: Props) {
   if (!setupDone) {
     return (
       <SetupWizard
-        onComplete={async () => {
-          setSetupDone(true);
-          router.push("/dashboard");
-        }}
+        onComplete={() => setSetupDone(true)}
       />
     );
   }
 
-  // Si ya está configurado y llega aquí, redirigimos
-  useEffect(() => {
-    if (setupDone) {
-      router.push("/dashboard");
-    }
-  }, [setupDone, router]);
-
-  return null;
+  return <LogoLoader className="min-h-screen" />;
 }

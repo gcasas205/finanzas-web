@@ -1,7 +1,6 @@
 "use client";
 
-import { useState, useMemo, useEffect } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { useState, useMemo, useEffect, useRef } from "react";
 import {
   Plus, Edit2, Trash2, X, RefreshCw, TrendingUp, TrendingDown,
   DollarSign, ArrowDownRight, ArrowUpRight, ShoppingCart, Banknote,
@@ -20,17 +19,26 @@ const ORIGENES: BucketOrigen[] = ["regla", "emergencia", "auto", "mud", "vac", "
 import { useDolar, useTransactions } from "@/components/DataProvider";
 import { UsdAmount } from "@/components/UsdAmount";
 import LogoLoader from "@/components/LogoLoader";
+import { ErrorState, StaleDataBanner } from "@/components/ui/States";
 import AnimatedNumber, { AnimatedUsdAmount } from "@/components/AnimatedNumber";
+import { dolarApi, ApiError, errorMessage, type DolarOpPayload } from "@/lib/api";
+import { Dialog, DialogActions } from "@/components/ui/Dialog";
+import { useConfirm } from "@/components/ui/ConfirmDialog";
+import { Field, focusFirstInvalid } from "@/components/ui/Field";
+import { Button } from "@/components/ui/Button";
+import { Segmented } from "@/components/ui/Segmented";
+import { EmptyState } from "@/components/ui/States";
 
 const ALL = "__all__";
 
 export default function Dolares() {
-  const { dolarOps, cotizacion, isLoading, refresh, refreshCotizacion } = useDolar();
+  const { dolarOps, cotizacion, isLoading, error, refresh, refreshCotizacion } = useDolar();
   const { transactions } = useTransactions();
   const [editing, setEditing] = useState<DolarOperacion | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [refreshingCot, setRefreshingCot] = useState(false);
   const [selectedMonth, setSelectedMonth] = useState(ALL);
+  const { confirm, dialog: confirmDialog } = useConfirm();
 
   const usdTxs = useMemo(() => transactions.filter(t => t.moneda === "USD"), [transactions]);
 
@@ -124,28 +132,40 @@ export default function Dolares() {
     setTimeout(() => setRefreshingCot(false), 1200);
   };
 
-  const handleDelete = async (id: string) => {
-    if (!confirm("¿Eliminar esta operación?")) return;
-    const r = await fetch("/api/dolar", {
-      method: "DELETE",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id }),
+  const handleDelete = async (op: DolarOperacion) => {
+    const ok = await confirm({
+      title: "Eliminar operación",
+      description: (
+        <>
+          Vas a eliminar la {op.tipo} de <strong className="text-paper"><UsdAmount value={op.montoUSD} /></strong> del{" "}
+          {formatFecha(op.fecha)}. No se puede deshacer.
+        </>
+      ),
     });
-    const d = await r.json();
-    if (d.ok) { toast.success("Eliminada"); refresh(); }
-    else toast.error("Error al eliminar");
+    if (!ok) return;
+    try {
+      await dolarApi.remove(op.id);
+      toast.success("Operación eliminada");
+      refresh();
+    } catch (e) {
+      toast.error(errorMessage(e, "No se pudo eliminar la operación"), { duration: 7000 });
+    }
   };
 
   if (isLoading) return <LogoLoader className="min-h-[70vh]" />;
+  if (error && dolarOps.length === 0 && transactions.length === 0) {
+    return <ErrorState message={error} onRetry={refresh} className="min-h-[70vh]" />;
+  }
 
   return (
     <div className="p-4 sm:p-6 lg:p-10 max-w-[1400px]">
+      {error && <StaleDataBanner message={error} onRetry={refresh} />}
       {/* Header */}
       <header className="mb-8 flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
         <div>
           <div className="eyebrow mb-2">Ahorro en moneda dura</div>
           <h1 className="display text-3xl sm:text-5xl text-paper">
-            Tus <em className="italic text-amber">dólares</em>
+            Tus <em className="italic">dólares</em>
           </h1>
         </div>
         <div className="flex items-center gap-3 w-full sm:w-auto">
@@ -153,18 +173,15 @@ export default function Dolares() {
             value={selectedMonth}
             onChange={(e) => setSelectedMonth(e.target.value)}
             aria-label="Filtrar por mes"
-            className="select-native flex-1 sm:flex-none bg-ink-800 border border-ink-500 text-paper pl-3 pr-9 py-2 text-sm focus:border-amber cursor-pointer"
+            className="select-native min-h-11 flex-1 sm:flex-none bg-ink-800 border border-control text-paper pl-3 pr-9 py-2 text-sm focus:border-amber cursor-pointer"
           >
             <option value={ALL}>Todo el histórico</option>
             {months.map(m => <option key={m} value={m}>{formatMes(m)}</option>)}
           </select>
-          <button
-            onClick={() => { setEditing(null); setShowForm(true); }}
-            className="inline-flex items-center gap-2 bg-amber text-ink-900 px-5 py-2.5 text-sm font-medium hover:bg-amber-light transition-all shrink-0"
-          >
-            <Plus className="w-4 h-4" />
+          <Button onClick={() => { setEditing(null); setShowForm(true); }} className="shrink-0">
+            <Plus className="w-4 h-4" aria-hidden="true" />
             Nueva
-          </button>
+          </Button>
         </div>
       </header>
 
@@ -271,10 +288,18 @@ export default function Dolares() {
             </thead>
             <tbody>
               {filas.length === 0 ? (
-                <tr><td colSpan={7} className="text-center py-16 text-ink-300 italic">
-                  {selectedMonth === ALL
-                    ? "Todavía no registraste operaciones ni gastos en dólares"
-                    : "Sin movimientos en dólares para este mes"}
+                <tr><td colSpan={7}>
+                  {selectedMonth === ALL ? (
+                    <EmptyState
+                      message="Todavía no registraste operaciones ni gastos en dólares"
+                      action={{ label: "Registrar una compra", onClick: () => { setEditing(null); setShowForm(true); } }}
+                    />
+                  ) : (
+                    <EmptyState
+                      message="Sin movimientos en dólares para este mes"
+                      action={{ label: "Ver todo el histórico", onClick: () => setSelectedMonth(ALL) }}
+                    />
+                  )}
                 </td></tr>
               ) : filas.map((f) => (
                 <tr key={f.id} className="hairline-b last:border-0 hover:bg-ink-700/20 transition-colors group">
@@ -305,7 +330,7 @@ export default function Dolares() {
                           aria-label="Editar operación">
                           <Edit2 className="w-4 h-4 sm:w-3.5 sm:h-3.5" />
                         </button>
-                        <button onClick={() => handleDelete(f.id)}
+                        <button onClick={() => handleDelete(f.raw as DolarOperacion)}
                           className="p-3.5 sm:p-1.5 text-ink-300 hover:text-terra-light transition-colors"
                           aria-label="Eliminar operación">
                           <Trash2 className="w-4 h-4 sm:w-3.5 sm:h-3.5" />
@@ -327,16 +352,14 @@ export default function Dolares() {
         Movimientos (eligiendo USD) y aparecen listados acá porque afectan tu tenencia.
       </p>
 
-      <AnimatePresence>
-        {showForm && (
-          <DolarForm
-            editing={editing}
-            cotizacion={cotizacion}
-            onClose={() => setShowForm(false)}
-            onSaved={() => { setShowForm(false); refresh(); }}
-          />
-        )}
-      </AnimatePresence>
+      <DolarForm
+        open={showForm}
+        editing={editing}
+        cotizacion={cotizacion}
+        onClose={() => setShowForm(false)}
+        onSaved={() => { setShowForm(false); refresh(); }}
+      />
+      {confirmDialog}
     </div>
   );
 }
@@ -469,13 +492,35 @@ function UsdTooltip({ active, payload, label }: any) {
 
 // ── Formulario (compra / venta) ───────────────────────────────────────────────
 
-function DolarForm({ editing, cotizacion, onClose, onSaved }: {
+type Errors = Partial<Record<string, string>>;
+
+function DolarForm({ open, editing, cotizacion, onClose, onSaved }: {
+  open: boolean;
+  editing: DolarOperacion | null;
+  cotizacion: Cotizacion | null;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  return (
+    <Dialog
+      open={open}
+      onClose={onClose}
+      eyebrow={editing ? "Editar" : "Nueva"}
+      title={editing ? "Modificar operación" : "Comprar / vender USD"}
+    >
+      <DolarFormBody key={editing?.id ?? "nueva"} editing={editing} cotizacion={cotizacion} onClose={onClose} onSaved={onSaved} />
+    </Dialog>
+  );
+}
+
+function DolarFormBody({ editing, cotizacion, onClose, onSaved }: {
   editing: DolarOperacion | null;
   cotizacion: Cotizacion | null;
   onClose: () => void;
   onSaved: () => void;
 }) {
   const today = hoyLocal();
+  const formRef = useRef<HTMLFormElement>(null);
   const [tipo, setTipo] = useState<"compra" | "venta">(editing?.tipo || "compra");
   const [fecha, setFecha] = useState(editing?.fecha || today);
   const [montoUSD, setMontoUSD] = useState(editing?.montoUSD?.toString() || "");
@@ -486,6 +531,9 @@ function DolarForm({ editing, cotizacion, onClose, onSaved }: {
   const [asigLargo, setAsigLargo] = useState(editing?.asigLargo != null ? String(editing.asigLargo) : "");
   const [origen, setOrigen] = useState<BucketOrigen>(editing?.origen ?? "regla");
   const [saving, setSaving] = useState(false);
+  const [errors, setErrors] = useState<Errors>({});
+
+  const clear = (field: string) => setErrors(prev => (prev[field] ? { ...prev, [field]: undefined } : prev));
 
   const cotDisponible = cotizacion && !cotizacion.fallback &&
     (cotizacion.compra > 0 || cotizacion.venta > 0);
@@ -500,205 +548,170 @@ function DolarForm({ editing, cotizacion, onClose, onSaved }: {
   const usd = parseFloat(montoUSD) || 0;
   const precio = parseFloat(precioARS) || 0;
   const totalARS = usd * precio;
+  const asignado = (parseFloat(asigMediano) || 0) + (parseFloat(asigLargo) || 0);
+  const sinAsignar = Math.round((usd - asignado) * 100) / 100;
 
-  // Cerrar con Escape: el modal solo se cerraba clickeando afuera o en Cancelar.
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
+  const validate = (): Errors => {
+    const e: Errors = {};
+    if (!montoUSD) e.montoUSD = "Poné el monto en USD";
+    else if (!(usd > 0)) e.montoUSD = "El monto tiene que ser mayor a 0";
+    if (!precioARS) e.precioARS = "Poné el precio del dólar";
+    else if (!(precio > 0)) e.precioARS = "El precio tiene que ser mayor a 0";
+    if (!fecha) e.fecha = "Indicá la fecha de la operación";
+    else if (fecha > today) e.fecha = "La fecha no puede ser futura";
+    if (tipo === "compra" && usd > 0 && sinAsignar < -0.005) {
+      e.asigMediano = `Asignaste US$ ${Math.abs(sinAsignar).toLocaleString("es-AR")} de más respecto del monto comprado`;
+    }
+    return e;
+  };
 
-  const handleSubmit = async () => {
-    if (!montoUSD || !precioARS || !fecha) {
-      toast.error("Completá fecha, monto en USD y precio");
+  const handleSubmit = async (ev: React.FormEvent) => {
+    ev.preventDefault();
+    const found = validate();
+    if (Object.keys(found).length) {
+      setErrors(found);
+      focusFirstInvalid(formRef.current);
       return;
     }
     setSaving(true);
-    const payload = {
+    const payload: DolarOpPayload = {
       ...(editing ? { id: editing.id, createdAt: editing.createdAt } : {}),
       fecha, tipo, montoUSD: usd, precioARS: precio, notas,
       ...(tipo === "compra"
         ? { asigMediano: parseFloat(asigMediano) || 0, asigLargo: parseFloat(asigLargo) || 0 }
         : { origen }),
     };
-    const method = editing ? "PUT" : "POST";
-    const r = await fetch("/api/dolar", {
-      method, headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-    const d = await r.json();
-    if (d.ok || d.operacion) { toast.success(editing ? "Actualizada" : "Registrada"); onSaved(); }
-    else toast.error(d.error || "Error al guardar");
-    setSaving(false);
+    try {
+      if (editing) await dolarApi.update({ ...payload, id: editing.id });
+      else await dolarApi.create(payload);
+      toast.success(editing ? "Operación actualizada" : tipo === "compra" ? "Compra registrada" : "Venta registrada");
+      onSaved();
+    } catch (e) {
+      if (e instanceof ApiError && e.field) {
+        setErrors({ [e.field]: e.message });
+        focusFirstInvalid(formRef.current);
+      } else {
+        toast.error(errorMessage(e, "No se pudo guardar la operación"), { duration: 7000 });
+      }
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
-    <motion.div
-      initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-      className="fixed inset-0 bg-ink-900/80 backdrop-blur-sm z-50 flex items-center justify-center p-6"
-      onClick={onClose}
-    >
-      <motion.div
-        initial={{ opacity: 0, scale: 0.96, y: 20 }}
-        animate={{ opacity: 1, scale: 1, y: 0 }}
-        exit={{ opacity: 0, scale: 0.96, y: 20 }}
-        transition={{ duration: 0.25 }}
-        className="surface-elevated w-full max-w-xl p-8 max-h-[90vh] overflow-y-auto"
-        onClick={(e) => e.stopPropagation()}
-        role="dialog"
-        aria-modal="true"
-        aria-label={editing ? "Modificar operación" : "Comprar o vender USD"}
-      >
-        <div className="flex items-start justify-between mb-6">
-          <div>
-            <div className="eyebrow mb-1">{editing ? "Editar" : "Nueva"}</div>
-            <h2 className="display text-3xl text-paper">
-              {editing ? "Modificar operación" : "Comprar / Vender USD"}
-            </h2>
-          </div>
-          <button onClick={onClose} className="text-ink-300 hover:text-paper p-3 -m-1" aria-label="Cerrar"><X className="w-5 h-5" /></button>
+    <form ref={formRef} onSubmit={handleSubmit} noValidate>
+      <div className="space-y-5">
+        <Segmented
+          label="Tipo de operación"
+          value={tipo}
+          onChange={(t) => { setTipo(t); setPrecioAuto(true); }}
+          options={[
+            { value: "compra", label: "↓ Compro USD" },
+            { value: "venta", label: "↑ Vendo USD" },
+          ]}
+        />
+
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <Field label="Monto (USD)" required error={errors.montoUSD}>
+            {(c) => (
+              <input {...c} type="number" step="0.01" min="0" inputMode="decimal" value={montoUSD}
+                onChange={(e) => { setMontoUSD(e.target.value); clear("montoUSD"); clear("asigMediano"); }}
+                placeholder="0,00" className="form-input tabular font-mono" data-autofocus />
+            )}
+          </Field>
+          <Field
+            label="Precio (ARS/USD)"
+            required
+            error={errors.precioARS}
+            extra={cotDisponible ? (
+              <label className="flex min-h-11 cursor-pointer items-center gap-2 text-xs text-ink-200">
+                <input type="checkbox" checked={precioAuto}
+                  onChange={(e) => setPrecioAuto(e.target.checked)} className="h-4 w-4 accent-amber" />
+                Cotización del día
+              </label>
+            ) : undefined}
+          >
+            {(c) => (
+              <input {...c} type="number" step="0.01" min="0" inputMode="decimal" value={precioARS}
+                onChange={(e) => { setPrecioARS(e.target.value); setPrecioAuto(false); clear("precioARS"); }}
+                placeholder="0,00" className="form-input tabular font-mono" />
+            )}
+          </Field>
         </div>
 
-        <div className="space-y-5">
-          <div className="grid grid-cols-2 gap-3">
-            {(["compra", "venta"] as const).map(t => (
-              <button key={t} onClick={() => { setTipo(t); setPrecioAuto(true); }}
-                aria-pressed={tipo === t}
-                className={`py-3 border text-sm transition-all ${
-                  tipo === t
-                    ? t === "compra" ? "border-moss bg-moss/10 text-moss-light" : "border-terra bg-terra/10 text-terra-light"
-                    : "border-ink-500 text-ink-300 hover:border-ink-400"
-                }`}>
-                {t === "compra" ? "↓ Compro USD" : "↑ Vendo USD"}
-              </button>
-            ))}
-          </div>
+        <Field
+          label="Fecha de la operación"
+          required
+          error={errors.fecha}
+          hint="Podés cargar operaciones de meses anteriores con el precio de ese momento."
+        >
+          {(c) => (
+            <input {...c} type="date" value={fecha} max={today}
+              onChange={(e) => { setFecha(e.target.value); clear("fecha"); }} className="form-input tabular" />
+          )}
+        </Field>
 
-          <div className="grid grid-cols-2 gap-4">
-            <Field label="Monto (USD)">
-              <input type="number" step="0.01" value={montoUSD}
-                onChange={(e) => setMontoUSD(e.target.value)}
-                placeholder="0.00" className="form-input tabular font-mono" autoFocus />
-            </Field>
-            <Field label={
-              <span className="flex items-center gap-2">
-                Precio (ARS/USD)
-                {cotDisponible && (
-                  <label className="flex items-center gap-1 text-[10px] cursor-pointer">
-                    <input type="checkbox" checked={precioAuto}
-                      onChange={(e) => setPrecioAuto(e.target.checked)} className="accent-amber" />
-                    <span>Auto</span>
-                  </label>
-                )}
-              </span>
-            }>
-              <input type="number" step="0.01" value={precioARS}
-                onChange={(e) => { setPrecioARS(e.target.value); setPrecioAuto(false); }}
-                placeholder="0.00" className="form-input tabular font-mono" />
-            </Field>
-          </div>
+        <div className="surface p-4 flex items-center justify-between">
+          <span className="eyebrow">{tipo === "compra" ? "Pagás en pesos" : "Recibís en pesos"}</span>
+          <span className="display text-2xl tabular text-paper">{formatPesos(totalARS)}</span>
+        </div>
 
-          <Field label="Fecha de la operación">
-            <input type="date" value={fecha} max={today}
-              onChange={(e) => setFecha(e.target.value)} className="form-input tabular" />
-            <p className="text-[10px] text-ink-400 mt-1">
-              Podés cargar operaciones de meses anteriores con el precio de ese momento.
+        {/* Ahorro: reparto (compra) u origen del retiro (venta) */}
+        {tipo === "compra" ? (
+          <fieldset className="surface p-4 space-y-3">
+            <legend className="eyebrow px-1">Destino del ahorro</legend>
+            <p className="text-xs text-ink-300 leading-relaxed">
+              El piso de emergencia se completa primero de forma automática. Repartí el resto de esta compra
+              entre mediano y largo plazo.
             </p>
-          </Field>
-
-          <div className="surface p-4 flex items-center justify-between">
-            <span className="eyebrow">Total en pesos</span>
-            <span className={`display text-2xl tabular ${tipo === "compra" ? "text-terra-light" : "text-moss-light"}`}>
-              {tipo === "compra" ? "-" : "+"}{formatPesos(totalARS)}
-            </span>
-          </div>
-
-          {/* Ahorro: reparto (compra) u origen del retiro (venta) */}
-          {tipo === "compra" ? (
-            <div className="surface p-4 space-y-3">
-              <div className="eyebrow text-amber">Destino del ahorro</div>
-              <p className="text-[11px] text-ink-400 leading-relaxed">
-                El piso de emergencia se completa primero de forma automática. Repartí el resto de esta compra
-                entre mediano y largo plazo.
-              </p>
-              <div className="grid grid-cols-2 gap-4">
-                <Field label="→ Mediano (USD)">
-                  <input type="number" step="0.01" value={asigMediano}
-                    onChange={(e) => setAsigMediano(e.target.value)}
-                    placeholder="0.00" className="form-input tabular font-mono" />
-                </Field>
-                <Field label="→ Largo · S&P (USD)">
-                  <input type="number" step="0.01" value={asigLargo}
-                    onChange={(e) => setAsigLargo(e.target.value)}
-                    placeholder="0.00" className="form-input tabular font-mono" />
-                </Field>
-              </div>
-              {usd > 0 && (
-                (() => {
-                  const rep = (parseFloat(asigMediano) || 0) + (parseFloat(asigLargo) || 0);
-                  const dif = Math.round((usd - rep) * 100) / 100;
-                  if (Math.abs(dif) < 0.01) return null;
-                  return (
-                    <p className="text-[11px] text-ink-300">
-                      {dif > 0
-                        ? `Sin asignar: US$ ${dif.toLocaleString("es-AR")} — irá al piso si falta, o a mediano.`
-                        : `Asignaste US$ ${Math.abs(dif).toLocaleString("es-AR")} de más respecto del monto comprado.`}
-                    </p>
-                  );
-                })()
-              )}
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <Field label="→ Mediano (USD)" error={errors.asigMediano}>
+                {(c) => (
+                  <input {...c} type="number" step="0.01" min="0" inputMode="decimal" value={asigMediano}
+                    onChange={(e) => { setAsigMediano(e.target.value); clear("asigMediano"); }}
+                    placeholder="0,00" className="form-input tabular font-mono" />
+                )}
+              </Field>
+              <Field label="→ Largo · S&P (USD)" error={errors.asigLargo}>
+                {(c) => (
+                  <input {...c} type="number" step="0.01" min="0" inputMode="decimal" value={asigLargo}
+                    onChange={(e) => { setAsigLargo(e.target.value); clear("asigLargo"); clear("asigMediano"); }}
+                    placeholder="0,00" className="form-input tabular font-mono" />
+                )}
+              </Field>
             </div>
-          ) : (
-            <Field label="Origen del retiro">
-              <select value={origen} onChange={(e) => setOrigen(e.target.value as BucketOrigen)}
-                className="form-input">
+            {usd > 0 && sinAsignar > 0.005 && (
+              <p className="text-xs text-ink-300">
+                Sin asignar: US$ {sinAsignar.toLocaleString("es-AR")}. Irá al piso si falta, o a mediano.
+              </p>
+            )}
+          </fieldset>
+        ) : (
+          <Field
+            label="Origen del retiro"
+            hint={<>&quot;Automático&quot; descuenta por la regla (mediano → largo → piso). O elegí un sobre puntual.</>}
+          >
+            {(c) => (
+              <select {...c} value={origen} onChange={(e) => setOrigen(e.target.value as BucketOrigen)} className="form-input">
                 {ORIGENES.map(o => <option key={o} value={o}>{ORIGEN_LABEL[o]}</option>)}
               </select>
-              <p className="text-[10px] text-ink-400 mt-1">
-                &quot;Automático&quot; descuenta por la regla (mediano → largo → piso). O elegí un sobre puntual.
-              </p>
-            </Field>
-          )}
-
-          <Field label="Notas (opcional)">
-            <input type="text" value={notas} onChange={(e) => setNotas(e.target.value)}
-              placeholder="Ej: compra mensual en el banco" className="form-input" />
+            )}
           </Field>
-        </div>
+        )}
 
-        <div className="flex justify-end gap-3 mt-8 pt-6 hairline-t">
-          <button onClick={onClose} className="px-5 py-2.5 text-sm text-ink-300 hover:text-paper transition-colors">
-            Cancelar
-          </button>
-          <button onClick={handleSubmit} disabled={saving}
-            className="px-6 py-2.5 bg-amber text-ink-900 text-sm font-medium hover:bg-amber-light disabled:opacity-50 transition-all">
-            {saving ? "Guardando..." : "Guardar"}
-          </button>
-        </div>
-      </motion.div>
+        <Field label="Notas (opcional)" error={errors.notas}>
+          {(c) => (
+            <input {...c} type="text" value={notas} maxLength={500}
+              onChange={(e) => { setNotas(e.target.value); clear("notas"); }}
+              placeholder="Ej: compra mensual en el banco" className="form-input" />
+          )}
+        </Field>
+      </div>
 
-      <style jsx global>{`
-        .form-input {
-          width: 100%;
-          background: rgba(13, 18, 13, 0.6);
-          border: 1px solid #3A3833;
-          color: #F4F1EA;
-          padding: 10px 14px;
-          font-size: 14px;
-          outline: none;
-          transition: border-color 0.2s;
-        }
-        .form-input:focus { border-color: #C9A24B; }
-      `}</style>
-    </motion.div>
-  );
-}
-
-function Field({ label, children }: { label: React.ReactNode; children: React.ReactNode }) {
-  return (
-    <div>
-      <label className="eyebrow block mb-2">{label}</label>
-      {children}
-    </div>
+      <DialogActions>
+        <Button variant="fantasma" onClick={onClose}>Cancelar</Button>
+        <Button type="submit" isLoading={saving}>{saving ? "Guardando…" : "Guardar"}</Button>
+      </DialogActions>
+    </form>
   );
 }

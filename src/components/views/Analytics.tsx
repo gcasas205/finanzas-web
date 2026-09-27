@@ -3,6 +3,7 @@
 import { useState, useMemo } from "react";
 import { motion } from "framer-motion";
 import LogoLoader from "@/components/LogoLoader";
+import { ErrorState, StaleDataBanner } from "@/components/ui/States";
 import {
   BarChart, Bar, LineChart, Line, AreaChart, Area,
   XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Cell,
@@ -18,7 +19,7 @@ import { impactoPesosDolar } from "@/lib/dolar-calc";
 interface Props { config: AppConfig; }
 
 export default function Analytics({ config }: Props) {
-  const { transactions, dolarOps, isLoading: loading } = useTransactions();
+  const { transactions, dolarOps, isLoading: loading, error, refresh } = useTransactions();
   const [tab, setTab] = useState<"tendencias" | "categorias" | "mercadopago" | "comparativa">("tendencias");
   const [selectedMonth, setSelectedMonth] = useState(() => {
     const d = new Date();
@@ -74,9 +75,13 @@ export default function Analytics({ config }: Props) {
   ] as const;
 
   if (loading) return <LogoLoader className="min-h-[60vh]" />;
+  if (error && transactions.length === 0 && dolarOps.length === 0) {
+    return <ErrorState message={error} onRetry={refresh} className="min-h-[60vh]" />;
+  }
 
   return (
     <div className="p-4 sm:p-6 lg:p-10 max-w-[1400px]">
+      {error && <StaleDataBanner message={error} onRetry={refresh} />}
       <header className="mb-10 flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
         <div>
           <div className="eyebrow mb-2">Análisis</div>

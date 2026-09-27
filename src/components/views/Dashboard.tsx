@@ -18,12 +18,13 @@ import { getCategoryColor } from "@/lib/categories";
 import { useTransactions } from "@/components/DataProvider";
 import { resumenDolar, impactoPesosDolar } from "@/lib/dolar-calc";
 import LogoLoader from "@/components/LogoLoader";
+import { ErrorState, StaleDataBanner } from "@/components/ui/States";
 import AnimatedNumber, { AnimatedUsdAmount } from "@/components/AnimatedNumber";
 
 interface Props { config: AppConfig; }
 
 export default function Dashboard({ config }: Props) {
-  const { transactions, dolarOps, cotizacion, isLoading: loading } = useTransactions();
+  const { transactions, dolarOps, cotizacion, isLoading: loading, error, refresh } = useTransactions();
   const [selectedMonth, setSelectedMonth] = useState(() => {
     const d = new Date();
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
@@ -132,9 +133,13 @@ export default function Dashboard({ config }: Props) {
   }, [transactions]);
 
   if (loading) return <LogoLoader className="min-h-[70vh]" />;
+  if (error && transactions.length === 0 && dolarOps.length === 0) {
+    return <ErrorState message={error} onRetry={refresh} className="min-h-[70vh]" />;
+  }
 
   return (
     <div className="p-4 sm:p-6 lg:p-10 max-w-[1400px]">
+      {error && <StaleDataBanner message={error} onRetry={refresh} />}
       {/* Header */}
       <header className="mb-6 lg:mb-12 flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
         <div>

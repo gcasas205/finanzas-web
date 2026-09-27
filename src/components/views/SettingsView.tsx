@@ -1,69 +1,87 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { motion } from "framer-motion";
-import { Check, Loader2, ExternalLink, AlertCircle } from "lucide-react";
+import { useRef, useState } from "react";
+import { Check, ExternalLink, AlertCircle } from "lucide-react";
 import { toast } from "sonner";
 import type { AppConfig } from "@/types";
 import { useRouter } from "next/navigation";
 import { useRefreshConfig } from "@/components/ConfigProvider";
+import { configApi, ApiError, errorMessage } from "@/lib/api";
+import { Field, focusFirstInvalid } from "@/components/ui/Field";
+import { Button } from "@/components/ui/Button";
 
 interface Props {
   config: AppConfig;
 }
 
+type Errors = Partial<Record<keyof AppConfig, string>>;
+
 export default function SettingsView({ config }: Props) {
   const router = useRouter();
   const refreshConfig = useRefreshConfig();
+  const formRef = useRef<HTMLFormElement>(null);
   const [form, setForm] = useState<AppConfig>({ ...config });
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
   const [testOk, setTestOk] = useState<boolean | null>(null);
+  const [errors, setErrors] = useState<Errors>({});
 
-  const update = (key: keyof AppConfig, value: any) => {
+  const update = <K extends keyof AppConfig>(key: K, value: AppConfig[K]) => {
     setForm(prev => ({ ...prev, [key]: value }));
+    setErrors(prev => (prev[key] ? { ...prev, [key]: undefined } : prev));
   };
 
-  const handleSave = async () => {
-    setSaving(true);
-    try {
-      const r = await fetch("/api/config", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form),
-      });
-      const data = await r.json();
-      if (!r.ok) {
-        // Antes esto no se chequeaba: aunque la hoja Config fallara, se mostraba
-        // "guardado" igual y el cambio se perdía sin que se notara.
-        toast.error(data.error || "Error al guardar");
-        return;
-      }
-      toast.success("Configuración guardada");
-      refreshConfig();  // la hoja Config ya persistió; refrescamos la config en vivo
-      router.refresh();
-    } catch {
-      toast.error("Error al guardar");
-    } finally {
-      setSaving(false);
+  const validate = (): Errors => {
+    const e: Errors = {};
+    const dia = (n: number) => Number.isInteger(n) && n >= 1 && n <= 31;
+    if (!dia(form.cardCutoffDay)) e.cardCutoffDay = "El día de cierre va de 1 a 31";
+    if (!dia(form.cardDueDay)) e.cardDueDay = "El día de vencimiento va de 1 a 31";
+    if (!(form.mpTna >= 0)) e.mpTna = "La TNA no puede ser negativa";
+    return e;
+  };
+
+  /** Guarda y devuelve el estado de conexión, o null si falló. */
+  const save = async () => {
+    const found = validate();
+    if (Object.keys(found).length) {
+      setErrors(found);
+      focusFirstInvalid(formRef.current);
+      return null;
     }
+    try {
+      return await configApi.save(form);
+    } catch (e) {
+      if (e instanceof ApiError && e.field) {
+        setErrors({ [e.field]: e.message });
+        focusFirstInvalid(formRef.current);
+      } else {
+        toast.error(errorMessage(e, "No se pudieron guardar los ajustes"), { duration: 7000 });
+      }
+      return null;
+    }
+  };
+
+  const handleSave = async (ev: React.FormEvent) => {
+    ev.preventDefault();
+    setSaving(true);
+    const res = await save();
+    setSaving(false);
+    if (!res) return;
+    toast.success("Ajustes guardados");
+    refreshConfig(); // la hoja Config ya persistió; refrescamos la config en vivo
+    router.refresh();
   };
 
   const handleTest = async () => {
     setTesting(true);
     setTestOk(null);
     // Guardar primero para que la prueba use los nuevos datos
-    await fetch("/api/config", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(form),
-    });
-    const r = await fetch("/api/config");
-    const data = await r.json();
-    setTestOk(data.connection?.ok ?? false);
+    const res = await save();
     setTesting(false);
-    if (data.connection?.ok) toast.success("Conexión OK");
-    else toast.error(data.connection?.error || "Error de conexión");
+    if (!res) return;
+    setTestOk(res.connection.ok);
+    if (res.connection.ok) toast.success("Conexión OK");
+    else toast.error(res.connection.error || "No se pudo conectar", { duration: 7000 });
   };
 
   return (
@@ -71,36 +89,43 @@ export default function SettingsView({ config }: Props) {
       <header className="mb-10">
         <div className="eyebrow mb-2">Ajustes</div>
         <h1 className="display text-3xl sm:text-5xl text-paper">
-          Tu <em className="italic text-amber">configuración</em>
+          Tu <em className="italic">configuración</em>
         </h1>
       </header>
 
-      <div className="space-y-8">
-        {/* Profile */}
+      <form ref={formRef} onSubmit={handleSave} noValidate className="space-y-8">
         <Section title="Perfil" eyebrow="Identidad">
-          <Field label="Nombre">
-            <input type="text" value={form.nombre} onChange={e => update("nombre", e.target.value)}
-              className="form-input" />
+          <Field label="Nombre" error={errors.nombre}>
+            {(c) => (
+              <input {...c} type="text" value={form.nombre} maxLength={40}
+                onChange={e => update("nombre", e.target.value)} className="form-input" />
+            )}
           </Field>
         </Section>
 
-        {/* Google Sheets */}
         <Section title="Google Sheets" eyebrow="Base de datos">
-          <Field label="Google Sheet ID">
-            <input type="text" value={form.googleSheetId} onChange={e => update("googleSheetId", e.target.value)}
-              placeholder="1BxiMVs0XRA5nFMdKvBdBZjg..."
-              className="form-input font-mono text-xs" />
-            <p className="text-[10px] text-ink-400 mt-1">
-              URL: docs.google.com/spreadsheets/d/<span className="text-amber">[este ID]</span>/edit
-            </p>
+          <Field
+            label="Google Sheet ID"
+            error={errors.googleSheetId}
+            hint={<>URL: docs.google.com/spreadsheets/d/<span className="text-paper">[este ID]</span>/edit</>}
+          >
+            {(c) => (
+              <input {...c} type="text" value={form.googleSheetId}
+                onChange={e => update("googleSheetId", e.target.value)}
+                placeholder="1BxiMVs0XRA5nFMdKvBdBZjg…"
+                className="form-input font-mono" />
+            )}
           </Field>
-          <Field label="Ruta al .json de credenciales">
-            <input type="text" value={form.googleCredsPath} onChange={e => update("googleCredsPath", e.target.value)}
-              placeholder="C:\Users\...\credenciales.json"
-              className="form-input font-mono text-xs" />
+          <Field label="Ruta al .json de credenciales" error={errors.googleCredsPath}>
+            {(c) => (
+              <input {...c} type="text" value={form.googleCredsPath}
+                onChange={e => update("googleCredsPath", e.target.value)}
+                placeholder="C:\Users\...\credenciales.json"
+                className="form-input font-mono" />
+            )}
           </Field>
-          <div className="flex items-start gap-2 text-[10px] text-ink-300 leading-relaxed border-l border-ink-500 pl-3">
-            <AlertCircle className="w-3 h-3 text-amber mt-0.5 shrink-0" strokeWidth={1.75} />
+          <div className="flex items-start gap-2 text-xs text-ink-300 leading-relaxed border-l border-control pl-3">
+            <AlertCircle className="w-4 h-4 text-ink-300 mt-0.5 shrink-0" strokeWidth={1.75} aria-hidden="true" />
             <span>
               El <span className="text-ink-200">Sheet ID</span> y las
               <span className="text-ink-200"> credenciales</span> son datos de arranque:
@@ -109,93 +134,70 @@ export default function SettingsView({ config }: Props) {
               —nombre, TNA y los días de tarjeta— sí se guardan en la hoja Config e impactan al instante.
             </span>
           </div>
-          <div className="flex items-center gap-3 mt-2">
-            <button onClick={handleTest} disabled={testing} aria-busy={testing}
-              className="inline-flex items-center gap-2 text-xs text-amber border border-amber/40 px-4 py-2 hover:bg-amber/5 transition-all disabled:opacity-50">
-              {testing ? <Loader2 className="w-3 h-3 animate-spin" /> : null}
+          <div className="flex items-center gap-3 mt-2" aria-live="polite">
+            <Button variant="secundario" onClick={handleTest} isLoading={testing}>
               Probar conexión
-            </button>
-            {testOk === true && <span className="text-xs text-moss-light flex items-center gap-1"><Check className="w-3 h-3" /> OK</span>}
-            {testOk === false && <span className="text-xs text-terra-light flex items-center gap-1"><AlertCircle className="w-3 h-3" /> Error</span>}
+            </Button>
+            {testOk === true && <span className="text-sm text-moss-light flex items-center gap-1"><Check className="w-4 h-4" aria-hidden="true" /> Conectado</span>}
+            {testOk === false && <span className="text-sm text-terra-light flex items-center gap-1"><AlertCircle className="w-4 h-4" aria-hidden="true" /> Sin conexión</span>}
           </div>
         </Section>
 
-        {/* Financial cycles */}
         <Section title="Ciclos financieros" eyebrow="Tarjeta y sueldo">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <Field label="Día cierre tarjeta">
-              <input type="number" min={1} max={31} value={form.cardCutoffDay}
-                onChange={e => update("cardCutoffDay", parseInt(e.target.value) || 1)}
-                className="form-input font-mono" />
-              <p className="text-[10px] text-ink-400 mt-1">Día del mes en que cierra el resumen</p>
+            <Field label="Día cierre tarjeta" error={errors.cardCutoffDay} hint="Día del mes en que cierra el resumen">
+              {(c) => (
+                <input {...c} type="number" min={1} max={31} inputMode="numeric" value={Number.isFinite(form.cardCutoffDay) ? form.cardCutoffDay : ""}
+                  onChange={e => update("cardCutoffDay", parseInt(e.target.value, 10))}
+                  className="form-input font-mono" />
+              )}
             </Field>
-            <Field label="Día vencimiento pago">
-              <input type="number" min={1} max={31} value={form.cardDueDay}
-                onChange={e => update("cardDueDay", parseInt(e.target.value) || 1)}
-                className="form-input font-mono" />
-              <p className="text-[10px] text-ink-400 mt-1">Día en que vence el pago del resumen</p>
+            <Field label="Día vencimiento pago" error={errors.cardDueDay} hint="Día en que vence el pago del resumen">
+              {(c) => (
+                <input {...c} type="number" min={1} max={31} inputMode="numeric" value={Number.isFinite(form.cardDueDay) ? form.cardDueDay : ""}
+                  onChange={e => update("cardDueDay", parseInt(e.target.value, 10))}
+                  className="form-input font-mono" />
+              )}
             </Field>
           </div>
         </Section>
 
-        {/* Mercado Pago */}
         <Section title="Mercado Pago" eyebrow="Inversión">
-          <Field label="TNA (%)">
-            <input type="number" step={0.1} value={form.mpTna}
-              onChange={e => update("mpTna", parseFloat(e.target.value) || 0)}
-              className="form-input font-mono" />
-            <p className="text-[10px] text-ink-400 mt-1">
-              Tasa actual: ~24-27%. Consultá en la app de Mercado Pago → Dinero disponible → Rendimiento.
-            </p>
+          <Field
+            label="TNA (%)"
+            error={errors.mpTna}
+            hint="Consultá la tasa en la app de Mercado Pago → Dinero disponible → Rendimiento."
+          >
+            {(c) => (
+              <input {...c} type="number" step={0.1} min={0} inputMode="decimal" value={Number.isFinite(form.mpTna) ? form.mpTna : ""}
+                onChange={e => update("mpTna", parseFloat(e.target.value))}
+                className="form-input font-mono" />
+            )}
           </Field>
-          <a href="https://www.mercadopago.com.ar/" target="_blank" rel="noopener"
-            className="inline-flex items-center gap-2 text-xs text-amber hover:text-amber-light link-underline mt-1">
-            Abrir Mercado Pago <ExternalLink className="w-3 h-3" />
+          <a href="https://www.mercadopago.com.ar/" target="_blank" rel="noopener noreferrer"
+            className="inline-flex min-h-11 items-center gap-2 text-sm text-ink-200 hover:text-paper link-underline">
+            Abrir Mercado Pago <ExternalLink className="w-4 h-4" aria-hidden="true" />
+            <span className="sr-only">(se abre en otra pestaña)</span>
           </a>
         </Section>
 
-        {/* Save */}
         <div className="pt-6 hairline-t flex justify-end">
-          <button onClick={handleSave} disabled={saving} aria-busy={saving}
-            className="inline-flex items-center gap-2 bg-amber text-ink-900 px-6 py-3 text-sm font-medium hover:bg-amber-light disabled:opacity-50 transition-all">
-            {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
-            Guardar configuración
-          </button>
+          <Button type="submit" isLoading={saving}>
+            {!saving && <Check className="w-4 h-4" aria-hidden="true" />}
+            Guardar ajustes
+          </Button>
         </div>
-      </div>
-
-      <style jsx global>{`
-        .form-input {
-          width: 100%;
-          background: rgba(13, 18, 13, 0.6);
-          border: 1px solid #3A3833;
-          color: #F4F1EA;
-          padding: 10px 14px;
-          font-size: 14px;
-          outline: none;
-          transition: border-color 0.2s;
-        }
-        .form-input:focus { border-color: #C9A24B; }
-      `}</style>
+      </form>
     </div>
   );
 }
 
 function Section({ title, eyebrow, children }: { title: string; eyebrow: string; children: React.ReactNode }) {
   return (
-    <div className="surface p-8">
+    <section className="surface p-5 sm:p-8">
       <div className="eyebrow mb-1">{eyebrow}</div>
-      <h3 className="display text-2xl text-paper mb-6">{title}</h3>
+      <h2 className="display text-2xl text-paper mb-6">{title}</h2>
       <div className="space-y-4">{children}</div>
-    </div>
-  );
-}
-
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div>
-      <label className="eyebrow block mb-2">{label}</label>
-      {children}
-    </div>
+    </section>
   );
 }
