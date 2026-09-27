@@ -1,32 +1,31 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { loadConfig, saveConfig, testConnection } from "@/lib/sheets";
-import { cacheOrFetch, cacheInvalidate, cacheClear } from "@/lib/cache";
+import { cacheOrFetch, cacheClear } from "@/lib/cache";
+import { ConfigSchema } from "@/lib/validations";
+import { AppError, SheetsError, readJson, withErrors } from "@/lib/errors";
 
-export async function GET() {
+export const dynamic = "force-dynamic";
+
+export const GET = withErrors(async () => {
   const config = await loadConfig();
   // testConnection se cachea 5 minutos para no abusar
-  const test = await cacheOrFetch(
-    "connection-test",
-    () => testConnection(),
-    5 * 60 * 1000,
-  );
-  return NextResponse.json({ config, connection: test });
-}
+  const connection = await cacheOrFetch("connection-test", () => testConnection(), 5 * 60 * 1000);
+  return NextResponse.json({ config, connection });
+});
 
-export async function POST(req: NextRequest) {
-  const body = await req.json();
+export const POST = withErrors(async (req) => {
+  const body = await readJson(req, ConfigSchema);
+  let config;
   try {
-    const config = await saveConfig(body);
-    // Invalidar todo el caché porque cambió la config (puede cambiar la sheet)
-    cacheClear();
-    const test = await testConnection();
-    return NextResponse.json({ config, connection: test });
-  } catch (e: any) {
-    // Antes esto se tragaba y respondía 200 con la config vieja: el cliente
-    // mostraba "guardado" aunque no se hubiera escrito nada en la hoja.
-    return NextResponse.json(
-      { error: e?.message || "Error al guardar en la hoja Config" },
-      { status: 500 },
-    );
+    config = await saveConfig(body);
+  } catch (e) {
+    if (e instanceof AppError) throw e;
+    // No se escribió la hoja Config: no respondemos "guardado".
+    console.error("[api] POST /api/config:", e);
+    throw new SheetsError("No se pudieron guardar los ajustes en la hoja Config. Probá de nuevo.");
   }
-}
+  // Invalidar todo el caché porque cambió la config (puede cambiar la sheet)
+  cacheClear();
+  const connection = await testConnection();
+  return NextResponse.json({ config, connection });
+});

@@ -176,7 +176,7 @@ git push -u origin main
 | `GOOGLE_CLIENT_SECRET` | Tu Client Secret de OAuth |
 | `NEXTAUTH_SECRET` | El string aleatorio que generaste |
 | `NEXTAUTH_URL` | `https://tu-app.vercel.app` (lo sabés después del primer deploy, podés actualizarlo) |
-| `ALLOWED_EMAILS` | `tu-email@gmail.com` (separar con comas si son varios) |
+| `ALLOWED_EMAILS` | `tu-email@gmail.com` (separar con comas si son varios). **Obligatorio**: vacío = nadie puede entrar |
 | `GOOGLE_SHEET_ID` | El ID de tu planilla |
 | `GOOGLE_SHEETS_CREDS_JSON` | El JSON de credenciales **en una sola línea** |
 

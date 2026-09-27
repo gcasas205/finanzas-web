@@ -5,18 +5,21 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, Suspense } from "react";
 import { motion } from "framer-motion";
 import LogoLoader from "@/components/LogoLoader";
+import { safeInternalPath } from "@/lib/allowlist";
 
 function LoginContent() {
   const { data: session, status } = useSession();
   const router = useRouter();
   const searchParams = useSearchParams();
   const error = searchParams.get("error");
+  // A dónde volver tras ingresar (sólo rutas internas: evita redirecciones abiertas).
+  const callbackUrl = safeInternalPath(searchParams.get("callbackUrl"));
 
   useEffect(() => {
-    if (status === "authenticated") {
-      router.push("/");
+    if (status === "authenticated" && !error) {
+      router.push(callbackUrl);
     }
-  }, [status, router]);
+  }, [status, router, callbackUrl, error]);
 
   if (status === "loading") {
     return <LogoLoader className="min-h-screen" label="Verificando sesión…" />;
@@ -64,7 +67,7 @@ function LoginContent() {
           </p>
 
           <button
-            onClick={() => signIn("google", { callbackUrl: "/" })}
+            onClick={() => signIn("google", { callbackUrl })}
             className="w-full inline-flex items-center justify-center gap-3 bg-paper text-ink-900 px-6 py-3.5 text-sm font-medium hover:bg-cream transition-all group"
           >
             {/* Google icon */}

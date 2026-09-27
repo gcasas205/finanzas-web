@@ -3,6 +3,7 @@ import fs from "fs/promises";
 import path from "path";
 import os from "os";
 import type { Transaction, Sueldo, AppConfig, DolarOperacion, AhorroConfig, SobreKey } from "@/types";
+import { AppError, SheetsError } from "@/lib/errors";
 
 /**
  * Config de arranque (bootstrap): SOLO Sheet ID y credenciales, para poder
@@ -395,266 +396,162 @@ function dolarToRow(d: DolarOperacion): any[] {
   ];
 }
 
-// ─── API pública ────────────────────────────────────────────────────────────
+// ─── Acceso con errores explícitos ──────────────────────────────────────────
+// Ninguna función pública se traga un error de Sheets devolviendo [] o false:
+// una falla se propaga como SheetsError (503) para que la UI la muestre en vez
+// de pintar "no hay movimientos" como si fuera real (y cachearlo).
 
-export async function listTransactions(): Promise<Transaction[]> {
+type SheetsCtx = { client: sheets_v4.Sheets; sheetId: string };
+
+async function requireSheets(): Promise<SheetsCtx> {
   const ctx = await getSheetsClient();
-  if (!ctx) return [];
+  if (!ctx) {
+    throw new SheetsError("Google Sheets no está configurado: falta el Sheet ID o las credenciales.");
+  }
+  return ctx;
+}
 
+/** Ejecuta una operación contra Sheets y traduce cualquier falla a SheetsError. */
+async function sheetsCall<T>(what: string, fn: (ctx: SheetsCtx) => Promise<T>): Promise<T> {
+  const ctx = await requireSheets();
   try {
-    await ensureSheets(ctx.client, ctx.sheetId);
-    const r = await ctx.client.spreadsheets.values.get({
-      spreadsheetId: ctx.sheetId,
-      range: "Transacciones!A2:Q",
-    });
-    const rows = r.data.values ?? [];
-    return rows.filter(row => row[0]).map(rowToTransaction);
+    return await fn(ctx);
   } catch (e) {
-    console.error("Error listing transactions:", e);
-    return [];
+    if (e instanceof AppError) throw e;
+    console.error(`[sheets] ${what}:`, e);
+    throw new SheetsError();
   }
 }
 
-export async function addTransaction(tx: Transaction): Promise<boolean> {
-  const ctx = await getSheetsClient();
-  if (!ctx) return false;
-
-  try {
-    await ensureSheets(ctx.client, ctx.sheetId);
-    await ctx.client.spreadsheets.values.append({
-      spreadsheetId: ctx.sheetId,
-      range: "Transacciones!A:Q",
-      valueInputOption: "RAW",
-      requestBody: { values: [transactionToRow(tx)] },
-    });
-    return true;
-  } catch (e) {
-    console.error("Error adding transaction:", e);
-    return false;
-  }
+/** Las pestañas se verifican una vez por instancia del servidor, no en cada request
+ *  (ensureSheets hace 1 + N llamadas a la API y Sheets tiene cuota por minuto). */
+const ensured = new Set<string>();
+async function ensureSheetsOnce(ctx: SheetsCtx): Promise<void> {
+  if (ensured.has(ctx.sheetId)) return;
+  await ensureSheets(ctx.client, ctx.sheetId);
+  ensured.add(ctx.sheetId);
 }
 
-export async function addTransactionsBulk(txs: Transaction[]): Promise<number> {
-  if (!txs.length) return 0;
-  const ctx = await getSheetsClient();
-  if (!ctx) return 0;
-
-  try {
-    await ensureSheets(ctx.client, ctx.sheetId);
-    await ctx.client.spreadsheets.values.append({
-      spreadsheetId: ctx.sheetId,
-      range: "Transacciones!A:Q",
-      valueInputOption: "RAW",
-      requestBody: { values: txs.map(transactionToRow) },
-    });
-    return txs.length;
-  } catch (e) {
-    console.error("Error bulk adding:", e);
-    return 0;
-  }
+/** Número de fila (1-based) donde está el id en la columna A de la pestaña, o null. */
+async function findRowNumber(ctx: SheetsCtx, tab: string, id: string): Promise<number | null> {
+  const r = await ctx.client.spreadsheets.values.get({
+    spreadsheetId: ctx.sheetId,
+    range: `${tab}!A2:A`,
+  });
+  const idx = (r.data.values ?? []).findIndex((row) => row[0] === id);
+  return idx === -1 ? null : idx + 2; // A2 => fila 2
 }
 
-export async function updateTransaction(tx: Transaction): Promise<boolean> {
-  const ctx = await getSheetsClient();
-  if (!ctx) return false;
-  try {
-    const r = await ctx.client.spreadsheets.values.get({
-      spreadsheetId: ctx.sheetId,
-      range: "Transacciones!A2:A",
-    });
-    const ids = (r.data.values ?? []).map(row => row[0]);
-    const idx = ids.indexOf(tx.id);
-    if (idx === -1) return false;
-
-    const rowNumber = idx + 2;
+async function updateRowById(tab: string, lastCol: string, id: string, row: unknown[]): Promise<boolean> {
+  return sheetsCall(`actualizar fila en ${tab}`, async (ctx) => {
+    const rowNumber = await findRowNumber(ctx, tab, id);
+    if (rowNumber === null) return false;
     await ctx.client.spreadsheets.values.update({
       spreadsheetId: ctx.sheetId,
-      range: `Transacciones!A${rowNumber}:Q${rowNumber}`,
+      range: `${tab}!A${rowNumber}:${lastCol}${rowNumber}`,
       valueInputOption: "RAW",
-      requestBody: { values: [transactionToRow(tx)] },
+      requestBody: { values: [row] },
     });
     return true;
-  } catch (e) {
-    console.error("Error updating transaction:", e);
-    return false;
-  }
+  });
 }
 
-export async function deleteTransaction(id: string): Promise<boolean> {
-  const ctx = await getSheetsClient();
-  if (!ctx) return false;
-  try {
-    const r = await ctx.client.spreadsheets.values.get({
-      spreadsheetId: ctx.sheetId,
-      range: "Transacciones!A2:A",
-    });
-    const ids = (r.data.values ?? []).map(row => row[0]);
-    const idx = ids.indexOf(id);
-    if (idx === -1) return false;
+async function deleteRowById(tab: string, id: string): Promise<boolean> {
+  return sheetsCall(`borrar fila en ${tab}`, async (ctx) => {
+    const rowNumber = await findRowNumber(ctx, tab, id);
+    if (rowNumber === null) return false;
 
-    // Get sheet ID for the Transacciones tab
     const meta = await ctx.client.spreadsheets.get({ spreadsheetId: ctx.sheetId });
-    const sheet = meta.data.sheets?.find(s => s.properties?.title === "Transacciones");
-    if (!sheet?.properties?.sheetId == null) return false;
-    const innerSheetId = sheet!.properties!.sheetId!;
+    const innerSheetId = meta.data.sheets?.find((s) => s.properties?.title === tab)?.properties?.sheetId;
+    if (innerSheetId == null) throw new SheetsError(`No se encontró la pestaña "${tab}" en la planilla.`);
 
-    const rowIndex = idx + 1; // index 0-based: row 1 is header → data starts at row index 1
+    const rowIndex = rowNumber - 1; // deleteDimension es 0-based
     await ctx.client.spreadsheets.batchUpdate({
       spreadsheetId: ctx.sheetId,
       requestBody: {
         requests: [{
           deleteDimension: {
-            range: {
-              sheetId: innerSheetId,
-              dimension: "ROWS",
-              startIndex: rowIndex,
-              endIndex: rowIndex + 1,
-            }
-          }
-        }]
-      }
+            range: { sheetId: innerSheetId, dimension: "ROWS", startIndex: rowIndex, endIndex: rowIndex + 1 },
+          },
+        }],
+      },
     });
     return true;
-  } catch (e) {
-    console.error("Error deleting transaction:", e);
-    return false;
-  }
+  });
+}
+
+async function appendRows(tab: string, lastCol: string, rows: unknown[][]): Promise<void> {
+  if (!rows.length) return;
+  await sheetsCall(`agregar filas en ${tab}`, async (ctx) => {
+    await ensureSheetsOnce(ctx);
+    await ctx.client.spreadsheets.values.append({
+      spreadsheetId: ctx.sheetId,
+      range: `${tab}!A:${lastCol}`,
+      valueInputOption: "RAW",
+      requestBody: { values: rows },
+    });
+  });
+}
+
+async function readRows(tab: string, range: string): Promise<unknown[][]> {
+  return sheetsCall(`leer ${tab}`, async (ctx) => {
+    await ensureSheetsOnce(ctx);
+    const r = await ctx.client.spreadsheets.values.get({ spreadsheetId: ctx.sheetId, range: `${tab}!${range}` });
+    return (r.data.values ?? []).filter((row) => row[0]);
+  });
+}
+
+// ─── API pública ────────────────────────────────────────────────────────────
+
+export async function listTransactions(): Promise<Transaction[]> {
+  return (await readRows("Transacciones", "A2:Q")).map(rowToTransaction);
+}
+
+export async function addTransaction(tx: Transaction): Promise<void> {
+  await appendRows("Transacciones", "Q", [transactionToRow(tx)]);
+}
+
+export async function addTransactionsBulk(txs: Transaction[]): Promise<number> {
+  await appendRows("Transacciones", "Q", txs.map(transactionToRow));
+  return txs.length;
+}
+
+/** false si el id no existe. */
+export async function updateTransaction(tx: Transaction): Promise<boolean> {
+  return updateRowById("Transacciones", "Q", tx.id, transactionToRow(tx));
+}
+
+/** false si el id no existe. */
+export async function deleteTransaction(id: string): Promise<boolean> {
+  return deleteRowById("Transacciones", id);
 }
 
 export async function listSueldos(): Promise<Sueldo[]> {
-  const ctx = await getSheetsClient();
-  if (!ctx) return [];
-  try {
-    await ensureSheets(ctx.client, ctx.sheetId);
-    const r = await ctx.client.spreadsheets.values.get({
-      spreadsheetId: ctx.sheetId,
-      range: "Sueldos!A2:M",
-    });
-    return (r.data.values ?? []).filter(row => row[0]).map(rowToSueldo);
-  } catch (e) {
-    console.error("Error listing sueldos:", e);
-    return [];
-  }
+  return (await readRows("Sueldos", "A2:M")).map(rowToSueldo);
 }
 
-export async function addSueldo(s: Sueldo): Promise<boolean> {
-  const ctx = await getSheetsClient();
-  if (!ctx) return false;
-  try {
-    await ensureSheets(ctx.client, ctx.sheetId);
-    await ctx.client.spreadsheets.values.append({
-      spreadsheetId: ctx.sheetId,
-      range: "Sueldos!A:M",
-      valueInputOption: "RAW",
-      requestBody: { values: [sueldoToRow(s)] },
-    });
-    return true;
-  } catch (e) {
-    console.error("Error adding sueldo:", e);
-    return false;
-  }
+export async function addSueldo(s: Sueldo): Promise<void> {
+  await appendRows("Sueldos", "M", [sueldoToRow(s)]);
 }
 
 // ─── Operaciones de dólar ────────────────────────────────────────────────────
 
 export async function listDolarOps(): Promise<DolarOperacion[]> {
-  const ctx = await getSheetsClient();
-  if (!ctx) return [];
-  try {
-    await ensureSheets(ctx.client, ctx.sheetId);
-    const r = await ctx.client.spreadsheets.values.get({
-      spreadsheetId: ctx.sheetId,
-      range: "Dolares!A2:K",
-    });
-    return (r.data.values ?? []).filter(row => row[0]).map(rowToDolar);
-  } catch (e) {
-    console.error("Error listing dolar ops:", e);
-    return [];
-  }
+  return (await readRows("Dolares", "A2:K")).map(rowToDolar);
 }
 
-export async function addDolarOp(op: DolarOperacion): Promise<boolean> {
-  const ctx = await getSheetsClient();
-  if (!ctx) return false;
-  try {
-    await ensureSheets(ctx.client, ctx.sheetId);
-    await ctx.client.spreadsheets.values.append({
-      spreadsheetId: ctx.sheetId,
-      range: "Dolares!A:K",
-      valueInputOption: "RAW",
-      requestBody: { values: [dolarToRow(op)] },
-    });
-    return true;
-  } catch (e) {
-    console.error("Error adding dolar op:", e);
-    return false;
-  }
+export async function addDolarOp(op: DolarOperacion): Promise<void> {
+  await appendRows("Dolares", "K", [dolarToRow(op)]);
 }
 
+/** false si el id no existe. */
 export async function updateDolarOp(op: DolarOperacion): Promise<boolean> {
-  const ctx = await getSheetsClient();
-  if (!ctx) return false;
-  try {
-    const r = await ctx.client.spreadsheets.values.get({
-      spreadsheetId: ctx.sheetId,
-      range: "Dolares!A2:A",
-    });
-    const ids = (r.data.values ?? []).map(row => row[0]);
-    const idx = ids.indexOf(op.id);
-    if (idx === -1) return false;
-
-    const rowNumber = idx + 2;
-    await ctx.client.spreadsheets.values.update({
-      spreadsheetId: ctx.sheetId,
-      range: `Dolares!A${rowNumber}:K${rowNumber}`,
-      valueInputOption: "RAW",
-      requestBody: { values: [dolarToRow(op)] },
-    });
-    return true;
-  } catch (e) {
-    console.error("Error updating dolar op:", e);
-    return false;
-  }
+  return updateRowById("Dolares", "K", op.id, dolarToRow(op));
 }
 
+/** false si el id no existe. */
 export async function deleteDolarOp(id: string): Promise<boolean> {
-  const ctx = await getSheetsClient();
-  if (!ctx) return false;
-  try {
-    const r = await ctx.client.spreadsheets.values.get({
-      spreadsheetId: ctx.sheetId,
-      range: "Dolares!A2:A",
-    });
-    const ids = (r.data.values ?? []).map(row => row[0]);
-    const idx = ids.indexOf(id);
-    if (idx === -1) return false;
-
-    const meta = await ctx.client.spreadsheets.get({ spreadsheetId: ctx.sheetId });
-    const sheet = meta.data.sheets?.find(s => s.properties?.title === "Dolares");
-    if (sheet?.properties?.sheetId == null) return false;
-    const innerSheetId = sheet.properties.sheetId;
-
-    const rowIndex = idx + 1; // fila 1 = header, datos arrancan en índice 1
-    await ctx.client.spreadsheets.batchUpdate({
-      spreadsheetId: ctx.sheetId,
-      requestBody: {
-        requests: [{
-          deleteDimension: {
-            range: {
-              sheetId: innerSheetId,
-              dimension: "ROWS",
-              startIndex: rowIndex,
-              endIndex: rowIndex + 1,
-            }
-          }
-        }]
-      }
-    });
-    return true;
-  } catch (e) {
-    console.error("Error deleting dolar op:", e);
-    return false;
-  }
+  return deleteRowById("Dolares", id);
 }
 
 // ─── Config del plan de ahorro (hoja "Config") ──────────────────────────────
@@ -675,42 +572,36 @@ function buildAhorroConfig(map: Record<string, number>): AhorroConfig {
   };
 }
 
-/** Lee la hoja Config (clave/valor) y devuelve la configuración del ahorro con defaults */
+/** Lee la hoja Config (clave/valor) y devuelve la configuración del ahorro con defaults.
+ *  Si Sheets falla se propaga el error: mostrar los defaults como si fueran tus
+ *  objetivos reales sería engañoso. */
 export async function getAhorroConfig(): Promise<AhorroConfig> {
-  const ctx = await getSheetsClient();
-  if (!ctx) return buildAhorroConfig({});
-  try {
-    await ensureSheets(ctx.client, ctx.sheetId);
-    const r = await ctx.client.spreadsheets.values.get({
-      spreadsheetId: ctx.sheetId,
-      range: "Config!A2:B",
-    });
-    const map: Record<string, number> = {};
-    for (const row of r.data.values ?? []) {
-      const key = String(row[0] ?? "").trim();
-      if (!key) continue;
-      const val = parseFloat(String(row[1]).replace(",", "."));
-      if (isFinite(val)) map[key] = val;
-    }
-    return buildAhorroConfig(map);
-  } catch (e) {
-    console.error("Error leyendo Config de ahorro:", e);
-    return buildAhorroConfig({});
+  const map: Record<string, number> = {};
+  for (const row of await readRows("Config", "A2:B")) {
+    const key = String(row[0] ?? "").trim();
+    if (!key) continue;
+    const val = parseFloat(String(row[1]).replace(",", "."));
+    if (isFinite(val)) map[key] = val;
   }
+  return buildAhorroConfig(map);
 }
 
 export async function testConnection(): Promise<{ ok: boolean; error?: string }> {
   const config = await loadBootstrapConfig();
   if (!config.googleSheetId) return { ok: false, error: "Sheet ID no configurado" };
-  if (!config.googleCredsPath) return { ok: false, error: "Credenciales no configuradas" };
+  // Las credenciales pueden venir de la env var (Vercel) o de un archivo local.
+  if (!process.env.GOOGLE_SHEETS_CREDS_JSON && !config.googleCredsPath) {
+    return { ok: false, error: "Credenciales no configuradas" };
+  }
 
   const ctx = await getSheetsClient();
-  if (!ctx) return { ok: false, error: "No se pudo autenticar con Google" };
+  if (!ctx) return { ok: false, error: "No se pudo autenticar con Google (revisá las credenciales)" };
 
   try {
-    const meta = await ctx.client.spreadsheets.get({ spreadsheetId: ctx.sheetId });
+    await ctx.client.spreadsheets.get({ spreadsheetId: ctx.sheetId, fields: "spreadsheetId" });
     return { ok: true };
-  } catch (e: any) {
-    return { ok: false, error: e?.message ?? "Error desconocido" };
+  } catch (e) {
+    console.error("[sheets] testConnection:", e);
+    return { ok: false, error: "No se pudo abrir la planilla. Revisá el Sheet ID y que esté compartida con la cuenta de servicio." };
   }
 }
