@@ -396,7 +396,7 @@ Algunos PDFs usan fuentes con encoding especial. La app soporta Unicode PUA pero
   - Importar: arrastrar y soltar el PDF ahora funciona.
 - **Diseño** (reglas en [`DESIGN.md`](DESIGN.md))
   - El ámbar queda para el logo, el botón principal y la sección actual; lo elegido (filtros, segmentos) se marca en claro.
-  - Montos de ingresos y gastos en neutro con signo; verde y rojo sólo para balance y resultados.
+  - Verde para la plata que entra y rojo para la que sale, siempre acompañado de signo o flecha.
   - Letra mínima de 13px en toda la app y bordes de campos con contraste suficiente (3.6:1).
   - Barra inferior del celular con 5 pestañas; "Más" abre Análisis, Importar y Ajustes. Enlace "Saltar al contenido".
   - Estados vacíos con la acción que los resuelve (por ejemplo, "Cargar el primero").

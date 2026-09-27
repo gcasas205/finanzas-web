@@ -225,19 +225,19 @@ export default function Dolares() {
         </div>
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-6">
           <DesgloseCard
-            icon={ShoppingCart} label="Comprado"
+            icon={ShoppingCart} accent={PALETTE.positivo} label="Comprado"
             usd={desglose.compraUSD} ars={desglose.compraARS} arsLabel="pagados"
           />
           <DesgloseCard
-            icon={Banknote} label="Vendido"
+            icon={Banknote} accent={PALETTE.negativoTexto} label="Vendido"
             usd={desglose.ventaUSD} ars={desglose.ventaARS} arsLabel="recibidos"
           />
           <DesgloseCard
-            icon={ArrowUpRight} label="Gastos en USD"
+            icon={ArrowUpRight} accent={PALETTE.negativo} label="Gastos en USD"
             usd={desglose.gastoUSD} arsLabel="desde tenencia"
           />
           <DesgloseCard
-            icon={ArrowDownRight} label="Ingresos en USD"
+            icon={ArrowDownRight} accent={PALETTE.positivo} label="Ingresos en USD"
             usd={desglose.ingresoUSD} arsLabel="a tenencia"
           />
         </div>
@@ -318,8 +318,8 @@ export default function Dolares() {
                   </td>
                   <td className="px-2 py-4 text-right tabular font-mono text-sm">
                     {f.kind === "op" ? (
-                      <span className="text-paper whitespace-nowrap">
-                        <span className="text-ink-300" aria-hidden="true">{f.tipo === "compra" ? "−" : "+"}</span>
+                      <span className={`whitespace-nowrap ${f.tipo === "compra" ? "text-terra-light" : "text-moss-light"}`}>
+                        <span aria-hidden="true">{f.tipo === "compra" ? "−" : "+"}</span>
                         <span className="sr-only">{f.tipo === "compra" ? "pagaste " : "recibiste "}</span>
                         {formatPesos(f.totalARS)}
                       </span>
@@ -372,11 +372,11 @@ export default function Dolares() {
 
 function ConceptoBadge({ tipo }: { tipo: string }) {
   const map: Record<string, { label: string; cls: string }> = {
-    // Chips neutros: compra/venta son operaciones, no un estado bueno o malo.
-    compra:      { label: "↓ Compra",  cls: "border-control text-paper" },
-    venta:       { label: "↑ Venta",   cls: "border-control text-paper" },
-    gasto:       { label: "⤴ Gasto USD", cls: "border-control text-ink-200" },
-    ingresoUSD:  { label: "⤵ Ingreso USD", cls: "border-control text-ink-200" },
+    // Compra/ingreso suman dólares (verde); venta/gasto los restan (rojo).
+    compra:      { label: "↓ Compra",  cls: "border-moss/40 text-moss-light bg-moss/5" },
+    venta:       { label: "↑ Venta",   cls: "border-terra/40 text-terra-light bg-terra/5" },
+    gasto:       { label: "⤴ Gasto USD", cls: "border-terra/40 text-terra-light bg-terra/5" },
+    ingresoUSD:  { label: "⤵ Ingreso USD", cls: "border-moss/40 text-moss-light bg-moss/5" },
   };
   const b = map[tipo] ?? { label: tipo, cls: "border-control text-ink-300" };
   return <span className={`inline-flex items-center gap-1.5 text-xs px-2 py-1 border ${b.cls}`}>{b.label}</span>;
@@ -384,14 +384,14 @@ function ConceptoBadge({ tipo }: { tipo: string }) {
 
 // ── Desglose card ─────────────────────────────────────────────────────────────
 
-function DesgloseCard({ icon: Icon, label, usd, ars, arsLabel }: {
-  icon: LucideIcon; label: string; usd: number; ars?: number; arsLabel: string;
+function DesgloseCard({ icon: Icon, accent, label, usd, ars, arsLabel }: {
+  icon: LucideIcon; accent: string; label: string; usd: number; ars?: number; arsLabel: string;
 }) {
   return (
     <div className="surface p-4 sm:p-5 relative overflow-hidden">
-      <div className="absolute top-0 left-0 right-0 h-px bg-ink-300" />
+      <div className="absolute top-0 left-0 right-0 h-px" style={{ background: accent }} />
       <div className="flex items-center justify-between mb-2">
-        <div className="eyebrow">{label}</div>
+        <div className="eyebrow" style={{ color: accent === PALETTE.negativo ? PALETTE.negativoTexto : accent }}>{label}</div>
         <Icon className="w-4 h-4 text-ink-300" strokeWidth={1.5} aria-hidden="true" />
       </div>
       <div className="display text-xl sm:text-2xl text-paper tabular leading-none"><AnimatedUsdAmount value={usd} /></div>
@@ -426,11 +426,11 @@ function CotizacionBanner({ cot, onRefresh, refreshing }: {
         <div className="flex items-center gap-8 flex-1">
           <div>
             <div className="text-xs uppercase tracking-wider text-ink-400 mb-0.5">Compra</div>
-            <div className="display text-2xl text-paper tabular"><AnimatedNumber value={cot!.compra} format={formatPesos} /></div>
+            <div className="display text-2xl text-moss-light tabular"><AnimatedNumber value={cot!.compra} format={formatPesos} /></div>
           </div>
           <div>
             <div className="text-xs uppercase tracking-wider text-ink-400 mb-0.5">Venta</div>
-            <div className="display text-2xl text-paper tabular"><AnimatedNumber value={cot!.venta} format={formatPesos} /></div>
+            <div className="display text-2xl text-terra-light tabular"><AnimatedNumber value={cot!.venta} format={formatPesos} /></div>
           </div>
           {cot!.actualizado && (
             <div className="ml-auto text-xs text-ink-400 hidden sm:block">
@@ -611,8 +611,8 @@ function DolarFormBody({ editing, cotizacion, onClose, onSaved }: {
           value={tipo}
           onChange={(t) => { setTipo(t); setPrecioAuto(true); }}
           options={[
-            { value: "compra", label: "↓ Compro USD" },
-            { value: "venta", label: "↑ Vendo USD" },
+            { value: "compra", label: "↓ Compro USD", tone: "positivo" },
+            { value: "venta", label: "↑ Vendo USD", tone: "negativo" },
           ]}
         />
 
@@ -629,10 +629,10 @@ function DolarFormBody({ editing, cotizacion, onClose, onSaved }: {
             required
             error={errors.precioARS}
             extra={cotDisponible ? (
-              <label className="flex min-h-11 cursor-pointer items-center gap-2 text-xs text-ink-200">
+              <label className="-my-3 flex cursor-pointer items-center gap-2 whitespace-nowrap py-3 text-xs text-ink-200">
                 <input type="checkbox" checked={precioAuto}
                   onChange={(e) => setPrecioAuto(e.target.checked)} className="h-4 w-4 accent-amber" />
-                Cotización del día
+                Del día
               </label>
             ) : undefined}
           >
@@ -658,7 +658,9 @@ function DolarFormBody({ editing, cotizacion, onClose, onSaved }: {
 
         <div className="surface p-4 flex items-center justify-between">
           <span className="eyebrow">{tipo === "compra" ? "Pagás en pesos" : "Recibís en pesos"}</span>
-          <span className="display text-2xl tabular text-paper">{formatPesos(totalARS)}</span>
+          <span className={`display text-2xl tabular ${tipo === "compra" ? "text-terra-light" : "text-moss-light"}`}>
+            {tipo === "compra" ? "−" : "+"}{formatPesos(totalARS)}
+          </span>
         </div>
 
         {/* Ahorro: reparto (compra) u origen del retiro (venta) */}

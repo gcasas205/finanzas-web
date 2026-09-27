@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { signOut, useSession } from "next-auth/react";
 import Link from "next/link";
@@ -53,6 +53,17 @@ const isActive = (pathname: string, href: string) => pathname.startsWith(href);
 export default function AppShell({ initialConfig, children }: { initialConfig: AppConfig, children: React.ReactNode }) {
   const pathname = usePathname();
   const [moreOpen, setMoreOpen] = useState(false);
+
+  // La rueda del mouse sobre un campo numérico enfocado cambiaba el monto sin
+  // querer (en Chrome suma/resta de a 0,01). Al girar la rueda, el campo pierde el foco.
+  useEffect(() => {
+    const onWheel = (e: WheelEvent) => {
+      const el = e.target;
+      if (el instanceof HTMLInputElement && el.type === "number" && el === document.activeElement) el.blur();
+    };
+    document.addEventListener("wheel", onWheel, { passive: true });
+    return () => document.removeEventListener("wheel", onWheel);
+  }, []);
   // Nombre en vivo (Ajustes lo persiste en la hoja Config); fallback al del SSR.
   const nombre = useConfig().nombre || initialConfig.nombre;
   const current = NAV_ITEMS.find(n => isActive(pathname, n.href));

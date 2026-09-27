@@ -267,7 +267,7 @@ export default function SetupWizard({ onComplete }: SetupWizardProps) {
                   onClick={handleFinish}
                   disabled={finishing}
                   aria-busy={finishing || undefined}
-                  className="inline-flex min-h-11 items-center gap-2 bg-amber text-ink-900 px-6 py-3 text-sm font-medium hover:bg-amber-light transition-all disabled:opacity-50"
+                  className="inline-flex min-h-11 items-center gap-2 bg-moss text-paper px-6 py-3 text-sm font-medium hover:bg-moss/85 transition-all disabled:opacity-50"
                 >
                   {finishing ? <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" /> : null}
                   Empezar <Check className="w-4 h-4" aria-hidden="true" />

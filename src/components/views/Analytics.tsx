@@ -307,7 +307,7 @@ function MercadoPagoTab({ acumulado, tna }: { acumulado: number; tna: number }) 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-6 mb-8 [&>*]:min-w-0">
         {[
           { label: "Capital en pesos", value: acumulado },
-          { label: "Ganancia 1 mes", value: g1 },
+          { label: "Ganancia 1 mes", value: g1, color: PALETTE.positivo },
           { label: "Ganancia 6 meses", value: g6 },
           { label: "Ganancia 12 meses", value: g12 },
         ].map((kpi, i) => (
@@ -318,8 +318,8 @@ function MercadoPagoTab({ acumulado, tna }: { acumulado: number; tna: number }) 
             transition={{ delay: i * 0.04, duration: 0.26 }}
             className="surface p-6 relative overflow-hidden"
           >
-            <div className="absolute top-0 left-0 right-0 h-px bg-ink-300" />
-            <div className="eyebrow mb-2">{kpi.label}</div>
+            <div className="absolute top-0 left-0 right-0 h-px" style={{ background: kpi.color ?? PALETTE.eje }} />
+            <div className="eyebrow mb-2" style={kpi.color ? { color: kpi.color } : undefined}>{kpi.label}</div>
             <div className="display text-3xl text-paper tabular">
               {acumulado > 0 ? formatPesos(kpi.value) : "$0"}
             </div>

@@ -172,13 +172,13 @@ export default function Transactions({ config }: Props) {
       {/* Summary */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-6 mb-6">
         <div className="surface p-4 sm:p-6">
-          <div className="eyebrow mb-1 sm:mb-2">Ingresos</div>
+          <div className="eyebrow text-moss-light mb-1 sm:mb-2">Ingresos</div>
           <div className="display text-2xl sm:text-3xl lg:text-4xl text-paper tabular leading-none">
             <AnimatedNumber value={totals.ingresos} format={formatPesos} />
           </div>
         </div>
         <div className="surface p-4 sm:p-6">
-          <div className="eyebrow mb-1 sm:mb-2">Gastos</div>
+          <div className="eyebrow text-terra-light mb-1 sm:mb-2">Gastos</div>
           <div className="display text-2xl sm:text-3xl lg:text-4xl text-paper tabular leading-none">
             <AnimatedNumber value={totals.egresos} format={formatPesos} />
           </div>
@@ -343,13 +343,13 @@ export default function Transactions({ config }: Props) {
 
 // ── Piezas de la lista ───────────────────────────────────────────────────────
 
-/** Monto en neutro con signo: el verde/rojo queda para el balance (estado). */
+/** Monto con signo: verde si entra (ingreso), rojo si sale (gasto). */
 function Monto({ tx }: { tx: Transaction }) {
-  const signo = tx.tipo === "ingreso" ? "+" : "−";
+  const esIngreso = tx.tipo === "ingreso";
   return (
-    <span className="tabular font-mono text-sm text-paper whitespace-nowrap">
-      <span className="sr-only">{tx.tipo === "ingreso" ? "Ingreso de " : "Gasto de "}</span>
-      <span aria-hidden="true" className="text-ink-300">{signo}</span>
+    <span className={`tabular font-mono text-sm whitespace-nowrap ${esIngreso ? "text-moss-light" : "text-terra-light"}`}>
+      <span className="sr-only">{esIngreso ? "Ingreso de " : "Gasto de "}</span>
+      <span aria-hidden="true">{esIngreso ? "+" : "−"}</span>
       {tx.moneda === "USD" ? <UsdAmount value={tx.monto} /> : formatPesos(tx.monto)}
     </span>
   );
@@ -509,8 +509,8 @@ function TransactionFormBody({ editing, config, onClose, onSaved }: Omit<FormPro
           value={tipo}
           onChange={setTipo}
           options={[
-            { value: "egreso", label: "↓ Gasto" },
-            { value: "ingreso", label: "↑ Ingreso" },
+            { value: "egreso", label: "↓ Gasto", tone: "negativo" },
+            { value: "ingreso", label: "↑ Ingreso", tone: "positivo" },
           ]}
         />
 
@@ -604,7 +604,7 @@ function TransactionFormBody({ editing, config, onClose, onSaved }: Omit<FormPro
             required
             error={errors.fechaPago}
             extra={
-              <label className="flex min-h-11 cursor-pointer items-center gap-2 text-xs text-ink-200">
+              <label className="-my-3 flex cursor-pointer items-center gap-2 whitespace-nowrap py-3 text-xs text-ink-200">
                 <input
                   type="checkbox"
                   checked={fechaPagoAuto}
