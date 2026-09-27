@@ -15,15 +15,18 @@ cifras héroe, monoespaciada (JetBrains Mono) para el trabajo. Grano sutil de fo
 |---|---|---|---|
 | **Marca / acción / ubicación** | `amber` | punto del logo, **un** botón primario por vista, ítem activo de la navegación (barra lateral, píldora de la barra inferior, subrayado de pestañas), foco de teclado | datos, series de gráficos, filtros elegidos, decoración de títulos |
 | **Selección** | `seleccion` (= `paper`) + texto `seleccion-tinta` | segmento/filtro elegido (`Segmented`), tarjeta elegida, `::selection` | acción principal |
-| **Estado** | `moss-light` (bueno) · `terra-light` (malo) | balance, resultado por tipo de cambio, variación, "objetivo cumplido", errores | montos neutros (un gasto no es "malo") |
+| **Estado / dirección** | `moss-light` (bueno, entra) · `terra-light` (malo, sale) | balance, resultado por tipo de cambio, variación, "objetivo cumplido", errores; gasto/ingreso y compra/venta elegidos | decoración |
 | **Neutros** | `ink-*`, `paper` | todo lo demás | — |
 
 Reglas con nombre, para citar en un review:
 
 - **La marca no reporta.** Si algo ámbar no es el logo, el primario o "estás acá", está mal.
 - **Lo elegido se enciende en neutro.** Filtros y segmentos elegidos: fondo `seleccion`, texto `seleccion-tinta`.
-- **El semáforo habla sólo de estado.** Los montos de ingresos y gastos van en `paper` con signo (+ / −);
-  verde y rojo quedan para el balance y los resultados. Siempre con texto o signo al lado (nunca sólo color).
+- **El semáforo habla de estado y de dirección de la plata.** Verde = entra / suma (ingreso, compra de USD,
+  balance positivo); rojo = sale / resta (gasto, venta de USD, balance negativo). Se usa en el tipo elegido de
+  los formularios (Gasto/Ingreso, Compro/Vendo), en los chips y totales de Dólares, en la cotización
+  (compra/venta) y en balances y resultados. Los montos de la lista de Movimientos van en `paper` con signo.
+  Siempre con texto, flecha o signo al lado (nunca sólo color).
 - **Series de gráficos:** ingresos `PALETTE.positivo`, gastos `PALETTE.negativo`, ahorro/tenencia/capital
   `PALETTE.serie` (neutro), período anterior `PALETTE.serieSecundaria`. Las categorías usan su color propio
   (`lib/categories.ts`), que es identidad, no estado.
@@ -58,7 +61,8 @@ Reglas con nombre, para citar en un review:
 | `terra` como texto | 3.2 ❌ — usar `terra-light` |
 | `moss` como texto | 2.5 ❌ — usar `moss-light` |
 
-- Campos: clase `.form-input` (borde `control`, hover `ink-300`, foco `amber`, error `terra-light` vía `aria-invalid`).
+- Campos: clase `.form-input` (borde `control`, hover `ink-300`, foco = un solo borde `amber` de 2px sin anillo
+  separado, error `terra-light` vía `aria-invalid`). Sin flechitas en `type="number"`; fechas alineadas a la izquierda.
 - Objetivo táctil mínimo 44×44 (`min-h-11`); botones de ícono con `p-2.5`–`p-3.5`.
 - Foco visible siempre (`:focus-visible` ámbar, 2px). "Saltar al contenido" es el primer foco.
 
@@ -108,7 +112,8 @@ Reglas con nombre, para citar en un review:
 ## Do / Don't
 
 - ✅ `bg-seleccion text-seleccion-tinta` para lo elegido · ❌ `bg-amber` en un filtro.
-- ✅ `<Monto>` en `paper` con signo · ❌ montos pintados de verde/rojo.
+- ✅ `<Monto>` en `paper` con signo en la lista · ✅ `tone` en `Segmented` para Gasto/Ingreso y Compro/Vendo.
+- ✅ Campos numéricos sin flechitas; la rueda del mouse no cambia el valor.
 - ✅ `PALETTE.serie` en un gráfico · ❌ `"#C9A24B"` suelto en un componente.
 - ✅ `text-xs` (13px) · ❌ `text-[10px]`.
 - ✅ `border-control` en campos · ❌ `border-ink-500` (1.6:1) delimitando un control.

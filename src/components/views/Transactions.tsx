@@ -509,8 +509,8 @@ function TransactionFormBody({ editing, config, onClose, onSaved }: Omit<FormPro
           value={tipo}
           onChange={setTipo}
           options={[
-            { value: "egreso", label: "↓ Gasto" },
-            { value: "ingreso", label: "↑ Ingreso" },
+            { value: "egreso", label: "↓ Gasto", tone: "negativo" },
+            { value: "ingreso", label: "↑ Ingreso", tone: "positivo" },
           ]}
         />
 
@@ -604,7 +604,7 @@ function TransactionFormBody({ editing, config, onClose, onSaved }: Omit<FormPro
             required
             error={errors.fechaPago}
             extra={
-              <label className="flex min-h-11 cursor-pointer items-center gap-2 text-xs text-ink-200">
+              <label className="-my-3 flex cursor-pointer items-center gap-2 whitespace-nowrap py-3 text-xs text-ink-200">
                 <input
                   type="checkbox"
                   checked={fechaPagoAuto}

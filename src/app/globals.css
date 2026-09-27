@@ -198,6 +198,43 @@
   select.form-input {
     @apply cursor-pointer pr-9;
   }
+  /* Foco de campo: un solo borde ámbar de 2px (borde + anillo interno), sin el
+     outline separado de :focus-visible, que dibujaba una segunda caja alrededor. */
+  .form-input:focus,
+  .form-input:focus-visible {
+    outline: none;
+    box-shadow: inset 0 0 0 1px theme('colors.amber.DEFAULT');
+  }
+  .form-input[aria-invalid="true"]:focus {
+    box-shadow: inset 0 0 0 1px theme('colors.terra.light');
+    border-color: theme('colors.terra.light');
+  }
+
+  /* Sin flechitas de subir/bajar en los campos numéricos (montos, cuotas, días). */
+  input[type="number"]::-webkit-inner-spin-button,
+  input[type="number"]::-webkit-outer-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+  input[type="number"] {
+    -moz-appearance: textfield;
+    appearance: textfield;
+  }
+
+  /* Fechas: en iOS el valor queda centrado y con alto propio; lo alineamos como
+     el resto de los campos. */
+  input[type="date"].form-input {
+    min-height: 2.75rem;
+    -webkit-appearance: none;
+    appearance: none;
+  }
+  input[type="date"].form-input::-webkit-date-and-time-value {
+    text-align: left;
+  }
+  input[type="date"].form-input::-webkit-calendar-picker-indicator {
+    filter: invert(0.8);
+    cursor: pointer;
+  }
 }
 
 /* Recharts overrides for editorial look */

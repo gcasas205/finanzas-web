@@ -45,8 +45,8 @@ export function Field({
   };
   return (
     <div className={cn("min-w-0", className)}>
-      <div className="mb-2 flex items-center gap-3">
-        <label htmlFor={id} className="eyebrow flex items-baseline gap-1">
+      <div className="mb-2 flex min-h-6 flex-wrap items-center justify-between gap-x-3 gap-y-1">
+        <label htmlFor={id} className="eyebrow flex items-baseline gap-1 whitespace-nowrap">
           {label}
           {required && <span className="text-terra-light" aria-hidden="true">*</span>}
         </label>
