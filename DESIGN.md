@@ -72,6 +72,9 @@ Reglas con nombre, para citar en un review:
 - **Desde `lg`:** barra lateral fija de 256px, activo con fondo `ink-700/50` + filete ámbar.
 - **Debajo de `lg`:** barra superior de 56px + **barra inferior de 5 pestañas** (Resumen, Movimientos, Dólares,
   Ahorro, **Más**). Activo = ícono en píldora ámbar 48×28. "Más" abre una hoja con Análisis, Importar y Ajustes.
+  Ambas barras son negras sólidas (sin transparencia) y su fondo se extiende más allá del borde (arriba la
+  superior, abajo la inferior), para que en iOS no se vea el contenido pasando detrás del reloj ni de la barra
+  del navegador. La superior mide 56px + `env(safe-area-inset-top)`.
   El contenido reserva `96px + env(safe-area-inset-bottom)`.
 - Tablas anchas → tarjetas/listas en celular; cero desborde horizontal de página a 320px.
 - Sólo se superponen diálogos: formularios de alta/edición, confirmaciones y la hoja "Más".
