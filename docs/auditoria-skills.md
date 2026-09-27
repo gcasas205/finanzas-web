@@ -39,7 +39,7 @@ Formato: **hallazgo → por qué importa → corrección propuesta**. Prioridad:
 | F6 | 🟠 | **Borrado con `window.confirm`** nativo. | Sin estilo, sin contexto (qué se borra), bloqueante. | `ConfirmDialog` con descripción del registro y botón de peligro; o borrado optimista con "Deshacer" en el toast. | S |
 | F7 | 🟡 | **Formateadores `Intl` creados en cada llamada** (`formatPesos`, `formatUSD`). | Se ejecutan por cada fila en cada render. | Instancias a nivel de módulo. | S |
 | F8 | 🟡 | **`aria-current="page"`** ausente en los links de navegación; no hay enlace "Saltar al contenido". | Navegación por teclado/lector. | Agregar ambos en `AppShell`. | S |
-| F9 | 🟡 | **Cifras animadas** (`AnimatedNumber`): verificar que el valor final esté en `sr-only` y la animación `aria-hidden`. | El lector anuncia cada paso del conteo. | Patrón de la skill. | S |
+| F9 | 🟡 | **Cifras animadas** (`AnimatedNumber`) sin `sr-only` ni `aria-hidden`. | El lector de pantalla puede anunciar valores intermedios del conteo. | Valor final en `sr-only` y la animación con `aria-hidden`. | S |
 
 ## 3. Diseño UI/UX
 
