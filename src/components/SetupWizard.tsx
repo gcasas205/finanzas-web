@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Check, AlertCircle, Loader2, ArrowRight } from "lucide-react";
 import { toast } from "sonner";
 import type { AppConfig } from "@/types";
+import { configApi, errorMessage } from "@/lib/api";
 
 interface SetupWizardProps {
   onComplete: () => void;
@@ -28,31 +29,30 @@ export default function SetupWizard({ onComplete }: SetupWizardProps) {
     setTesting(true);
     setTestResult(null);
     try {
-      const r = await fetch("/api/config", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(config),
-      });
-      const data = await r.json();
+      const data = await configApi.save(config);
       setTestResult(data.connection);
-      if (data.connection?.ok) {
+      if (data.connection.ok) {
         toast.success("Conexión exitosa con Google Sheets");
       }
-    } catch (e: any) {
-      setTestResult({ ok: false, error: e?.message });
+    } catch (e) {
+      setTestResult({ ok: false, error: errorMessage(e, "No se pudo probar la conexión") });
     } finally {
       setTesting(false);
     }
   };
 
+  const [finishing, setFinishing] = useState(false);
   const handleFinish = async () => {
-    await fetch("/api/config", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(config),
-    });
-    toast.success("Configuración guardada");
-    onComplete();
+    setFinishing(true);
+    try {
+      await configApi.save(config);
+      toast.success("Configuración guardada");
+      onComplete();
+    } catch (e) {
+      toast.error(errorMessage(e, "No se pudo guardar la configuración"), { duration: 7000 });
+    } finally {
+      setFinishing(false);
+    }
   };
 
   return (
@@ -60,14 +60,14 @@ export default function SetupWizard({ onComplete }: SetupWizardProps) {
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
+        transition={{ duration: 0.26, ease: [0.16, 1, 0.3, 1] }}
         className="w-full max-w-2xl"
       >
         {/* Header */}
         <div className="mb-12 text-center">
           <div className="eyebrow mb-3">Bienvenido</div>
           <h1 className="display text-5xl text-paper mb-3">
-            Configurá tu <em className="text-amber italic">espacio</em>
+            Configurá tu <em className="italic">espacio</em>
           </h1>
           <p className="text-ink-300 text-sm">
             Tres pasos para conectar tu hoja de cálculo y empezar
@@ -92,8 +92,8 @@ export default function SetupWizard({ onComplete }: SetupWizardProps) {
             initial={{ opacity: 0, x: 30 }}
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: -30 }}
-            transition={{ duration: 0.35 }}
-            className="surface p-10"
+            transition={{ duration: 0.26, ease: [0.16, 1, 0.3, 1] }}
+            className="surface p-6 sm:p-10"
           >
             {step === 1 && (
               <>
@@ -103,13 +103,15 @@ export default function SetupWizard({ onComplete }: SetupWizardProps) {
                   Solo para personalizar el saludo
                 </p>
 
+                <label htmlFor="setup-nombre" className="sr-only">Tu nombre</label>
                 <input
+                  id="setup-nombre"
                   type="text"
                   value={config.nombre}
                   onChange={(e) => setConfig({ ...config, nombre: e.target.value })}
                   placeholder="Tu nombre"
                   autoFocus
-                  className="w-full bg-transparent border-0 border-b border-ink-500 text-paper text-2xl py-3 px-0 focus:border-amber transition-colors display"
+                  className="w-full bg-transparent border-0 border-b border-control text-paper text-2xl py-3 px-0 focus:border-amber transition-colors display placeholder:text-ink-400"
                 />
               </>
             )}
@@ -126,34 +128,37 @@ export default function SetupWizard({ onComplete }: SetupWizardProps) {
 
                 <div className="space-y-5">
                   <div>
-                    <label className="eyebrow block mb-2">Google Sheet ID</label>
+                    <label htmlFor="setup-sheet" className="eyebrow block mb-2">Google Sheet ID</label>
                     <input
+                      id="setup-sheet"
+                      aria-describedby="setup-sheet-hint"
                       type="text"
                       value={config.googleSheetId}
                       onChange={(e) => setConfig({ ...config, googleSheetId: e.target.value })}
                       placeholder="1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgVE2upms"
-                      className="w-full bg-ink-900/60 border border-ink-500 text-paper px-4 py-3 focus:border-amber transition-colors text-sm font-mono"
+                      className="form-input font-mono"
                     />
-                    <p className="text-[11px] text-ink-300 mt-1">
-                      Lo encontrás en la URL: docs.google.com/spreadsheets/d/<span className="text-amber">[ID]</span>/edit
+                    <p id="setup-sheet-hint" className="text-xs text-ink-300 mt-1">
+                      Lo encontrás en la URL: docs.google.com/spreadsheets/d/<span className="text-paper">[ID]</span>/edit
                     </p>
                   </div>
 
                   <div>
-                    <label className="eyebrow block mb-2">Ruta al .json de credenciales</label>
+                    <label htmlFor="setup-creds" className="eyebrow block mb-2">Ruta al .json de credenciales</label>
                     <input
+                      id="setup-creds"
                       type="text"
                       value={config.googleCredsPath}
                       onChange={(e) => setConfig({ ...config, googleCredsPath: e.target.value })}
                       placeholder="C:\Users\Gonzalo\credenciales.json"
-                      className="w-full bg-ink-900/60 border border-ink-500 text-paper px-4 py-3 focus:border-amber transition-colors text-sm font-mono"
+                      className="form-input font-mono"
                     />
                   </div>
 
                   <button
                     onClick={testConnection}
                     disabled={!config.googleSheetId || !config.googleCredsPath || testing}
-                    className="mt-2 inline-flex items-center gap-2 text-amber hover:text-amber-light text-sm border border-amber/40 px-4 py-2 hover:bg-amber/5 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+                    className="mt-2 inline-flex min-h-11 items-center gap-2 text-paper text-sm border border-control px-4 py-2 hover:border-ink-300 hover:bg-ink-700/40 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
                   >
                     {testing ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
                     Probar conexión
@@ -161,6 +166,7 @@ export default function SetupWizard({ onComplete }: SetupWizardProps) {
 
                   {testResult && (
                     <motion.div
+                      role="status"
                       initial={{ opacity: 0, y: -8 }}
                       animate={{ opacity: 1, y: 0 }}
                       className={`text-sm flex items-start gap-2 ${
@@ -194,37 +200,40 @@ export default function SetupWizard({ onComplete }: SetupWizardProps) {
 
                 <div className="grid grid-cols-2 gap-6">
                   <div>
-                    <label className="eyebrow block mb-2">Día de cierre tarjeta</label>
+                    <label htmlFor="setup-cierre" className="eyebrow block mb-2">Día de cierre tarjeta</label>
                     <input
+                      id="setup-cierre"
                       type="number"
                       min={1}
                       max={31}
                       value={config.cardCutoffDay}
                       onChange={(e) => setConfig({ ...config, cardCutoffDay: parseInt(e.target.value) || 1 })}
-                      className="w-full bg-ink-900/60 border border-ink-500 text-paper px-4 py-3 focus:border-amber font-mono"
+                      className="form-input font-mono"
                     />
                   </div>
                   <div>
-                    <label className="eyebrow block mb-2">Día de vencimiento</label>
+                    <label htmlFor="setup-venc" className="eyebrow block mb-2">Día de vencimiento</label>
                     <input
+                      id="setup-venc"
                       type="number"
                       min={1}
                       max={31}
                       value={config.cardDueDay}
                       onChange={(e) => setConfig({ ...config, cardDueDay: parseInt(e.target.value) || 1 })}
-                      className="w-full bg-ink-900/60 border border-ink-500 text-paper px-4 py-3 focus:border-amber font-mono"
+                      className="form-input font-mono"
                     />
                   </div>
                   <div className="col-span-2">
-                    <label className="eyebrow block mb-2">TNA Mercado Pago (%)</label>
+                    <label htmlFor="setup-tna" className="eyebrow block mb-2">TNA Mercado Pago (%)</label>
                     <input
+                      id="setup-tna"
                       type="number"
                       step="0.1"
                       value={config.mpTna}
                       onChange={(e) => setConfig({ ...config, mpTna: parseFloat(e.target.value) || 0 })}
-                      className="w-full bg-ink-900/60 border border-ink-500 text-paper px-4 py-3 focus:border-amber font-mono"
+                      className="form-input font-mono"
                     />
-                    <p className="text-[11px] text-ink-300 mt-1">
+                    <p className="text-xs text-ink-300 mt-1">
                       Tasa actual ~24-27%. Lo podés actualizar después en Ajustes.
                     </p>
                   </div>
@@ -237,7 +246,7 @@ export default function SetupWizard({ onComplete }: SetupWizardProps) {
               <button
                 onClick={() => setStep(step - 1)}
                 disabled={step === 1}
-                className="text-ink-300 hover:text-paper transition-colors text-sm disabled:opacity-30 disabled:cursor-not-allowed"
+                className="min-h-11 text-ink-300 hover:text-paper transition-colors text-sm disabled:opacity-30 disabled:cursor-not-allowed"
               >
                 ← Atrás
               </button>
@@ -249,23 +258,26 @@ export default function SetupWizard({ onComplete }: SetupWizardProps) {
                     (step === 1 && !config.nombre) ||
                     (step === 2 && (!testResult?.ok))
                   }
-                  className="inline-flex items-center gap-2 bg-amber text-ink-900 px-6 py-3 text-sm font-medium hover:bg-amber-light transition-all disabled:opacity-30 disabled:cursor-not-allowed"
+                  className="inline-flex min-h-11 items-center gap-2 bg-amber text-ink-900 px-6 py-3 text-sm font-medium hover:bg-amber-light transition-all disabled:opacity-30 disabled:cursor-not-allowed"
                 >
                   Continuar <ArrowRight className="w-4 h-4" />
                 </button>
               ) : (
                 <button
                   onClick={handleFinish}
-                  className="inline-flex items-center gap-2 bg-moss text-paper px-6 py-3 text-sm font-medium hover:bg-moss-light transition-all"
+                  disabled={finishing}
+                  aria-busy={finishing || undefined}
+                  className="inline-flex min-h-11 items-center gap-2 bg-amber text-ink-900 px-6 py-3 text-sm font-medium hover:bg-amber-light transition-all disabled:opacity-50"
                 >
-                  Empezar <Check className="w-4 h-4" />
+                  {finishing ? <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" /> : null}
+                  Empezar <Check className="w-4 h-4" aria-hidden="true" />
                 </button>
               )}
             </div>
           </motion.div>
         </AnimatePresence>
 
-        <p className="text-center text-[11px] text-ink-400 mt-8 tracking-wider uppercase">
+        <p className="text-center text-xs text-ink-300 mt-8">
           Tus datos viven solo en tu Google Sheets — nada se sube a la nube
         </p>
       </motion.div>

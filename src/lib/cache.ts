@@ -2,6 +2,13 @@
  * Caché en memoria del servidor con TTL.
  * Sobrevive entre requests pero se resetea al reiniciar el server.
  * Ideal para evitar rate limits de Google Sheets API.
+ *
+ * Límite conocido: en Vercel cada instancia serverless tiene su propio Map.
+ * `cacheInvalidate` sólo limpia la instancia que atendió la escritura, así que
+ * otra instancia puede servir datos de hasta un TTL de antigüedad. Para uso
+ * personal (una persona, pocas instancias) es aceptable; si molesta, bajar el
+ * TTL o pasar a `unstable_cache` + `revalidateTag`.
+ * Los errores no se cachean: si `fn()` falla, la próxima llamada reintenta.
  */
 
 interface CacheEntry<T> {
@@ -9,7 +16,7 @@ interface CacheEntry<T> {
   expiresAt: number;
 }
 
-const store = new Map<string, CacheEntry<any>>();
+const store = new Map<string, CacheEntry<unknown>>();
 
 const DEFAULT_TTL_MS = 3 * 60 * 1000; // 3 minutos
 

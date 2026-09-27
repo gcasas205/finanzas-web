@@ -2,17 +2,20 @@
 
 import { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Upload, FileText, CreditCard, Check, Loader2, Trash2 } from "lucide-react";
+import { Upload, FileText, CreditCard, Check, Loader2, Trash2, type LucideIcon } from "lucide-react";
 import { toast } from "sonner";
 import type { AppConfig, Transaction } from "@/types";
-import { formatPesos, formatFecha, formatMes } from "@/lib/utils";
+import { formatPesos, formatFecha, formatMes, cn } from "@/lib/utils";
+import type { VisaParsedResult, SueldoParsedResult } from "@/lib/pdf-parser";
+import { importApi, errorMessage } from "@/lib/api";
+import { Button } from "@/components/ui/Button";
 import { CATEGORIES } from "@/lib/categories";
 import { useTransactions } from "@/components/DataProvider";
 
 interface Props { config: AppConfig; }
 
 type DocType = "tarjeta" | "sueldo";
-type ParseResult = any;
+type ParseResult = VisaParsedResult | SueldoParsedResult;
 
 export default function ImportView({ config }: Props) {
   const { refresh } = useTransactions();
@@ -24,6 +27,7 @@ export default function ImportView({ config }: Props) {
   // Lista editable de la vista previa de tarjeta
   const [editedTxs, setEditedTxs] = useState<Transaction[]>([]);
   const fileRef = useRef<HTMLInputElement>(null);
+  const [dragging, setDragging] = useState(false);
 
   useEffect(() => {
     if (result?.type === "visa") setEditedTxs(result.transactions ?? []);
@@ -39,12 +43,11 @@ export default function ImportView({ config }: Props) {
       formData.append("file", f);
       formData.append("tipo", docType);
       formData.append("action", "preview");
-      const r = await fetch("/api/import-pdf", { method: "POST", body: formData });
-      const data = await r.json();
-      if (data.error) toast.error(data.error);
-      else setResult(data.result);
-    } catch (e: any) {
-      toast.error("Error al procesar: " + (e?.message ?? "desconocido"));
+      const data = await importApi.pdf<{ result: ParseResult }>(formData);
+      setResult(data.result);
+    } catch (e) {
+      toast.error(errorMessage(e, "No se pudo procesar el PDF"), { duration: 7000 });
+      setFile(null);
     } finally {
       setParsing(false);
     }
@@ -66,19 +69,14 @@ export default function ImportView({ config }: Props) {
         // Se manda la lista revisada (editada / sin las filas quitadas)
         formData.append("transactions", JSON.stringify(editedTxs));
       }
-      const r = await fetch("/api/import-pdf", { method: "POST", body: formData });
-      const data = await r.json();
-      if (data.ok) {
-        const count = data.imported ?? (docType === "sueldo" ? 1 : editedTxs.length);
-        toast.success(`Importados ${count} registros`);
-        setResult(null);
-        setFile(null);
-        refresh();
-      } else {
-        toast.error(data.error || "Error al importar");
-      }
-    } catch (e: any) {
-      toast.error("Error: " + (e?.message ?? "desconocido"));
+      const data = await importApi.pdf<{ imported: number }>(formData);
+      const count = data.imported;
+      toast.success(`${count} registro${count === 1 ? "" : "s"} importado${count === 1 ? "" : "s"}`);
+      setResult(null);
+      setFile(null);
+      refresh();
+    } catch (e) {
+      toast.error(errorMessage(e, "No se pudo importar"), { duration: 7000 });
     } finally {
       setImporting(false);
     }
@@ -89,15 +87,12 @@ export default function ImportView({ config }: Props) {
       <header className="mb-10">
         <div className="eyebrow mb-2">Importar</div>
         <h1 className="display text-3xl sm:text-5xl text-paper">
-          Desde tus <em className="italic text-amber">PDFs</em>
+          Desde tus <em className="italic">PDFs</em>
         </h1>
-        <p className="text-ink-300 text-sm mt-2">
-          Subí tu resumen de tarjeta o recibo de sueldo y se parsean automáticamente
-        </p>
       </header>
 
       {/* Doc type selector */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-8">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-8" role="group" aria-label="Tipo de documento">
         <TypeCard
           active={docType === "tarjeta"}
           onClick={() => { setDocType("tarjeta"); setResult(null); setFile(null); }}
@@ -119,24 +114,35 @@ export default function ImportView({ config }: Props) {
         role="button"
         tabIndex={0}
         onClick={() => fileRef.current?.click()}
+        aria-label={file ? `Archivo elegido: ${file.name}. Elegir otro PDF` : "Elegir un PDF"}
         onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); fileRef.current?.click(); } }}
-        className={`surface p-8 sm:p-12 text-center cursor-pointer transition-all hover:bg-ink-700/30 group ${
-          parsing ? "pointer-events-none opacity-70" : ""
-        }`}
+        onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
+        onDragLeave={() => setDragging(false)}
+        onDrop={(e) => {
+          e.preventDefault();
+          setDragging(false);
+          const f = e.dataTransfer.files?.[0];
+          if (f) handleFileSelect(f);
+        }}
+        className={cn(
+          "surface p-8 sm:p-12 text-center cursor-pointer transition-all hover:bg-ink-700/30 group border-dashed",
+          dragging && "border-paper bg-ink-700/40",
+          parsing && "pointer-events-none opacity-70",
+        )}
       >
-        <input ref={fileRef} type="file" accept=".pdf" className="hidden"
-          onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFileSelect(f); }} />
+        <input ref={fileRef} type="file" accept=".pdf,application/pdf" className="hidden" tabIndex={-1}
+          onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFileSelect(f); e.target.value = ""; }} />
         {parsing ? (
           <div className="flex flex-col items-center gap-3" role="status" aria-live="polite">
-            <Loader2 className="w-8 h-8 text-amber animate-spin" />
-            <p className="text-sm text-ink-200">Analizando PDF...</p>
+            <Loader2 className="w-8 h-8 text-ink-200 animate-spin" aria-hidden="true" />
+            <p className="text-sm text-ink-200">Analizando PDF…</p>
           </div>
         ) : (
           <div className="flex flex-col items-center gap-3">
-            <Upload className="w-8 h-8 text-ink-300 group-hover:text-amber transition-colors" strokeWidth={1.5} />
+            <Upload className="w-8 h-8 text-ink-300 group-hover:text-paper transition-colors" strokeWidth={1.5} aria-hidden="true" />
             <div>
-              <p className="text-sm text-paper">{file ? file.name : "Hacé clic para seleccionar un PDF"}</p>
-              <p className="text-[11px] text-ink-400 mt-1">o arrastrá el archivo aquí</p>
+              <p className="text-sm text-paper">{file ? file.name : "Tocá para elegir un PDF"}</p>
+              <p className="text-xs text-ink-300 mt-1">o arrastralo acá · máximo 10 MB</p>
             </div>
           </div>
         )}
@@ -147,6 +153,7 @@ export default function ImportView({ config }: Props) {
         {result && (
           <motion.div
             initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -16 }}
+            transition={{ duration: 0.26, ease: [0.16, 1, 0.3, 1] }}
             className="mt-8"
           >
             {result.type === "visa" && (
@@ -159,25 +166,26 @@ export default function ImportView({ config }: Props) {
             {result.type === "sueldo" && <SueldoPreview result={result} />}
 
             <div className="flex flex-col sm:flex-row sm:justify-end gap-3 sm:gap-4 mt-6">
-              <button
+              <Button
+                variant="fantasma"
                 onClick={() => { setResult(null); setFile(null); }}
-                className="px-5 py-2.5 text-sm text-ink-300 hover:text-paper transition-colors order-2 sm:order-1"
+                className="order-2 sm:order-1"
               >
                 Cancelar
-              </button>
-              <button
+              </Button>
+              <Button
                 onClick={handleImport}
-                disabled={importing || (docType === "tarjeta" && editedTxs.length === 0)}
-                aria-busy={importing}
-                className="inline-flex items-center justify-center gap-2 bg-moss text-paper px-6 py-2.5 text-sm font-medium hover:bg-moss-light disabled:opacity-50 transition-all order-1 sm:order-2"
+                isLoading={importing}
+                disabled={docType === "tarjeta" && editedTxs.length === 0}
+                className="order-1 sm:order-2"
               >
-                {importing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+                {!importing && <Check className="w-4 h-4" aria-hidden="true" />}
                 {importing
-                  ? "Importando..."
+                  ? "Importando…"
                   : docType === "tarjeta"
                     ? `Importar ${editedTxs.length} movimiento${editedTxs.length === 1 ? "" : "s"}`
                     : "Importar todo"}
-              </button>
+              </Button>
             </div>
           </motion.div>
         )}
@@ -186,21 +194,23 @@ export default function ImportView({ config }: Props) {
   );
 }
 
+/** Tarjeta elegible: lo elegido va en la voz de selección (borde y fondo neutros fuertes). */
 function TypeCard({ active, onClick, icon: Icon, label, description }: {
-  active: boolean; onClick: () => void; icon: any; label: string; description: string;
+  active: boolean; onClick: () => void; icon: LucideIcon;
+  label: string; description: string;
 }) {
   return (
-    <button onClick={onClick}
-      className={`surface p-6 text-left transition-all ${active ? "border-amber bg-amber/5" : "hover:bg-ink-700/20"}`}>
-      <Icon className={`w-5 h-5 mb-3 ${active ? "text-amber" : "text-ink-300"}`} strokeWidth={1.5} />
-      <div className={`text-sm mb-1 ${active ? "text-paper" : "text-ink-200"}`}>{label}</div>
-      <div className="text-[11px] text-ink-400">{description}</div>
+    <button type="button" onClick={onClick} aria-pressed={active}
+      className={cn("surface p-6 text-left transition-all", active ? "!border-seleccion bg-ink-700/50" : "hover:bg-ink-700/20")}>
+      <Icon className={cn("w-5 h-5 mb-3", active ? "text-paper" : "text-ink-300")} strokeWidth={1.5} />
+      <div className={cn("text-sm mb-1", active ? "text-paper font-medium" : "text-ink-200")}>{label}</div>
+      <div className="text-xs text-ink-300">{description}</div>
     </button>
   );
 }
 
 function VisaPreview({ result, txs, onChange }: {
-  result: any; txs: Transaction[]; onChange: (t: Transaction[]) => void;
+  result: VisaParsedResult; txs: Transaction[]; onChange: (t: Transaction[]) => void;
 }) {
   const total = txs.reduce((s, t) => s + t.monto, 0);
 
@@ -222,45 +232,49 @@ function VisaPreview({ result, txs, onChange }: {
             {result.cierre && <span>Cierre: {result.cierre}</span>}
             {result.vencimiento && <span>Vencimiento: {result.vencimiento}</span>}
           </div>
-          <p className="text-[11px] text-ink-400 mt-2">
+          <p className="text-xs text-ink-300 mt-2">
             Revisá antes de importar: podés corregir descripción, categoría y monto, o quitar filas con la papelera.
           </p>
         </div>
         <div className="text-left sm:text-right shrink-0">
-          <div className="eyebrow text-terra mb-1">Total</div>
-          <div className="display text-2xl text-terra-light tabular">{formatPesos(total)}</div>
+          <div className="eyebrow mb-1">Total</div>
+          <div className="display text-2xl text-paper tabular">{formatPesos(total)}</div>
         </div>
       </div>
 
       <div className="max-h-[28rem] overflow-y-auto overflow-x-auto -mx-4 sm:mx-0 px-4 sm:px-0">
         <table className="w-full min-w-[640px]">
+          <caption className="sr-only">Movimientos detectados en el resumen</caption>
           <thead>
             <tr className="hairline-b">
-              <th className="eyebrow text-left px-2 py-2">Consumo</th>
-              <th className="eyebrow text-left px-2 py-2">Pago</th>
-              <th className="eyebrow text-left px-2 py-2">Descripción</th>
-              <th className="eyebrow text-left px-2 py-2">Categoría</th>
-              <th className="eyebrow text-right px-2 py-2">Monto</th>
-              <th className="eyebrow text-right px-2 py-2 w-10"></th>
+              <th scope="col" className="eyebrow text-left px-2 py-2">Consumo</th>
+              <th scope="col" className="eyebrow text-left px-2 py-2">Pago</th>
+              <th scope="col" className="eyebrow text-left px-2 py-2">Descripción</th>
+              <th scope="col" className="eyebrow text-left px-2 py-2">Categoría</th>
+              <th scope="col" className="eyebrow text-right px-2 py-2">Monto</th>
+              <th scope="col" className="eyebrow text-right px-2 py-2 w-10"><span className="sr-only">Quitar</span></th>
             </tr>
           </thead>
           <tbody>
             {txs.map((tx, i) => (
               <tr key={i} className="hairline-b last:border-0">
                 <td className="px-2 py-2 text-xs text-ink-200 font-mono tabular whitespace-nowrap">{formatFecha(tx.fechaConsumo)}</td>
-                <td className="px-2 py-2 text-xs text-amber font-mono tabular whitespace-nowrap">{formatFecha(tx.fechaPago)}</td>
+                <td className="px-2 py-2 text-xs text-paper font-mono tabular whitespace-nowrap">{formatFecha(tx.fechaPago)}</td>
                 <td className="px-2 py-2">
                   <input
                     value={tx.descripcion}
                     onChange={(e) => update(i, { descripcion: e.target.value })}
-                    className="w-full bg-transparent border-b border-transparent hover:border-ink-500 focus:border-amber text-sm text-paper py-1 transition-colors"
+                    aria-label={`Descripción de la fila ${i + 1}`}
+                    maxLength={100}
+                    className="w-full bg-transparent border-b border-control/60 hover:border-control focus:border-amber text-sm text-paper py-1 transition-colors"
                   />
                 </td>
                 <td className="px-2 py-2">
                   <select
                     value={tx.categoria}
                     onChange={(e) => update(i, { categoria: e.target.value })}
-                    className="bg-ink-800 border border-ink-500 text-xs text-ink-100 px-2 py-1 focus:border-amber cursor-pointer max-w-[130px]"
+                    aria-label={`Categoría de ${tx.descripcion}`}
+                    className="select-native bg-ink-800 border border-control text-xs text-ink-100 pl-2 pr-8 py-1.5 focus:border-amber cursor-pointer max-w-[150px]"
                   >
                     {CATEGORIES.map(c => <option key={c.name} value={c.name}>{c.name}</option>)}
                   </select>
@@ -269,16 +283,18 @@ function VisaPreview({ result, txs, onChange }: {
                   <input
                     type="number" step="0.01" value={tx.monto}
                     onChange={(e) => update(i, { monto: parseFloat(e.target.value) || 0 })}
-                    className="w-24 bg-transparent border-b border-transparent hover:border-ink-500 focus:border-amber text-sm text-right font-mono tabular text-terra-light py-1 transition-colors"
+                    aria-label={`Monto de ${tx.descripcion}`}
+                    className="w-28 bg-transparent border-b border-control/60 hover:border-control focus:border-amber text-sm text-right font-mono tabular text-paper py-1 transition-colors"
                   />
                 </td>
                 <td className="px-2 py-2 text-right">
                   <button
                     onClick={() => remove(i)}
-                    className="p-1.5 text-ink-400 hover:text-terra-light transition-colors"
-                    title="Quitar de la importación"
+                    type="button"
+                    className="p-2.5 text-ink-300 hover:text-terra-light transition-colors"
+                    aria-label={`Quitar ${tx.descripcion} de la importación`}
                   >
-                    <Trash2 className="w-4 h-4" />
+                    <Trash2 className="w-4 h-4" aria-hidden="true" />
                   </button>
                 </td>
               </tr>
@@ -295,7 +311,7 @@ function VisaPreview({ result, txs, onChange }: {
   );
 }
 
-function SueldoPreview({ result }: { result: any }) {
+function SueldoPreview({ result }: { result: SueldoParsedResult }) {
   const s = result.sueldo;
   if (!s) return <div className="surface p-8 text-ink-300 italic">No se pudo parsear el recibo.</div>;
   return (
@@ -305,8 +321,8 @@ function SueldoPreview({ result }: { result: any }) {
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-12 gap-y-4 text-sm">
         <Item label="Cargo" value={s.cargo || "—"} />
         <Item label="Período trabajado" value={s.periodoTrabajado ? formatMes(s.periodoTrabajado) : "—"} />
-        <Item label="Período de pago" value={s.periodoPago ? formatMes(s.periodoPago) : "—"} accent />
-        <Item label="Fecha estimada pago" value={s.fechaPago || "—"} accent />
+        <Item label="Período de pago" value={s.periodoPago ? formatMes(s.periodoPago) : "—"} />
+        <Item label="Fecha estimada pago" value={s.fechaPago || "—"} />
         <div className="col-span-1 sm:col-span-2 hairline-t mt-2 pt-4" />
         <Item label="Sueldo básico (bruto)" value={formatPesos(s.bruto)} mono />
         <div className="hidden sm:block" />
@@ -317,12 +333,12 @@ function SueldoPreview({ result }: { result: any }) {
         <div className="col-span-1 sm:col-span-2 hairline-t mt-2 pt-4" />
         <div className="col-span-1 sm:col-span-2 flex items-end justify-between">
           <div>
-            <div className="eyebrow text-moss-light mb-1">Total neto</div>
-            <div className="display text-4xl text-moss-light tabular">{formatPesos(s.neto)}</div>
+            <div className="eyebrow mb-1">Total neto</div>
+            <div className="display text-4xl text-paper tabular">{formatPesos(s.neto)}</div>
           </div>
           {s.neto > 0 && (
-            <div className="flex items-center gap-2 text-xs text-moss-light">
-              <Check className="w-4 h-4" />
+            <div className="flex items-center gap-2 text-xs text-ink-200">
+              <Check className="w-4 h-4 text-moss-light" aria-hidden="true" />
               Ingreso en {s.periodoPago ? formatMes(s.periodoPago) : "—"}
             </div>
           )}
@@ -332,11 +348,11 @@ function SueldoPreview({ result }: { result: any }) {
   );
 }
 
-function Item({ label, value, accent, mono }: { label: string; value: string; accent?: boolean; mono?: boolean }) {
+function Item({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
   return (
     <div>
-      <div className="text-[11px] text-ink-400 uppercase tracking-wider mb-0.5">{label}</div>
-      <div className={`${accent ? "text-amber" : "text-paper"} ${mono ? "font-mono tabular" : ""}`}>{value}</div>
+      <div className="text-xs text-ink-300 mb-0.5">{label}</div>
+      <div className={cn("text-paper", mono && "font-mono tabular")}>{value}</div>
     </div>
   );
 }

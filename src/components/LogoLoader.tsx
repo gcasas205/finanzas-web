@@ -1,3 +1,5 @@
+import { PALETTE } from "@/lib/palette";
+
 /**
  * Estado de carga unificado: el mark "F." de la marca con un anillo ámbar
  * girando alrededor. Reemplaza los textos sueltos de "Cargando..." y los
@@ -20,7 +22,7 @@ export default function LogoLoader({
         <svg className="absolute -inset-2 w-20 h-20 animate-spin" viewBox="0 0 40 40" fill="none">
           <circle
             cx="20" cy="20" r="17"
-            stroke="#C9A24B" strokeWidth="2.5" strokeLinecap="round"
+            stroke={PALETTE.marca} strokeWidth="2.5" strokeLinecap="round"
             strokeDasharray="30 78"
           />
         </svg>

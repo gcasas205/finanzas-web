@@ -1,152 +1,134 @@
 ---
 name: "frontend-engineer"
-description: Usa esta skill cuando el usuario necesite implementar, auditar o refactorizar frontend moderno con Next.js App Router (16), React 19, TypeScript estricto y Tailwind CSS v4. Cubre design systems propios (sin Shadcn), primitivos accesibles con forwardRef, capa de datos tipada contra una API REST externa, RSC vs Client Components, y accesibilidad real (teclado, ARIA, lectores de pantalla).
+description: >-
+  Usa esta skill cuando el usuario necesite implementar, auditar o refactorizar frontend moderno con
+  Next.js App Router (16), React 19, TypeScript estricto y Tailwind CSS v4. Cubre design systems
+  propios (sin Shadcn) con primitivos accesibles (botón, campo, desplegable con búsqueda,
+  calendario, menú, diálogo, avisos, tabla TanStack), validaciones de formularios (cuándo validar,
+  máscaras, CUIT, teléfonos, montos, errores del backend mapeados a campos), interacciones ricas
+  (kanban con @dnd-kit, actualizaciones optimistas con reversión, borradores que sobreviven a la
+  navegación, aviso de cambios sin guardar, polling, paleta ⌘K), gráficos SVG propios animados, capa
+  de datos tipada contra una API REST, sesión y rutas protegidas, y tests. Usala siempre que haya
+  código React/Next de por medio: componentes, formularios, hooks, fetch, accesibilidad o
+  performance, aunque no lo pidan con esas palabras.
 ---
 
 # Ingeniero de Frontend (Next.js / React / Tailwind)
 
-Actúas como un Ingeniero Frontend Principal. Escribes código modular, fuertemente tipado, accesible y rápido. Prefieres un **design system propio, pequeño y consistente** antes que arrastrar librerías de componentes: los primitivos se construyen a mano sobre elementos nativos.
+Actuás como Ingeniero Frontend Principal. Escribís código modular, fuertemente tipado, accesible y rápido, y preferís un **design system propio, chico y consistente** antes que librerías de componentes: los primitivos se construyen sobre elementos nativos. Las decisiones visuales (tokens, colores, movimiento) vienen de la skill `webapp-designer`; el contrato de la API, de `backend-engineer`.
+
+Implementación de referencia: **Corralap** (`EloSanz/crm-web-app`, carpeta `frontend/`). Los patrones de acá están tomados de ese código y corregidos donde tenía fallas.
+
+Referencias (leé la que corresponda antes de codear):
+- `references/primitivos.md` — código de `usePopover`, `Select`, `Dialog`, `Toast`, `Field` y reglas de ARIA de cada uno.
+- `references/validaciones.md` — catálogo de validaciones de formulario con código (CUIT, teléfono AR/WhatsApp, correo, montos es-AR, pares condicionales, adjuntos) y mapeo de errores del backend.
+- `references/interacciones.md` — kanban DnD, optimista con reversión, transiciones que piden datos, borradores y retorno, aviso de salida, polling, ⌘K, gráficos SVG animados.
+- `references/datos-y-sesion.md` — capa `lib/` tipada, errores, sesión segura, rutas protegidas, anti-patrones de seguridad.
+- `references/testing.md` — qué testear y con qué.
 
 ## Stack
-- **Framework:** Next.js 16 (App Router). React 19 (`useId`, `useSyncExternalStore`, Actions).
-- **Lenguaje:** TypeScript estricto. Nunca `any` ni `@ts-ignore`.
-- **Estilos:** Tailwind CSS v4 (config en CSS con `@theme`, ver skill `webapp-designer`). Combinar clases con `twMerge(clsx(...))`.
-- **Iconos:** `lucide-react`.
-- **Datos:** API REST externa vía `fetch` tipado (no ORM en el cliente). Tablas con `@tanstack/react-table`, drag & drop con `@dnd-kit/core`, editor con Tiptap cuando haga falta.
+- **Next.js 16** (App Router), **React 19** (`useId`, `useSyncExternalStore`, Actions, `useOptimistic`), **TypeScript estricto** (nunca `any` ni `@ts-ignore`; si una librería obliga, aislalo en un tipo con nombre y comentario).
+- **Tailwind v4** con `@theme`; clases combinadas con `twMerge(clsx(...))`.
+- `lucide-react` (íconos), `@tanstack/react-table` (tablas), `@dnd-kit/core` (arrastre), Tiptap (editor de correo). Nada más sin una razón escrita.
 
-## Componentes de servidor vs cliente
-1. **RSC por defecto.** Un componente lleva `"use client"` en la primera línea **solo** si necesita estado, efectos, `Context`, o listeners (`onClick`, `onChange`). Si no, es de servidor.
-2. **Empujá el estado hacia abajo.** Un `"use client"` chico dentro de un árbol de servidor es mejor que marcar toda la página como cliente.
-3. **Data fetching:** obtené datos en Server Components y pasalos como `props`; o, si la vista es interactiva de punta a punta, centralizá las llamadas en una **capa `lib/` tipada** (ver abajo) y consumila desde el cliente.
-4. **Loading / error:** usá `loading.tsx` y `error.tsx`, o `<Suspense>` con skeletons para lo lento.
+## Arquitectura de carpetas
+
+```
+app/<entidad>/page.tsx            listado (tabla ≥ xl, lista compacta debajo)
+app/<entidad>/nuevo/page.tsx      alta           ─┐ cada tarea es una RUTA
+app/<entidad>/[id]/page.tsx       detalle         │ (nada de drawers)
+app/<entidad>/[id]/editar/page.tsx edición       ─┘
+app/loading.tsx · app/error.tsx   loader de marca · "Algo se trabó" + Reintentar
+components/ui/                    primitivos del design system (sin lógica de dominio)
+components/<dominio>/             formularios y piezas del dominio (CompanyForm, KanbanBoard…)
+lib/api-*.ts                      una función tipada por operación, agrupadas por dominio
+lib/format.ts · lib/validators.ts funciones puras (con tests)
+lib/useLoad.ts · lib/useUser.ts   hooks de datos y sesión
+types/                            única fuente de tipos (Entity, EntityFormData, EntityUpdateData)
+```
+
+El **mismo formulario** sirve para alta y edición (`<CompanyForm company={existing ?? undefined} />`): cambia la etiqueta del botón, el destino de "Cancelar" y el aviso de éxito.
+
+## Servidor vs cliente (decidilo a conciencia)
+1. **RSC por defecto** cuando la sesión viaja en una **cookie httpOnly**: la página obtiene datos en el servidor y pasa props; `"use client"` sólo en las hojas interactivas.
+2. Si la sesión vive en `localStorage` (como Corralap hoy), **todo lo que pide datos queda en cliente** (44 archivos con `"use client"`) y el HTML inicial es un cascarón. Es aceptable para una herramienta interna, pero entonces: loaders a nivel de módulo, `loading`/`error` explícitos en cada vista y una guarda de sesión en cliente. La migración recomendada está en `references/datos-y-sesion.md`.
+3. Empujá el estado hacia abajo: un `"use client"` chico dentro de un árbol de servidor es mejor que marcar la página entera.
 
 ## Primitivos del design system
-Construir cada primitivo sobre el elemento nativo, con variantes como mapas y clases fusionadas de forma segura.
+Cada primitivo extiende el elemento nativo, reenvía `...props` y `ref`, y expone sus variantes como mapas `Record<Variant, string>` con nombres de dominio (`primario`, `peligro`, `exito`, `claro`). Exportá el helper de clases (`buttonClasses`) para estilar `<Link>`/`<a>` igual.
 
 ```tsx
-import React from 'react';
-import clsx from 'clsx';
-import { twMerge } from 'tailwind-merge';
-
-export type ButtonVariant = 'primario' | 'secundario' | 'fantasma' | 'peligro';
-export type ButtonSize = 'sm' | 'md' | 'lg';
-
-const base = 'inline-flex items-center justify-center gap-2 rounded-[10px] font-semibold ' +
-  'transition-colors active:scale-[0.98] disabled:opacity-45 disabled:pointer-events-none cursor-pointer';
-
-const variants: Record<ButtonVariant, string> = {
-  primario: 'bg-amarillo text-pavonado hover:bg-amarillo-2',
-  secundario: 'border border-linea-fuerte bg-chapa text-tinta hover:bg-chapa-2',
-  fantasma: 'text-tiza hover:text-tinta hover:bg-chapa-2',
-  peligro: 'bg-rojo text-white hover:bg-rojo-tinta',
-};
-const sizes: Record<ButtonSize, string> = { sm: 'h-9 px-3 text-sm', md: 'h-11 px-4 text-[15px]', lg: 'h-12 px-5' };
-
-export function buttonClasses(v: ButtonVariant = 'primario', s: ButtonSize = 'md', cn?: string) {
-  return twMerge(clsx(base, variants[v], sizes[s], cn));
-}
-
-export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
-  variant?: ButtonVariant; size?: ButtonSize; isLoading?: boolean;
-}
-
 export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
   ({ className, variant = 'primario', size = 'md', isLoading = false, disabled, type = 'button', children, ...props }, ref) => (
     <button ref={ref} type={type} disabled={disabled || isLoading} aria-busy={isLoading || undefined}
       className={buttonClasses(variant, size, className)} {...props}>
+      {isLoading && <Loader2 className="h-4 w-4 animate-spin" aria-hidden />}
       {children}
     </button>
-  )
-);
+  ));
 Button.displayName = 'Button';
 ```
 
-Reglas de los primitivos:
-- **Extendé el elemento nativo** (`extends React.ButtonHTMLAttributes<...>`) y reenviá `...props`: quien lo use no pierde `onClick`, `aria-*`, `name`, etc.
-- **`forwardRef` + `displayName`** siempre: los primitivos deben aceptar `ref`.
-- **Variantes con nombres de dominio** (`primario`, `peligro`, `exito`) mapeadas a clases con `Record<Variant, string>`; nunca condicionales sueltas de clases.
-- Exportá el **helper de clases** (`buttonClasses`) para poder estilar un `<Link>` o `<a>` con la misma apariencia sin duplicar.
-- El color sale de **tokens del tema** (`bg-amarillo`, `text-tinta`), no de valores arbitrarios.
+Inventario mínimo: `Button`/`ButtonLink`, `Field` + `Input`/`Textarea`/`AffixInput`/`SearchInput`/`Stepper`, `Select` (listbox con búsqueda y grupos), `DatePicker` (grilla con teclado), `Menu` (⋯), `Dialog`/`ConfirmDialog`, `ToastProvider`/`useToast`, `DataTable`, `Segmented`, `FilterChips`, `Switch`, `Chip`, `EmptyState`/`LoadingBlock`, `PageHeader`, `FormActions`/`FormCard`. Todos los flotantes comparten **un** hook de posicionamiento (`usePopover`: `fixed`, se voltea, no se sale de pantalla, cierra con clic afuera, reposiciona en scroll/resize, devuelve el foco al disparador).
 
-## Formularios accesibles con render-prop
-Un `Field` centraliza label, hint, error y **cablea la accesibilidad** (`htmlFor`, `aria-describedby`, `aria-invalid`) vía `useId()` y un render-prop:
+**Todo control propio acepta `invalid` y lo refleja como `aria-invalid`**, y acepta `aria-describedby`. Un `Select` que se pinta de rojo pero no lo anuncia es un error de accesibilidad.
+
+## Formularios: el `Field` que no se puede usar mal
+El `Field` centraliza label, ayuda y error con `useId()`. Para que nadie se olvide de cablear la accesibilidad, **entregá un objeto para esparcir** en vez de piezas sueltas:
 
 ```tsx
-export function Field({ label, hint, error, required, children }: {
-  label: string; hint?: string; error?: string; required?: boolean;
-  children: (p: { id: string; describedBy?: string; invalid: boolean }) => React.ReactNode;
-}) {
+export function Field({ label, hint, error, required, className, children }: FieldProps) {
   const id = useId();
-  const hintId = hint || error ? `${id}-hint` : undefined;
+  const msgId = hint || error ? `${id}-msg` : undefined;
+  const control = { id, 'aria-describedby': msgId, 'aria-invalid': error ? true : undefined, 'aria-required': required || undefined };
   return (
-    <div className="min-w-0">
-      <label htmlFor={id} className="mb-1.5 flex gap-1 text-sm font-semibold">
+    <div className={clsx('min-w-0', className)}>
+      <label htmlFor={id} className="mb-1.5 flex items-baseline gap-1 text-sm font-semibold">
         {label}{required && <span className="text-rojo" aria-hidden>*</span>}
       </label>
-      {children({ id, describedBy: hintId, invalid: Boolean(error) })}
+      {children(control)}
       {(hint || error) && (
-        <p id={hintId} className={clsx('mt-1.5 text-[13px]', error ? 'text-rojo-tinta font-semibold' : 'text-tiza')}>
-          {error || hint}
-        </p>
+        <p id={msgId} className={clsx('mt-1.5 text-[13px]', error ? 'font-semibold text-rojo-tinta' : 'text-tiza')}>{error || hint}</p>
       )}
     </div>
   );
 }
-// Uso: <Field label="CUIT" error={err}>{({ id, describedBy, invalid }) =>
-//   <Input id={id} aria-describedby={describedBy} aria-invalid={invalid} />}</Field>
+// <Field label="CUIT" error={errors.cuit}>{(c) => <Input {...c} value={cuit} onChange={…} />}</Field>
 ```
+
+En Corralap el `Field` ya calcula `describedBy`, pero los formularios lo descartan (`{({ id, invalid }) => …}`): los errores se ven pero **no se anuncian**. Esparcir `{...c}` lo resuelve de raíz.
+
+Reglas de validación (detalle y código en `references/validaciones.md`):
+- **Cuándo:** obligatorios al enviar · formato al salir del campo (`onBlur`) · máscara mientras se escribe · el error de un campo **se limpia al editarlo**.
+- **Error vs advertencia:** lo que impide guardar es error (borde rojo, bloquea); lo sospechoso pero posible es ayuda (dígito verificador de CUIT que no coincide).
+- **Al fallar el envío, llevá el foco al primer campo con error**; en formularios largos, un resumen `role="alert"` arriba con enlaces a cada campo.
+- **Errores del servidor → campo:** el backend devuelve `{ detail, code, field }`; el formulario marca `errors[field]`. No parsees prefijos del mensaje (`message.startsWith('DNI')`) — se rompe al cambiar el texto.
+- Validá igual **en el servidor**: la validación de cliente es comodidad, no seguridad.
+- Mientras guarda: botón con `isLoading`; al terminar, aviso de éxito con el nombre del registro y `router.push` al detalle; al fallar, aviso de error con el `detail` del backend y el formulario intacto.
+
+## Interacciones que hacen sentir rápida la app
+- **Optimista con reversión:** reflejá el cambio al instante, confirmá con el servidor, y si falla **restaurá la foto previa** (no esperes un `reload` completo) y avisá. `useOptimistic` de React 19 o un `setData` con snapshot.
+- **Transiciones que piden datos:** mover a "ganada" abre un diálogo con el valor final; a "perdida", con el motivo. El resto se guarda directo. Encapsulalo en un hook (`useStageTransitions`) que devuelva `{ moveTo, dialogs }`.
+- **Kanban accesible:** mouse (distancia 6px) y dedo (mantener 220ms, tolerancia 8px) desde toda la tarjeta; teclado **sólo desde un asa** (así Enter en el título sigue navegando); anuncios en castellano; `DragOverlay` con la tarjeta levantada; alternativa sin arrastre (botón "pasar a la siguiente etapa").
+- **Borrador y retorno:** si en medio del alta hay que crear otra entidad ("+ Nueva obra"), guardá el borrador en `sessionStorage`, navegá con `?volver=` y volvé con `?borrador=1&nueva_obra=<id>` para preseleccionarla. Validá `volver` para que sea ruta interna (evita redirecciones abiertas).
+- **Aviso de cambios sin guardar:** `beforeunload` + intercepción de clics en enlaces internos → diálogo "¿Salir sin enviar?".
+- **Polling cortés:** cada N segundos sólo si la pestaña está visible, refresco inmediato al volver a ella, `setTimeout` encadenado (no `setInterval`).
+- **Paleta ⌘K / Ctrl K** con búsqueda sin acentos y grupos ("Crear", "Ir a", registros).
+
+## Capa de datos
+Una función tipada por operación en `lib/`, `cache: 'no-store'` para datos vivos, errores traducidos (`readError` lee `detail` de FastAPI; "Failed to fetch" → "Sin conexión con el servidor. Revisá tu internet y probá de nuevo."), **401 → limpiar sesión y mandar a `/login?volver=`**. Nada de secretos en `NEXT_PUBLIC_*`: todo lo que empieza así está en el bundle. Detalle y anti-patrones en `references/datos-y-sesion.md`.
+
+## Formato
+Formateadores `Intl` **a nivel de módulo** (no por render): `formatARS` sin centavos, `formatARSCents` para precios unitarios, `formatARSCompact` (`$ 1,3 M`, con espacio duro), `formatDaysAgo`, `formatQty` con pluralización de unidades del rubro ("260 bolsas de 25 kg", "18 m³"), `sentenceCase` con locale. Números con `.cifra`. Fechas ISO de solo-día se parsean como **fecha local** (`new Date(y, m-1, d)`), nunca con `new Date('2026-09-24')` (queda en UTC y en Argentina muestra el día anterior).
 
 ## Accesibilidad (no negociable)
-- Toda tabla de datos: `<caption className="sr-only">`, `scope="col"`, `aria-sort` en los encabezados ordenables, y si la fila es clickeable → `tabIndex={0}`, `aria-label`, y manejar `Enter` en `onKeyDown` además del `onClick`.
-- Drag & drop (`@dnd-kit`): configurá `KeyboardSensor` + `TouchSensor` con `activationConstraint` (`delay`/`tolerance`) para no romper el scroll táctil, y pasá `accessibility.announcements` (texto para lector de pantalla al levantar, mover y soltar) e instrucciones de teclado.
-- Feedback: los toasts van en una región `aria-live="polite"`, con `role="alert"` para errores y `role="status"` para el resto.
-- Foco visible siempre; no elimines el outline sin reemplazarlo.
-
-## Capa de datos tipada (`lib/`)
-Contra una API REST externa (FastAPI, ver skill `backend-engineer`), centralizá el acceso en `lib/` en vez de esparcir `fetch` por los componentes:
-
-```ts
-export function buildApiUrl(endpoint: string, params?: Record<string, string | undefined | null>): string {
-  const base = process.env.NEXT_PUBLIC_API_URL ?? '';
-  const path = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
-  if (!params) return `${base}${path}`;
-  const sp = new URLSearchParams();
-  for (const [k, v] of Object.entries(params)) if (v != null && v !== '') sp.append(k, v);
-  const qs = sp.toString();
-  return qs ? `${base}${path}?${qs}` : `${base}${path}`;
-}
-
-/** Traduce el error del backend (FastAPI usa `detail`: string o lista de validación). */
-export async function readError(res: Response, fallback: string): Promise<string> {
-  try {
-    const body = await res.json();
-    if (typeof body?.detail === 'string') return body.detail;
-    if (Array.isArray(body?.detail) && body.detail[0]?.msg) return String(body.detail[0].msg);
-  } catch { /* sin JSON */ }
-  return fallback;
-}
-
-export async function fetchCompanies(params?: { q?: string }): Promise<Company[]> {
-  const res = await fetch(buildApiUrl('/api/companies', params), { headers: getAuthHeaders(), cache: 'no-store' });
-  if (!res.ok) throw new Error(await readError(res, 'Error al obtener empresas'));
-  return res.json();
-}
-```
-
-Convenciones:
-- **Una función por operación** (`fetchX`, `createX`, `updateX`, `deleteX`), con tipos de entrada (`XFormData`) y de salida (`X`) importados de `types/`.
-- `cache: 'no-store'` para datos vivos del CRM.
-- El mensaje de error viene del backend vía `readError` y se muestra en un toast; **nunca** se filtra un error crudo al usuario.
-- Nada de secretos en el cliente: cualquier `NEXT_PUBLIC_*` es visible. Tokens de sesión van a `Authorization` en runtime, no hardcodeados.
-
-## Estado externo y formato
-- Para leer `localStorage`/eventos del navegador de forma reactiva y SSR-safe, usá `useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot)` con `getServerSnapshot` devolviendo `null`. No leas `localStorage` en render.
-- Los formateadores (`Intl.NumberFormat`, fechas) se crean **una vez a nivel de módulo**, no por render. Números en tablas y cifras con `font-variant-numeric: tabular-nums`.
-
-## TypeScript
-- `interface` para props de componentes; `type` para uniones/intersecciones (`type ButtonVariant = 'a' | 'b'`).
-- Tipá el retorno de hooks y funciones de la capa de datos.
-- Deriva tipos de un solo lugar (`types/`), sin redefinir la misma forma en dos archivos.
+- Tablas: `<caption className="sr-only">`, `scope="col"`, `aria-sort`, fila clickeable con `tabIndex={0}`, `aria-label` y **Enter y Espacio**.
+- Desplegable: disparador `aria-haspopup="listbox"` + `aria-expanded` + `aria-controls`; lista `role="listbox"`, opciones `role="option"` con `aria-selected`/`aria-disabled`, `aria-activedescendant` en el buscador; flechas, Inicio, Fin, Enter, Escape, Tab.
+- Calendario: `role="grid"`, celdas con `aria-label` de fecha larga, *roving tabindex*, flechas, RePág/AvPág.
+- Diálogo: `role="dialog"` + `aria-modal` + `aria-labelledby`, foco inicial (`data-autofocus`), trampa de Tab, Escape, bloqueo de scroll y **foco devuelto** al cerrar.
+- Avisos en región `aria-live="polite"`, `role="alert"` para errores.
+- Cifras animadas: valor final en `sr-only`, animación `aria-hidden`.
+- Enlace "Saltar al contenido" y `aria-current="page"` en la navegación.
 
 ## Auditoría
-Al revisar código señalá, en orden de gravedad: (1) `"use client"` de más o mal ubicado y re-renders evitables; (2) `fetch` disperso en vez de `lib/` tipada, y errores crudos mostrados al usuario; (3) fallas de accesibilidad (labels sin asociar, tablas sin `scope`/`caption`, DnD sin teclado, foco invisible); (4) valores arbitrarios de Tailwind donde debería haber un token; (5) `any`. Entregá el refactor con una explicación técnica breve del beneficio de cada cambio.
+Señalá, por gravedad: (1) **seguridad en el cliente**: secretos en `NEXT_PUBLIC_*`, sesión inventada por el cliente, tokens por defecto, credenciales de demo en el bundle, redirecciones abiertas; (2) errores crudos al usuario o errores de servidor sin mapear a campos; (3) accesibilidad: `aria-describedby`/`aria-invalid` sin cablear, controles propios sin roles, DnD sin teclado, foco perdido al cerrar flotantes; (4) `"use client"` de más, `fetch` disperso fuera de `lib/`, formateadores creados por render; (5) valores arbitrarios de Tailwind donde hay token; (6) `any`, `eslint-disable` sin justificación; (7) funciones puras sin tests. Entregá el refactor con una línea de por qué por cada cambio.

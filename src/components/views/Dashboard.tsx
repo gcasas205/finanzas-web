@@ -5,6 +5,7 @@ import { motion } from "framer-motion";
 import {
   TrendingUp, TrendingDown, Wallet, Zap,
   Calendar, Info, DollarSign,
+  type LucideIcon,
 } from "lucide-react";
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
@@ -18,12 +19,16 @@ import { getCategoryColor } from "@/lib/categories";
 import { useTransactions } from "@/components/DataProvider";
 import { resumenDolar, impactoPesosDolar } from "@/lib/dolar-calc";
 import LogoLoader from "@/components/LogoLoader";
+import { ErrorState, StaleDataBanner } from "@/components/ui/States";
 import AnimatedNumber, { AnimatedUsdAmount } from "@/components/AnimatedNumber";
+import { PALETTE } from "@/lib/palette";
+import { EmptyState } from "@/components/ui/States";
+import type { ChartTooltipProps } from "@/components/ui/chart";
 
 interface Props { config: AppConfig; }
 
 export default function Dashboard({ config }: Props) {
-  const { transactions, dolarOps, cotizacion, isLoading: loading } = useTransactions();
+  const { transactions, dolarOps, cotizacion, isLoading: loading, error, refresh } = useTransactions();
   const [selectedMonth, setSelectedMonth] = useState(() => {
     const d = new Date();
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
@@ -132,15 +137,19 @@ export default function Dashboard({ config }: Props) {
   }, [transactions]);
 
   if (loading) return <LogoLoader className="min-h-[70vh]" />;
+  if (error && transactions.length === 0 && dolarOps.length === 0) {
+    return <ErrorState message={error} onRetry={refresh} className="min-h-[70vh]" />;
+  }
 
   return (
     <div className="p-4 sm:p-6 lg:p-10 max-w-[1400px]">
+      {error && <StaleDataBanner message={error} onRetry={refresh} />}
       {/* Header */}
       <header className="mb-6 lg:mb-12 flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
         <div>
           <div className="eyebrow mb-2">{formatMes(selectedMonth)}</div>
           <h1 className="display text-4xl sm:text-5xl lg:text-6xl text-paper leading-none">
-            Tu <em className="italic text-amber">balance</em>
+            Tu <em className="italic">balance</em>
           </h1>
         </div>
 
@@ -150,7 +159,7 @@ export default function Dashboard({ config }: Props) {
             id="dashboard-mes"
             value={selectedMonth}
             onChange={(e) => setSelectedMonth(e.target.value)}
-            className="select-native bg-ink-800 border border-ink-500 text-paper pl-3 pr-9 py-2 text-sm focus:border-amber cursor-pointer"
+            className="select-native min-h-11 bg-ink-800 border border-control text-paper pl-3 pr-9 py-2 text-sm focus:border-amber cursor-pointer"
           >
             {months.map(m => (
               <option key={m} value={m}>{formatMes(m)}</option>
@@ -166,10 +175,10 @@ export default function Dashboard({ config }: Props) {
         transition={{ delay: 0.2 }}
         className="surface px-5 py-3 mb-8 flex items-start gap-3"
       >
-        <Info className="w-4 h-4 text-amber mt-0.5 shrink-0" strokeWidth={1.5} />
+        <Info className="w-4 h-4 text-ink-300 mt-0.5 shrink-0" strokeWidth={1.5} aria-hidden="true" />
         <p className="text-xs text-ink-200 leading-relaxed">
           <span className="text-paper">Cómo se cuentan los meses:</span> los gastos
-          de tarjeta se asignan al mes en que se <em className="text-amber italic">pagan</em> realmente
+          de tarjeta se asignan al mes en que se <em className="text-paper italic">pagan</em> realmente
           (según día de vencimiento {config.cardDueDay}). El sueldo se cuenta al mes
           siguiente del trabajado. Cambiá los ciclos en Ajustes.
         </p>
@@ -182,7 +191,7 @@ export default function Dashboard({ config }: Props) {
           variant="hero"
           eyebrow="Patrimonio total"
           value={patrimonioTotal}
-          accent="amber"
+          accent="ink"
           subtitle={`Pesos ${formatPesosCompact(acumuladoARS)} · USD ${formatPesosCompact(tenenciaUSDenARS)}`}
           icon={Wallet}
           delay={0}
@@ -210,39 +219,39 @@ export default function Dashboard({ config }: Props) {
         <motion.div
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5, delay: 0.2, ease: [0.22, 1, 0.36, 1] }}
+          transition={{ duration: 0.26, delay: 0.12, ease: [0.16, 1, 0.3, 1] }}
           className="surface p-4 sm:p-7 relative overflow-hidden col-span-2 sm:col-span-8"
         >
-          <div className="absolute top-0 left-0 right-0 h-px bg-moss" />
+          <div className="absolute top-0 left-0 right-0 h-px bg-ink-300" />
           <div className="flex items-center justify-between mb-4">
-            <div className="eyebrow text-[10px] text-moss-light">Posición en dólares</div>
+            <div className="eyebrow">Posición en dólares</div>
             <DollarSign className="w-4 h-4 text-ink-300 hidden sm:block" strokeWidth={1.5} />
           </div>
           <div className="grid grid-cols-3 gap-2 sm:gap-4">
             <div>
-              <div className="text-[9px] uppercase tracking-wider text-ink-400 mb-1">Tenencia</div>
+              <div className="text-xs text-ink-300 mb-1">Tenencia</div>
               <div className="display text-lg sm:text-3xl text-paper tabular leading-none">
                 <AnimatedUsdAmount value={dolar.tenenciaUSD} />
               </div>
-              <div className="text-[10px] text-ink-300 mt-1 truncate">
+              <div className="text-xs text-ink-300 mt-1 truncate">
                 {dolar.precioPromedioCompra > 0 ? `PPC ${formatPesosCompact(dolar.precioPromedioCompra)}` : "Sin compras"}
               </div>
             </div>
             <div>
-              <div className="text-[9px] uppercase tracking-wider text-ink-400 mb-1">Valor hoy</div>
+              <div className="text-xs text-ink-300 mb-1">Valor hoy</div>
               <div className="display text-lg sm:text-3xl text-paper tabular leading-none">
                 <AnimatedNumber value={tenenciaUSDenARS} format={formatPesosCompact} />
               </div>
-              <div className="text-[10px] text-ink-300 mt-1 truncate">
+              <div className="text-xs text-ink-300 mt-1 truncate">
                 {precioValuacion > 0 ? `@ ${formatPesosCompact(precioValuacion)}` : "Sin cotización"}
               </div>
             </div>
             <div>
-              <div className="text-[9px] uppercase tracking-wider text-ink-400 mb-1">Result. T.C.</div>
+              <div className="text-xs text-ink-300 mb-1">Result. T.C.</div>
               <div className={`display text-lg sm:text-3xl tabular leading-none ${resultadoTC >= 0 ? "text-moss-light" : "text-terra-light"}`}>
                 {resultadoTC >= 0 ? "+" : ""}<AnimatedNumber value={resultadoTC} format={formatPesosCompact} />
               </div>
-              <div className="text-[10px] text-ink-300 mt-1">latente</div>
+              <div className="text-xs text-ink-300 mt-1">latente</div>
             </div>
           </div>
         </motion.div>
@@ -250,7 +259,7 @@ export default function Dashboard({ config }: Props) {
         <KPICard
           eyebrow={`Mercado Pago · TNA ${config.mpTna}%`}
           value={mpGanancia30d}
-          accent="amber"
+          accent="ink"
           subtitle="Proyección 30 días"
           icon={Zap}
           delay={0.25}
@@ -267,31 +276,31 @@ export default function Dashboard({ config }: Props) {
               <div className="eyebrow mb-1">Evolución</div>
               <h2 className="display text-2xl text-paper">Últimos 6 meses</h2>
             </div>
-            <div className="flex gap-4 text-[11px]">
-              <LegendDot color="#6A8970" label="Ingresos" />
-              <LegendDot color="#A04A2F" label="Gastos" />
-              <LegendDot color="#C9A24B" label="Ahorro" />
+            <div className="flex gap-4 text-xs">
+              <LegendDot color={PALETTE.positivo} label="Ingresos" />
+              <LegendDot color={PALETTE.negativo} label="Gastos" />
+              <LegendDot color={PALETTE.serie} label="Ahorro" />
             </div>
           </div>
 
           {evolution.length > 0 ? (
             <ResponsiveContainer width="100%" height={280}>
               <BarChart data={evolution} margin={{ top: 10, right: 0, bottom: 0, left: 0 }}>
-                <CartesianGrid stroke="#252420" strokeDasharray="2 4" vertical={false} />
-                <XAxis dataKey="mesLabel" stroke="#8A8576" fontSize={11} tickLine={false} axisLine={false} />
-                <YAxis stroke="#8A8576" fontSize={11} tickLine={false} axisLine={false}
+                <CartesianGrid stroke={PALETTE.grilla} strokeDasharray="2 4" vertical={false} />
+                <XAxis dataKey="mesLabel" stroke={PALETTE.eje} fontSize={13} tickLine={false} axisLine={false} />
+                <YAxis stroke={PALETTE.eje} fontSize={13} tickLine={false} axisLine={false}
                   tickFormatter={(v) => formatPesosCompact(v)} />
                 <Tooltip
                   content={<EditorialTooltip />}
-                  cursor={{ fill: "rgba(244,241,234,0.03)" }}
+                  cursor={{ fill: PALETTE.cursor }}
                 />
-                <Bar dataKey="ingresos" fill="#6A8970" radius={[2, 2, 0, 0]} />
-                <Bar dataKey="egresos"  fill="#A04A2F" radius={[2, 2, 0, 0]} />
-                <Bar dataKey="ahorro"   fill="#C9A24B" radius={[2, 2, 0, 0]} />
+                <Bar dataKey="ingresos" name="Ingresos" fill={PALETTE.positivo} radius={[2, 2, 0, 0]} />
+                <Bar dataKey="egresos" name="Gastos" fill={PALETTE.negativo} radius={[2, 2, 0, 0]} />
+                <Bar dataKey="ahorro" name="Ahorro" fill={PALETTE.serie} radius={[2, 2, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           ) : (
-            <EmptyState message="Sin datos de evolución todavía" />
+            <EmptyState message="Sin datos de evolución todavía" action={{ label: "Cargar un movimiento", href: "/transactions?nuevo=1" }} />
           )}
         </div>
 
@@ -331,7 +340,7 @@ export default function Dashboard({ config }: Props) {
                       <div className="text-paper truncate">{c.name}</div>
                       <div className="text-ink-300 tabular">{formatPesos(c.value)}</div>
                     </div>
-                    <div className="text-ink-200 tabular text-[11px]">
+                    <div className="text-ink-200 tabular text-xs">
                       {c.pct.toFixed(0)}%
                     </div>
                   </div>
@@ -355,26 +364,26 @@ export default function Dashboard({ config }: Props) {
         </div>
 
         {upcomingPayments.length > 0 ? (
-          <div className="grid grid-cols-2 gap-x-12 gap-y-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-12 gap-y-1">
             {upcomingPayments.map((tx, i) => (
               <motion.div
                 key={tx.id}
                 initial={{ opacity: 0, x: -10 }}
                 animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: i * 0.04 }}
+                transition={{ delay: Math.min(i * 0.04, 0.22), duration: 0.18 }}
                 className="flex items-center justify-between py-3 hairline-b last:border-0"
               >
                 <div className="flex-1 min-w-0">
                   <div className="text-sm text-paper truncate">{tx.descripcion}</div>
-                  <div className="text-[11px] text-ink-300 mt-0.5 flex items-center gap-2">
+                  <div className="text-xs text-ink-300 mt-0.5 flex items-center gap-2">
                     <span>{formatFecha(tx.fechaPago)}</span>
                     {tx.cuotaTotal > 1 && (
-                      <span className="text-amber">· {tx.cuotaNumero}/{tx.cuotaTotal}</span>
+                      <span>· cuota {tx.cuotaNumero}/{tx.cuotaTotal}</span>
                     )}
                   </div>
                 </div>
-                <div className="text-sm font-mono tabular text-terra-light ml-4">
-                  -{formatPesos(tx.monto)}
+                <div className="text-sm font-mono tabular text-paper ml-4 whitespace-nowrap">
+                  <span className="text-ink-300" aria-hidden="true">−</span>{formatPesos(tx.monto)}
                 </div>
               </motion.div>
             ))}
@@ -395,19 +404,18 @@ interface KPICardProps {
   value: number;
   /** Si se pasa, se muestra en lugar de formatPesos(value) — para montos en USD u otros */
   valueText?: string;
-  accent: "moss" | "terra" | "amber" | "ink";
+  accent: "moss" | "terra" | "ink";
   subtitle: string;
-  icon?: any;
+  icon?: LucideIcon;
   delay?: number;
   className?: string;
 }
 
 function KPICard({ variant = "default", eyebrow, value, valueText, accent, subtitle, icon: Icon, delay = 0, className = "" }: KPICardProps) {
   const accentColors = {
-    moss: "#6A8970",
-    terra: "#D4886E",
-    amber: "#C9A24B",
-    ink: "#8A8576",
+    moss: PALETTE.positivo,
+    terra: PALETTE.negativoTexto,
+    ink: PALETTE.eje,
   };
   const color = accentColors[accent];
   const isHero = variant === "hero";
@@ -416,14 +424,14 @@ function KPICard({ variant = "default", eyebrow, value, valueText, accent, subti
     <motion.div
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.5, delay, ease: [0.22, 1, 0.36, 1] }}
+      transition={{ duration: 0.26, delay, ease: [0.16, 1, 0.3, 1] }}
       className={`surface p-4 sm:p-7 relative overflow-hidden ${className}`}
     >
       {/* Accent line */}
       <div className="absolute top-0 left-0 right-0 h-px" style={{ background: color }} />
 
       <div className="flex items-start justify-between mb-2 sm:mb-4">
-        <div className="eyebrow text-[8px] sm:text-[10px]" style={{ color }}>{eyebrow}</div>
+        <div className="eyebrow text-xs" style={{ color }}>{eyebrow}</div>
         {Icon && <Icon className="w-3 h-3 sm:w-4 sm:h-4 text-ink-300 hidden sm:block" strokeWidth={1.5} />}
       </div>
 
@@ -431,7 +439,7 @@ function KPICard({ variant = "default", eyebrow, value, valueText, accent, subti
         {valueText ?? <AnimatedNumber value={value} format={formatPesos} />}
       </div>
 
-      <div className="text-[9px] sm:text-[11px] text-ink-300 tracking-wide truncate">
+      <div className="text-xs text-ink-300 tracking-wide truncate">
         {subtitle}
       </div>
     </motion.div>
@@ -442,28 +450,28 @@ function LegendDot({ color, label }: { color: string; label: string }) {
   return (
     <div className="flex items-center gap-2 text-ink-200">
       <div className="w-2 h-2 rounded-full" style={{ background: color }} />
-      <span className="font-mono uppercase tracking-wider">{label}</span>
+      <span className="font-mono">{label}</span>
     </div>
   );
 }
 
-function EditorialTooltip({ active, payload, label }: any) {
+function EditorialTooltip({ active, payload, label }: ChartTooltipProps) {
   if (!active || !payload?.length) return null;
   return (
     <div className="bg-ink-800/95 backdrop-blur-md border border-ink-500 rounded-sm shadow-2xl px-4 py-3 min-w-[160px]">
       {label && (
-        <div className="text-[10px] uppercase tracking-widest text-ink-300 mb-2 font-mono">
+        <div className="text-xs uppercase tracking-widest text-ink-300 mb-2 font-mono">
           {label}
         </div>
       )}
-      {payload.map((entry: any, i: number) => (
+      {payload.map((entry, i) => (
         <div key={i} className="flex items-center justify-between gap-4 text-xs py-0.5">
           <div className="flex items-center gap-2">
             <div className="w-2 h-2 rounded-full" style={{ background: entry.color }} />
             <span className="text-ink-200 capitalize">{entry.name || entry.payload?.name}</span>
           </div>
           <span className="text-paper tabular font-mono">
-            {formatPesos(entry.value)}
+            {formatPesos(Number(entry.value ?? 0))}
           </span>
         </div>
       ))}
@@ -471,10 +479,4 @@ function EditorialTooltip({ active, payload, label }: any) {
   );
 }
 
-function EmptyState({ message }: { message: string }) {
-  return (
-    <div className="flex items-center justify-center py-16 text-sm text-ink-300">
-      <span className="italic">{message}</span>
-    </div>
-  );
-}
+

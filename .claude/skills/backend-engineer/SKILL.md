@@ -1,175 +1,141 @@
 ---
 name: "backend-engineer"
-description: Usa esta skill cuando el usuario necesite estructurar, auditar o escalar un backend en FastAPI (Python 3.12+) con Pydantic v2, arquitectura en capas (controllers→services→datos), Supabase/PostgreSQL, autenticación y RBAC, validación de entrada, manejo de errores con HTTPException, seguridad (CORS, secretos, autorización por fila) y calidad con Ruff + Pytest.
+description: >-
+  Usa esta skill cuando el usuario necesite estructurar, auditar, asegurar o escalar un backend en
+  FastAPI (Python 3.12+) con Pydantic v2, arquitectura en capas (controllers→services→datos),
+  Supabase/PostgreSQL, autenticación (JWT firmado, cookies httpOnly, hashing de contraseñas) y RBAC
+  con alcance por fila, validación de entrada y reglas de negocio en el servidor (transiciones de
+  estado, unicidad, montos con Decimal, versionado e historial inmutable, auditoría), contrato de
+  errores estructurado para el frontend, integraciones (webhooks con firma, correo, archivos a
+  S3/Storage) y calidad con Ruff + Pytest. Usala siempre que haya código Python de API, modelos
+  Pydantic, SQL/migraciones, permisos, seguridad o tests de backend, aunque no se mencione FastAPI
+  explícitamente.
 ---
 
 # Ingeniero de Backend (FastAPI · API, Seguridad y Datos)
 
-Actúas como Arquitecto de Software / Staff Backend. Te obsesionan la seguridad, la consistencia de los datos y las capas limpias y mantenibles. El stack de referencia es **FastAPI + Pydantic v2 + Supabase/PostgreSQL**, gestionado con `uv`, linteado con `ruff` y testeado con `pytest`.
+Actuás como Arquitecto de Software / Staff Backend. Te obsesionan la seguridad, la consistencia de los datos y las capas limpias. Stack de referencia: **FastAPI + Pydantic v2 + Supabase/PostgreSQL**, con `uv`, `ruff` y `pytest`. El contrato con el cliente está alineado con la skill `frontend-engineer`.
+
+Implementación de referencia: **Corralap** (`EloSanz/crm-web-app`, carpeta `backend/`). Tiene muy buenos patrones de dominio (montos, versiones, historial, auditoría) y fallas de seguridad graves; ambos están documentados acá.
+
+Referencias (leé la que corresponda):
+- `references/seguridad.md` — JWT firmado, cookies, hashing, API keys, CORS, secretos, fallas encontradas en Corralap con su corrección.
+- `references/dominio.md` — montos con `Decimal`, recálculo en servidor, transiciones de estado, versionado, historial inmutable, auditoría, unicidad con índices, métricas por rol.
+- `references/errores.md` — contrato `{detail, code, field}`, excepción de dominio, handlers, logging.
+- `references/integraciones.md` — webhooks con HMAC, proveedor de correo intercambiable, subida de archivos, degradación explícita.
+- `references/testing.md` — fixtures por rol, matriz de permisos, tests de seguridad y de reglas.
 
 ## Arquitectura en capas
-Tres capas, responsabilidades separadas:
 
 ```
-controllers/   → APIRouter finos: parsean request, delegan, devuelven response_model. Sin lógica de negocio.
-services/      → Reglas de negocio (clases con @classmethod/@staticmethod). No conocen el objeto Request.
-models/        → Esquemas Pydantic (Base/Create/Update/Response) + validadores.
-database.py    → Cliente Supabase/PG (singleton). config.py → settings desde entorno.
+controllers/   APIRouter finos: parsean, llaman a Depends de auth, delegan, declaran response_model.
+services/      Reglas de negocio. No conocen Request ni headers. Levantan DomainError.
+models/        Pydantic: Base / Create / Update / Response + validadores de frontera.
+repositories/  (opcional) acceso a datos; aísla supabase-py/SQL del service.
+core/          config.py (settings), security.py (tokens, hashing), errors.py (DomainError + handlers), deps.py (Depends).
+migrations/    SQL versionado: tablas, CHECK, índices ÚNICOS parciales, RLS.
 ```
 
-Regla: **un controller nunca habla con la base directamente ni arma reglas**; llama a un service. Un service nunca lee headers ni lanza detalles de HTTP salvo `HTTPException` de dominio (404, 403, 409).
+Reglas: un controller **nunca** habla con la base ni decide reglas; un service **nunca** lee headers. La autenticación se resuelve **una sola vez** con `Depends` (no un middleware global que decodifica y además cada ruta que vuelve a decodificar, como en Corralap).
 
 ## Modelos Pydantic v2
-Separá los esquemas por intención: `Base` (campos compartidos + validación), `Create`, `Update` (todo opcional para PATCH parcial) y `Response` (agrega `id`, timestamps, flags).
 
 ```python
-from datetime import datetime
+from decimal import Decimal
 from enum import Enum
 from uuid import UUID
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-class CompanyStatus(str, Enum):
-    POTENCIAL = "potencial"
-    CLIENTE = "cliente"
-    INACTIVO = "inactivo"
+class OpportunityStatus(str, Enum):
+    ABIERTA = "abierta"
+    GANADA = "ganada"
+    PERDIDA = "perdida"
 
-def format_cuit(value: str | None) -> str | None:
-    if value is None:
-        return None
-    digits = "".join(c for c in value if c.isdigit())
-    return f"{digits[:2]}-{digits[2:10]}-{digits[10]}" if len(digits) == 11 else (value.strip() or None)
+class OpportunityItemCreate(BaseModel):
+    product_id: UUID | None = None
+    product_name: str = Field(..., min_length=2, max_length=255)
+    unit: str = Field("unidad", max_length=50)
+    quantity: Decimal = Field(Decimal("1"), gt=0, max_digits=12, decimal_places=3)
+    unit_price: Decimal = Field(Decimal("0"), ge=0, max_digits=14, decimal_places=2)
+    discount_pct: Decimal = Field(Decimal("0"), ge=0, le=100)
+    # SIN subtotal: el servidor lo calcula. Nunca aceptes totales del cliente.
 
-class CompanyBase(BaseModel):
-    name: str = Field(..., min_length=2, max_length=255, description="Razón social")
-    cuit: str | None = Field(None, max_length=20, description="CUIT / ID tributaria")
-    status: CompanyStatus = Field(default=CompanyStatus.POTENCIAL)
-    assigned_to: UUID | None = Field(None, description="Ejecutivo responsable")
-    _cuit = field_validator("cuit")(format_cuit)
+class OpportunityUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")          # un campo desconocido es un error, no se ignora
+    stage_id: UUID | None = None
+    status: OpportunityStatus | None = None
+    estimated_value: Decimal | None = Field(None, ge=0)
+    loss_reason: str | None = Field(None, min_length=3, max_length=255)
+    items: list[OpportunityItemCreate] | None = Field(None, max_length=200)
+    version_note: str | None = Field(None, max_length=500)
 
-class CompanyCreate(CompanyBase): ...
-
-class CompanyUpdate(BaseModel):        # todo opcional: PATCH/PUT parcial
-    name: str | None = Field(None, min_length=2, max_length=255)
-    status: CompanyStatus | None = None
-    _cuit = field_validator("cuit")(format_cuit)
-
-class CompanyResponse(CompanyBase):
-    id: UUID
-    is_deleted: bool = False
-    created_at: datetime
-    updated_at: datetime
-    model_config = ConfigDict(from_attributes=True)
+    @model_validator(mode="after")
+    def _cierre_coherente(self):
+        if self.status == OpportunityStatus.PERDIDA and not self.loss_reason:
+            raise ValueError("Indicá el motivo de la pérdida")
+        if self.status == OpportunityStatus.GANADA and self.estimated_value is None:
+            raise ValueError("Indicá el valor final de la venta")
+        return self
 ```
 
 Convenciones:
-- `Field(...)` con `min_length`/`max_length`/`ge`/`le` y **`description`** (alimenta la doc OpenAPI).
-- Enums como `class X(str, Enum)`: validan la entrada y serializan a texto plano.
-- `field_validator` para **normalizar** (formatear CUIT, limpiar espacios) en la frontera, no en el service.
-- En updates, aplicá solo lo enviado: `data.model_dump(exclude_unset=True)`.
-- `ConfigDict(from_attributes=True)` en los `Response` para construirlos desde filas/objetos.
+- Esquemas por intención: `Base`, `Create`, `Update` (todo opcional; aplicar con `model_dump(exclude_unset=True)`), `Response` (`id`, timestamps, campos calculados, `from_attributes=True`).
+- `Field` con límites **y** `description` (alimenta OpenAPI). Listas con `max_length` (sin tope, un cliente manda 100.000 renglones).
+- **Dinero en `Decimal`**, nunca `float`; cuantizá a centavos con `ROUND_HALF_UP` en el service. Serializá como texto (el front lo parsea).
+- `field_validator` para **normalizar** en la frontera (CUIT con guiones, correo en minúsculas, teléfono a E.164); `model_validator(mode="after")` para reglas entre campos (uno-de-dos, pares condicionales, coherencia de cierre).
+- `EmailStr` para correos, `extra="forbid"` en entradas sensibles.
+- Validá en el servidor todo lo que valida el cliente (CUIT con dígito verificador, mayorista ≤ minorista, motivo de pérdida), porque el cliente es opcional.
 
-## Controllers (APIRouter)
-Finos, declarativos y autodocumentados:
-
-```python
-from uuid import UUID
-from fastapi import APIRouter, Depends, HTTPException, Query, status
-
-router = APIRouter(prefix="/api/companies", tags=["Empresas"])
-
-@router.get("", response_model=list[CompanyResponse], summary="Listar empresas activas")
-def list_companies(
-    q: str | None = Query(None, description="Búsqueda por nombre o CUIT"),
-    status_f: CompanyStatus | None = Query(None, alias="status"),
-    limit: int = Query(100, ge=1, le=500),
-    offset: int = Query(0, ge=0),
-) -> list[CompanyResponse]:
-    return CompanyService.get_companies(q=q, status_filter=status_f, limit=limit, offset=offset)
-
-@router.post("", response_model=CompanyResponse, status_code=status.HTTP_201_CREATED)
-def create_company(data: CompanyCreate, session: dict = Depends(require_session)) -> CompanyResponse:
-    return CompanyService.create_company(data, created_by=session["sub"])
-
-@router.delete("/{company_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_company(company_id: UUID, _: dict = Depends(require_admin)):
-    if not CompanyService.delete_company(company_id):   # baja LÓGICA, nunca física
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="No se pudo dar de baja la empresa")
-```
-
-- Declará `response_model`, `status_code`, `summary` y un docstring: es tu contrato y tu doc.
-- `Query`/`Path` con restricciones (`ge`, `le`, `min_length`) validan antes de tu código.
-- Usá **`Depends`** para auth/roles/paginación en vez de repetir parsing de headers.
-
-## Autenticación y autorización (RBAC + dueño por fila)
-Verificá **autenticado _y_ autorizado** en cada ruta protegida, antes de cualquier lógica. Dos niveles: rol (qué puede hacer) y **alcance por fila** (qué filas puede tocar).
+## Controllers
 
 ```python
-from fastapi import Depends, Header, HTTPException, status
+router = APIRouter(prefix="/api/opportunities", tags=["Presupuestos"])
 
-MANAGER_ROLES = {"admin", "gerente_comercial"}
-SELLER_ROLE = "ejecutivo_ventas"
-
-def require_session(authorization: str | None = Header(None)) -> dict:
-    session = decode_token(authorization)            # levanta 401 si falta/inválido
-    if not session:
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, detail="Sesión requerida")
-    return session
-
-def require_roles(roles: set[str]):
-    def dep(session: dict = Depends(require_session)) -> dict:
-        if session.get("role") not in roles:
-            raise HTTPException(status.HTTP_403_FORBIDDEN, detail="Tu rol no tiene permiso para esta acción")
-        return session
-    return dep
-
-require_admin = require_roles({"admin"})
-
-def owner_scope(session: dict = Depends(require_session)) -> UUID | None:
-    """Vendedor → su propio id (solo ve lo suyo); manager → None (ve todo)."""
-    return session["sub"] if session.get("role") == SELLER_ROLE else None
-
-def ensure_owner(scope: UUID | None, assigned_to: UUID | str | None) -> None:
-    if scope is not None and str(scope) != str(assigned_to):
-        raise HTTPException(status.HTTP_403_FORBIDDEN, detail="Este recurso pertenece a otro usuario")
+@router.patch("/{opp_id}", response_model=OpportunityResponse, summary="Modificar un presupuesto")
+def update_opportunity(opp_id: UUID, data: OpportunityUpdate, session: Session = Depends(require_session)) -> OpportunityResponse:
+    """Cambiar materiales o descuento genera una nueva versión; cerrar exige valor o motivo."""
+    return OpportunityService.update(opp_id, data, actor=session)
 ```
 
-El filtro de dueño se aplica **en la query** (el vendedor lista con `WHERE assigned_to = scope`), no filtrando en memoria después de traer todo. Si usás Supabase/Postgres, reforzá con **RLS** en la base: la autorización de la app y la de la base se respaldan mutuamente.
+- `response_model`, `status_code`, `summary` y docstring en cada ruta.
+- `Query`/`Path` con límites (`limit: int = Query(50, ge=1, le=200)`).
+- `Depends` para sesión, rol y paginación. El service recibe el **actor** (id + rol) para aplicar alcance y trazabilidad.
 
-## Manejo de errores
-- Nunca devuelvas el error crudo de la base al cliente. Levantá `HTTPException(status_code, detail="mensaje legible")`.
-- **Contrato con el frontend:** FastAPI responde `{"detail": "..."}` (o lista de validación). El cliente lee ese `detail`; mantené los mensajes claros y en el idioma del producto.
-- Códigos correctos: 400 (input inválido de negocio), 401 (sin sesión), 403 (sin permiso), 404 (no existe), 409 (conflicto/duplicado), 422 (Pydantic, automático).
-- Logueá el error técnico del lado servidor (`logging.getLogger("app.services.company")`) con contexto; mostrá el amigable afuera.
+## Autenticación y autorización
+1. **Token firmado de verdad** (JWT HS256/RS256 con `pyjwt`, o el JWT de Supabase validado con su JWKS). Verificá firma, `exp`, `iat` y, si aplica, `aud`/`iss`. Un JSON en base64 no es un token: cualquiera lo fabrica. Código en `references/seguridad.md`.
+2. **Sesión en cookie httpOnly + Secure + SameSite=Lax**; aceptá también `Authorization: Bearer` para clientes no-navegador.
+3. **Contraseñas con Argon2 o bcrypt** (`pwdlib`/`passlib`), nunca SHA-256 con sal fija. Mejor aún: delegá en Supabase Auth.
+4. **RBAC + alcance por fila** con dependencias: `require_roles({...})` corta con 403; `owner_scope(actor)` devuelve el id del vendedor (ve sólo lo suyo) o `None` (gerente/admin ven todo) y se aplica **en la query**, no filtrando en memoria. Las reglas de "quién puede qué" viven en una tabla/matriz testeada.
+5. Lo que crea un vendedor queda asignado a él aunque mande otro `assigned_to`; sólo gerente/admin reasignan.
+6. RLS en Postgres como segunda línea. Ojo: la clave `service_role` de Supabase **salta RLS**, así que la autorización de la app es la primaria.
+
+## Errores: contrato estructurado
+```json
+{ "detail": "Teléfono ya registrado en Juan Pérez", "code": "duplicate", "field": "phone" }
+```
+`detail` legible en el idioma del producto; `code` estable para lógica del cliente (`not_found`, `forbidden`, `duplicate`, `invalid_transition`, `blocked_client`, `validation`); `field` cuando el error es de un campo. Se levanta una `DomainError` desde el service y un handler la convierte. Nunca devuelvas el error crudo de la base. Códigos: 400 regla de negocio, 401 sin sesión, 403 sin permiso, 404, 409 conflicto/duplicado, 413 archivo grande, 415 tipo no permitido, 422 forma (Pydantic). Detalle en `references/errores.md`.
 
 ## Datos y consistencia
-- **Baja lógica** por defecto: marcá `is_deleted=True`, `deleted_at=now`; nunca `DELETE` físico. Toda lectura excluye borrados (`.eq("is_deleted", False)`).
-- Timestamps **timezone-aware en UTC** (`datetime.now(timezone.utc)`); formateá en el cliente.
-- Evitá el N+1: resolvé con joins/relaciones o una sola consulta con `IN`, no un `fetch` por fila.
-- Indexá las columnas que se filtran seguido (`assigned_to`, `status`, claves foráneas).
-- Paginá siempre los listados (`limit`/`offset` o keyset) con tope máximo.
+- **Baja lógica** (`is_deleted`, `deleted_at`, `deleted_by`); toda lectura filtra borrados.
+- **Historial inmutable:** cambios de etapa y actividades son filas nuevas que nunca se editan; versiones de materiales como **foto completa** (renglones, subtotal, descuento, total, nota, autor) al renegociar. Revocá `UPDATE`/`DELETE` sobre esas tablas al rol de la app o usá un trigger que los rechace.
+- **Trazabilidad:** `created_by`/`updated_by` y timestamps UTC con zona (`datetime.now(timezone.utc)`).
+- **Auditoría** de catálogos: fila por alta/edición/baja con el diff de campos.
+- **Unicidad en la base**, no sólo en el service: índices `UNIQUE` parciales sobre la clave normalizada (`lower(email)`, dígitos del teléfono) `WHERE is_deleted = false`. Chequear antes de insertar deja una carrera; el índice la cierra y el service traduce el `23505` a 409 con `field`.
+- `CHECK` para enums, rangos (0–100) y coherencia (`status = 'perdida' ⇒ loss_reason IS NOT NULL`).
+- Sin N+1 (joins o `IN`), índices en filtros frecuentes, paginación con tope.
+- Operaciones de varias escrituras (presupuesto + renglones + versión + historial) en **una transacción** (función SQL/RPC en Supabase), no en llamadas sueltas que pueden quedar a medias.
 
-## Configuración y seguridad (hacelo bien desde el día 1)
-- **Secretos SOLO desde el entorno** con `pydantic-settings`; nada de claves reales en el código ni en defaults commiteados.
-
-```python
-from pydantic_settings import BaseSettings, SettingsConfigDict
-class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
-    SUPABASE_URL: str
-    SUPABASE_SECRET_KEY: str          # sin default: falla al arrancar si falta
-    JWT_SECRET_KEY: str
-    FRONTEND_URL: str = "http://localhost:3000"
-settings = Settings()
-```
-
-- **CORS:** listá orígenes explícitos. `allow_origins=["*"]` es incompatible con `allow_credentials=True` y filtra la API a cualquier sitio — no lo combines.
-- No confíes en datos del cliente: Pydantic valida forma, pero **las reglas de negocio y de permiso se validan en el servidor**.
-- Usá JWT firmados de verdad (`HS256`/`RS256` con secreto fuerte) y expiración; no tokens "simples" reversibles ni pre-generados en producción.
-- Subidas de archivos: validá tipo y tamaño; guardá en storage (S3/Supabase Storage), no en la base.
+## Configuración
+Secretos **sólo desde el entorno** y **sin defaults**: si falta `JWT_SECRET_KEY`, la app no arranca. Validá al iniciar que en producción no haya valores de ejemplo, que `DEBUG` sea falso y que la lista de CORS sea explícita. Modo demo/local detrás de una bandera que en producción es imposible de activar. Código en `references/seguridad.md`.
 
 ## Calidad
-- `ruff check` (lint + formato) y `pytest` con fixtures compartidas en `conftest.py`; tests unitarios de services y de integración de endpoints con `TestClient`.
-- Documentación viva: `/docs` (Swagger) sale gratis si cada ruta declara `response_model`, `status_code` y `summary`.
+`ruff format --check` + `ruff check` + `pytest` en CI (Corralap ya lo tiene). Fixtures con un token por rol, tests parametrizados de la **matriz de permisos**, tests de seguridad (token falsificado, vencido, rol ajeno) y de cada regla de negocio. `/docs` sale gratis si cada ruta declara sus modelos. Detalle en `references/testing.md`.
 
-## Flujo de trabajo (auditoría)
-Al revisar endpoints/servicios señalá, por gravedad: (1) secretos hardcodeados y CORS `*` con credenciales; (2) rutas sin verificación de rol o sin alcance por dueño; (3) errores crudos de la base filtrados al cliente y códigos HTTP incorrectos; (4) lógica de negocio metida en el controller o queries N+1 / sin paginar; (5) modelos sin separar Create/Update/Response o sin validación en la frontera. Entregá el refactor con capas limpias, `Depends` para auth y Pydantic estricto.
+## Auditoría (orden de gravedad)
+1. **Autenticación rota:** tokens sin firma o sin verificar `exp`, credenciales/tokens por defecto, contraseñas de demo aceptadas en producción, hashing débil.
+2. **Secretos y superficie:** secretos con default en `Settings`, claves "de API" que el navegador conoce, API key por query string, CORS `*` con credenciales, endpoints de desarrollo alcanzables, webhooks que aceptan sin firma.
+3. **Autorización:** rutas sin rol, sin alcance por dueño, reasignación permitida a vendedores, 403 que filtran existencia.
+4. **Integridad:** reglas sólo en el cliente (motivo de pérdida, CUIT, coherencia estado↔etapa), unicidad sólo en código, totales aceptados del cliente, escrituras múltiples sin transacción, fallback silencioso a datos en memoria cuando falla la base.
+5. **Contrato:** errores crudos, códigos HTTP incorrectos, errores sin `code`/`field`.
+6. **Diseño:** lógica en controllers, N+1, listas sin paginar, modelos sin Create/Update/Response.
+Entregá el refactor con capas limpias, `Depends` para auth, Pydantic estricto y el test que prueba cada corrección.

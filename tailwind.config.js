@@ -10,7 +10,28 @@ module.exports = {
         sans: ['var(--font-sans)', 'system-ui'],
         mono: ['var(--font-mono)', 'monospace'],
       },
+      // Escala tipográfica cerrada (ver DESIGN.md). `xs` sube de 12 a 13px: es el
+      // piso de lectura (etiquetas, chips, ayudas). Nada por debajo de 13px.
+      fontSize: {
+        xs: ['13px', { lineHeight: '18px' }],
+        label: ['13px', { lineHeight: '18px' }],
+        meta: ['14px', { lineHeight: '20px' }],
+        body: ['15px', { lineHeight: '22px' }],
+      },
       colors: {
+        // Voces de color (ver DESIGN.md):
+        //   marca/acción/ubicación → amber (logo, primario único, ítem activo)
+        //   selección del usuario  → seleccion (filtro/segmento elegido)
+        //   estado                 → moss (bien) / terra (mal), siempre con etiqueta
+        //   neutros                → ink / paper
+        seleccion: {
+          DEFAULT: '#F4F1EA', // = paper: lo elegido se "enciende" en neutro fuerte
+          tinta: '#0A0F0D',   // texto sobre selección (17:1)
+        },
+        // Borde de controles (inputs, selects, segmentos): 3.6:1 sobre ink-900 y
+        // 3.3:1 sobre ink-700, cumple WCAG 1.4.11. Las hairlines (1.2:1) quedan
+        // sólo para separadores decorativos.
+        control: '#6E6A62',
         // Editorial financial palette
         ink: {
           DEFAULT: '#0A0F0D',
@@ -46,9 +67,10 @@ module.exports = {
         },
       },
       animation: {
-        'fade-up': 'fadeUp 0.6s cubic-bezier(0.22, 1, 0.36, 1) forwards',
-        'fade-in': 'fadeIn 0.4s ease-out forwards',
-        'slide-in': 'slideIn 0.5s cubic-bezier(0.22, 1, 0.36, 1) forwards',
+        // Duraciones del catálogo: 180ms fundidos, 260ms entradas de contenido.
+        'fade-up': 'fadeUp 0.26s cubic-bezier(0.16, 1, 0.3, 1) forwards',
+        'fade-in': 'fadeIn 0.18s ease-out forwards',
+        'slide-in': 'slideIn 0.26s cubic-bezier(0.16, 1, 0.3, 1) forwards',
         'shimmer': 'shimmer 2.5s linear infinite',
       },
       keyframes: {

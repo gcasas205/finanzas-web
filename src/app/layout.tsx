@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Fraunces, JetBrains_Mono } from "next/font/google";
 import { Toaster } from "sonner";
 import AuthProvider from "@/components/AuthProvider";
@@ -22,6 +22,14 @@ export const metadata: Metadata = {
   description: "Seguimiento financiero personal",
 };
 
+// viewport-fit=cover: la barra inferior móvil respeta env(safe-area-inset-bottom).
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
+  themeColor: "#0A0F0D",
+};
+
 export default function RootLayout({
   children,
 }: {
@@ -36,14 +44,16 @@ export default function RootLayout({
         <Toaster
           position="bottom-right"
           theme="dark"
+          visibleToasts={3}
+          duration={4500}
           toastOptions={{
             style: {
-              background: "#13120F",
-              border: "1px solid #3A3833",
+              background: "var(--toast-bg)",
+              border: "1px solid var(--toast-border)",
               borderRadius: "2px",
-              color: "#F4F1EA",
+              color: "var(--toast-text)",
               fontFamily: "var(--font-sans)",
-              fontSize: "13px",
+              fontSize: "14px",
             },
           }}
         />

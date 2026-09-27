@@ -19,8 +19,9 @@ Web app de seguimiento financiero personal con importación automática de resú
 | **Importar PDF** | Parsea automáticamente resúmenes VISA ICBC y recibos de sueldo (incluye PDFs con encoding PUA) |
 | **Análisis BI** | 4 tabs: Tendencias, Categorías (con filtro por mes), Proyección Mercado Pago, Comparativa mensual |
 | **Fechas duales** | Cada gasto tiene fecha de consumo + fecha de pago real. Sueldos se asignan al mes de cobro |
-| **Autenticación** | Google OAuth con whitelist de emails. Solo vos podés acceder |
-| **Responsive** | Funciona en desktop, tablet y celular con navegación adaptativa |
+| **Autenticación** | Google OAuth con whitelist de emails (`ALLOWED_EMAILS`, obligatoria: vacía = nadie entra). Solo vos podés acceder |
+| **Responsive** | Funciona en desktop, tablet y celular: barra lateral en escritorio, barra inferior de 5 pestañas en el celular |
+| **Accesible** | Contraste WCAG AA medido, foco visible, formularios que anuncian sus errores, diálogos con foco controlado |
 | **Caché** | Caché en memoria de 3 minutos para no exceder los límites de la API de Google Sheets |
 
 ---
@@ -176,7 +177,7 @@ git push -u origin main
 | `GOOGLE_CLIENT_SECRET` | Tu Client Secret de OAuth |
 | `NEXTAUTH_SECRET` | El string aleatorio que generaste |
 | `NEXTAUTH_URL` | `https://tu-app.vercel.app` (lo sabés después del primer deploy, podés actualizarlo) |
-| `ALLOWED_EMAILS` | `tu-email@gmail.com` (separar con comas si son varios) |
+| `ALLOWED_EMAILS` | `tu-email@gmail.com` (separar con comas si son varios). **Obligatorio**: vacío = nadie puede entrar |
 | `GOOGLE_SHEET_ID` | El ID de tu planilla |
 | `GOOGLE_SHEETS_CREDS_JSON` | El JSON de credenciales **en una sola línea** |
 
@@ -282,7 +283,11 @@ npm install
 npm run dev        # http://localhost:3000
 npm run build      # Build de producción
 npm start          # Servir build de producción
+npm test           # Tests (Vitest): cálculos, validaciones, errores de la API
+npm run typecheck  # TypeScript en modo estricto
 ```
+
+Sistema de diseño y reglas de color/tipografía: ver [`DESIGN.md`](DESIGN.md).
 
 ### Estructura del proyecto
 
@@ -291,7 +296,7 @@ src/
 ├── app/
 │   ├── api/
 │   │   ├── auth/[...nextauth]/route.ts   # Autenticación
-│   │   ├── config/route.ts               # Configuración de la app (env/archivo)
+│   │   ├── config/route.ts               # Ajustes (hoja Config) + prueba de conexión
 │   │   ├── ahorro/config/route.ts        # Config del plan de ahorro (hoja Config)
 │   │   ├── dolar/route.ts                # CRUD operaciones de dólar
 │   │   ├── dolar/cotizacion/route.ts     # Cotización oficial (dolarhoy)
@@ -312,12 +317,21 @@ src/
 │   │   ├── Analytics.tsx                  # Gráficos BI
 │   │   ├── ImportView.tsx                 # Importación de PDFs
 │   │   └── SettingsView.tsx               # Configuración
+│   ├── ui/                                # Design system: Button, Field, Dialog, useConfirm,
+│   │                                      #   Segmented, ErrorState/EmptyState
 │   ├── AppShell.tsx                       # Layout principal + navegación
 │   ├── AuthProvider.tsx                   # Wrapper de sesión
 │   ├── DataProvider.tsx                   # Estado compartido (SWR) + hooks
 │   ├── UsdAmount.tsx                      # Formato de montos en USD
 │   └── SetupWizard.tsx                    # Wizard de primera vez
 ├── lib/
+│   ├── __tests__/                         # Tests (Vitest)
+│   ├── api.ts                             # Cliente tipado de la API (fetch + errores)
+│   ├── errors.ts                          # Contrato de errores {detail, code, field}
+│   ├── validations.ts                     # Schemas Zod de entrada de la API
+│   ├── transactions.ts                    # Normalización de movimientos (server)
+│   ├── allowlist.ts                       # Emails permitidos + redirecciones seguras
+│   ├── palette.ts                         # Colores para gráficos (espejo de los tokens)
 │   ├── cache.ts                           # Caché en memoria
 │   ├── categories.ts                      # Categorías y auto-categorización
 │   ├── ahorro-calc.ts                     # Motor del ahorro (cascada de buckets)
@@ -362,6 +376,32 @@ Algunos PDFs usan fuentes con encoding especial. La app soporta Unicode PUA pero
 
 ## Novedades
 
+### v6.0
+
+> **Cambio importante al actualizar:** `ALLOWED_EMAILS` ahora es obligatoria. Si está vacía, nadie puede
+> iniciar sesión (antes entraba cualquier cuenta de Google). Revisala en Vercel antes de deployar.
+
+- **Seguridad**
+  - El login falla cerrado sin `ALLOWED_EMAILS`, y la lista se vuelve a chequear en cada request: sacar un email corta el acceso al instante, sin esperar a que venza la sesión.
+  - La API sin sesión responde 401 (antes redirigía y el navegador recibía HTML); el login vuelve a la pantalla donde estabas.
+  - `/api/health` ya no expone fragmentos de las credenciales.
+- **Datos confiables**
+  - Todas las rutas validan con Zod en el servidor (movimientos, dólares, ajustes, importación de PDF) y responden errores en castellano con el formato `{ detail, code, field }`.
+  - Si Google Sheets falla, la app lo dice ("No pudimos cargar tus datos" + Reintentar) en vez de mostrar "sin movimientos" y guardarlo en caché.
+  - Editar un movimiento guarda lo validado (antes se escribía el cuerpo recibido tal cual). Montos redondeados a centavos.
+  - La importación de PDF valida la lista revisada, el tamaño (10 MB) y el tipo de archivo.
+- **Formularios y diálogos**
+  - Errores debajo de cada campo, anunciados a lectores de pantalla; el foco va al primer campo con error y el error del servidor marca su campo.
+  - Diálogos con foco controlado, salida animada y hoja inferior en el celular. Borrar pide confirmación con el nombre del registro.
+  - Importar: arrastrar y soltar el PDF ahora funciona.
+- **Diseño** (reglas en [`DESIGN.md`](DESIGN.md))
+  - El ámbar queda para el logo, el botón principal y la sección actual; lo elegido (filtros, segmentos) se marca en claro.
+  - Montos de ingresos y gastos en neutro con signo; verde y rojo sólo para balance y resultados.
+  - Letra mínima de 13px en toda la app y bordes de campos con contraste suficiente (3.6:1).
+  - Barra inferior del celular con 5 pestañas; "Más" abre Análisis, Importar y Ajustes. Enlace "Saltar al contenido".
+  - Estados vacíos con la acción que los resuelve (por ejemplo, "Cargar el primero").
+- **Calidad**: TypeScript en modo estricto sin `any`, y tests con Vitest (`npm test`) para cálculos, validaciones y seguridad.
+
 ### v5.1
 
 - **Favicon con logo y estado de carga**: la pestaña del navegador ahora muestra el ícono de la app (el mismo "F." ámbar del wordmark) y gira un anillo de carga mientras hay datos, un guardado o una importación de PDF en curso — en cualquier sección, no solo en la que lo disparó.
@@ -404,4 +444,4 @@ Proyecto personal. Uso libre.
 
 ---
 
-v5.1 · Gonzalo Casas
+v6.0 · Gonzalo Casas

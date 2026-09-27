@@ -3,8 +3,11 @@
 import { createContext, useContext, useCallback } from "react";
 import useSWR from "swr";
 import type { Transaction, DolarOperacion, Cotizacion, AhorroConfig } from "@/types";
+import { request, dolarApi, errorMessage } from "@/lib/api";
 
-const fetcher = (url: string) => fetch(url).then(r => r.json());
+// El fetcher tira ApiError si la respuesta no es ok: un 500/503 nunca se toma
+// como "sin datos" (antes `r.json()` del error terminaba en una lista vacía).
+const fetcher = <T,>(url: string) => request<T>(url);
 
 interface DataContextType {
   transactions: Transaction[];
@@ -12,7 +15,10 @@ interface DataContextType {
   cotizacion: Cotizacion | null;
   ahorroConfig: AhorroConfig | null;
   isLoading: boolean;
-  error: any;
+  /** Mensaje del error de carga de movimientos u operaciones, o null. */
+  error: string | null;
+  /** Error de la config de ahorro (sólo la usa la vista Ahorro). */
+  ahorroError: string | null;
   /** Refresca transacciones y operaciones de dólar tras cualquier mutación */
   refresh: () => void;
   /** Vuelve a pedir la cotización (opcionalmente forzando el scraping) */
@@ -26,6 +32,7 @@ const DataContext = createContext<DataContextType>({
   ahorroConfig: null,
   isLoading: true,
   error: null,
+  ahorroError: null,
   refresh: () => {},
   refreshCotizacion: () => {},
 });
@@ -39,14 +46,14 @@ const SWR_OPTS = {
 };
 
 export function DataProvider({ children }: { children: React.ReactNode }) {
-  const tx = useSWR("/api/transactions", fetcher, SWR_OPTS);
-  const dolar = useSWR("/api/dolar", fetcher, SWR_OPTS);
-  const cot = useSWR("/api/dolar/cotizacion", fetcher, {
+  const tx = useSWR<{ transactions: Transaction[] }>("/api/transactions", fetcher, SWR_OPTS);
+  const dolar = useSWR<{ operaciones: DolarOperacion[] }>("/api/dolar", fetcher, SWR_OPTS);
+  const cot = useSWR<Cotizacion>("/api/dolar/cotizacion", fetcher, {
     ...SWR_OPTS,
     // La cotización cambia durante el día: refrescar cada 15 min
     refreshInterval: 15 * 60 * 1000,
   });
-  const ahorro = useSWR("/api/ahorro/config", fetcher, SWR_OPTS);
+  const ahorro = useSWR<{ config: AhorroConfig }>("/api/ahorro/config", fetcher, SWR_OPTS);
 
   const refresh = useCallback(() => {
     tx.mutate();
@@ -57,9 +64,10 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   const refreshCotizacion = useCallback((force = false) => {
     if (force) {
       // Pide al server que re-scrapee, ignorando su caché de 10 min
-      fetch("/api/dolar/cotizacion?force=1")
-        .then(r => r.json())
-        .then(data => cot.mutate(data, { revalidate: false }));
+      dolarApi
+        .cotizacion(true)
+        .then(data => cot.mutate(data, { revalidate: false }))
+        .catch(() => { /* el banner ya muestra "sin cotización"; no es bloqueante */ });
     } else {
       cot.mutate();
     }
@@ -72,8 +80,9 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         dolarOps: dolar.data?.operaciones ?? [],
         cotizacion: cot.data ?? null,
         ahorroConfig: ahorro.data?.config ?? null,
-        isLoading: tx.isLoading,
-        error: tx.error || dolar.error,
+        isLoading: tx.isLoading || dolar.isLoading,
+        error: tx.error || dolar.error ? errorMessage(tx.error || dolar.error) : null,
+        ahorroError: ahorro.error ? errorMessage(ahorro.error) : null,
         refresh,
         refreshCotizacion,
       }}
@@ -90,12 +99,12 @@ export function useTransactions() {
 
 /** Alias semántico para las operaciones de dólar */
 export function useDolar() {
-  const { dolarOps, cotizacion, isLoading, refresh, refreshCotizacion } = useContext(DataContext);
-  return { dolarOps, cotizacion, isLoading, refresh, refreshCotizacion };
+  const { dolarOps, cotizacion, isLoading, error, refresh, refreshCotizacion } = useContext(DataContext);
+  return { dolarOps, cotizacion, isLoading, error, refresh, refreshCotizacion };
 }
 
 /** Datos necesarios para la vista de Ahorro */
 export function useAhorro() {
-  const { dolarOps, transactions, ahorroConfig, isLoading, refresh } = useContext(DataContext);
-  return { dolarOps, transactions, ahorroConfig, isLoading, refresh };
+  const { dolarOps, transactions, ahorroConfig, isLoading, error, ahorroError, refresh } = useContext(DataContext);
+  return { dolarOps, transactions, ahorroConfig, isLoading, error: error ?? ahorroError, refresh };
 }

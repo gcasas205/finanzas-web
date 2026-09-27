@@ -3,6 +3,7 @@
 import { createContext, useContext } from "react";
 import useSWR from "swr";
 import type { AppConfig } from "@/types";
+import { configApi } from "@/lib/api";
 
 /**
  * Provee la configuración de la app EN VIVO al árbol de componentes.
@@ -14,7 +15,6 @@ import type { AppConfig } from "@/types";
  * instante, sin redeploy — pese a que las páginas son estáticas por performance.
  */
 
-const fetcher = (url: string) => fetch(url).then((r) => r.json());
 
 interface ConfigContextValue {
   config: AppConfig;
@@ -31,7 +31,7 @@ export function ConfigProvider({
   initialConfig: AppConfig;
   children: React.ReactNode;
 }) {
-  const { data, mutate } = useSWR<{ config: AppConfig }>("/api/config", fetcher, {
+  const { data, mutate } = useSWR<{ config: AppConfig }>("/api/config", () => configApi.get(), {
     fallbackData: { config: initialConfig },
     revalidateOnFocus: false,
     revalidateOnReconnect: false,

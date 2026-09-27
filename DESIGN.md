@@ -1,0 +1,114 @@
+# DESIGN.md — Finanzas
+
+Sistema de diseño de la app. Mandan estas reglas: si una pantalla las contradice, se corrige la pantalla.
+Tokens en `tailwind.config.js` (clases) y `src/lib/palette.ts` (lo que no admite clases: Recharts, SVG, `style`).
+Criterio: skill `webapp-designer` (`.claude/skills/webapp-designer/`).
+
+## Carácter
+
+Editorial y oscuro: tinta casi negra (`ink-900`), papel cálido (`paper`), serif de display (Fraunces) para títulos y
+cifras héroe, monoespaciada (JetBrains Mono) para el trabajo. Grano sutil de fondo. Hairlines en vez de sombras.
+
+## 1. Voces de color
+
+| Voz | Token | Se usa para | Nunca para |
+|---|---|---|---|
+| **Marca / acción / ubicación** | `amber` | punto del logo, **un** botón primario por vista, ítem activo de la navegación (barra lateral, píldora de la barra inferior, subrayado de pestañas), foco de teclado | datos, series de gráficos, filtros elegidos, decoración de títulos |
+| **Selección** | `seleccion` (= `paper`) + texto `seleccion-tinta` | segmento/filtro elegido (`Segmented`), tarjeta elegida, `::selection` | acción principal |
+| **Estado** | `moss-light` (bueno) · `terra-light` (malo) | balance, resultado por tipo de cambio, variación, "objetivo cumplido", errores | montos neutros (un gasto no es "malo") |
+| **Neutros** | `ink-*`, `paper` | todo lo demás | — |
+
+Reglas con nombre, para citar en un review:
+
+- **La marca no reporta.** Si algo ámbar no es el logo, el primario o "estás acá", está mal.
+- **Lo elegido se enciende en neutro.** Filtros y segmentos elegidos: fondo `seleccion`, texto `seleccion-tinta`.
+- **El semáforo habla sólo de estado.** Los montos de ingresos y gastos van en `paper` con signo (+ / −);
+  verde y rojo quedan para el balance y los resultados. Siempre con texto o signo al lado (nunca sólo color).
+- **Series de gráficos:** ingresos `PALETTE.positivo`, gastos `PALETTE.negativo`, ahorro/tenencia/capital
+  `PALETTE.serie` (neutro), período anterior `PALETTE.serieSecundaria`. Las categorías usan su color propio
+  (`lib/categories.ts`), que es identidad, no estado.
+
+## 2. Tipografía (escala cerrada)
+
+| Rol | Clase | Uso |
+|---|---|---|
+| Display | `display text-3xl sm:text-5xl` | título de vista (va solo) y cifra héroe |
+| Título | `display text-2xl` | paneles, diálogos, estados de error |
+| Body | `text-sm` / `text-body` (15px) | celdas, campos, navegación |
+| Meta | `text-meta` (14px) | datos secundarios |
+| Label | `text-xs` (**13px**) | rótulos, chips, ayudas y errores de campo |
+| Rótulo | `.eyebrow` (13px, mayúsculas, +0.08em) | encabezado de sección y de columna |
+
+- **Piso de lectura: 13px.** `text-xs` está redefinido a 13px; no se usan `text-[Npx]` por debajo.
+- Todo número lleva `.tabular` (cifras tabulares) para que no "baile" al animarse.
+- Títulos de vista con una palabra en itálica (`<em className="italic">`), en el mismo color del título.
+
+## 3. Controles y contraste (WCAG AA medido)
+
+| Par | Ratio |
+|---|---|
+| `paper` / `ink-900` | 17.1 |
+| `ink-300` / `ink-900` (texto secundario) | 5.2 |
+| `ink-400` / `ink-900` (placeholder) | 4.9 |
+| `moss-light` / `ink-900` | 5.0 |
+| `terra-light` / `ink-900` | 6.9 |
+| `ink-900` / `amber` (botón primario) | 8.1 |
+| **`control` / `ink-900`** (borde de campo) | **3.6** (≥ 3:1, WCAG 1.4.11) |
+| `control` / `ink-700` | 3.3 |
+| `terra` como texto | 3.2 ❌ — usar `terra-light` |
+| `moss` como texto | 2.5 ❌ — usar `moss-light` |
+
+- Campos: clase `.form-input` (borde `control`, hover `ink-300`, foco `amber`, error `terra-light` vía `aria-invalid`).
+- Objetivo táctil mínimo 44×44 (`min-h-11`); botones de ícono con `p-2.5`–`p-3.5`.
+- Foco visible siempre (`:focus-visible` ámbar, 2px). "Saltar al contenido" es el primer foco.
+
+## 4. Layout
+
+- **Desde `lg`:** barra lateral fija de 256px, activo con fondo `ink-700/50` + filete ámbar.
+- **Debajo de `lg`:** barra superior de 56px + **barra inferior de 5 pestañas** (Resumen, Movimientos, Dólares,
+  Ahorro, **Más**). Activo = ícono en píldora ámbar 48×28. "Más" abre una hoja con Análisis, Importar y Ajustes.
+  El contenido reserva `96px + env(safe-area-inset-bottom)`.
+- Tablas anchas → tarjetas/listas en celular; cero desborde horizontal de página a 320px.
+- Sólo se superponen diálogos: formularios de alta/edición, confirmaciones y la hoja "Más".
+
+## 5. Movimiento
+
+- Curva única de salida: `cubic-bezier(0.16, 1, 0.3, 1)`.
+- Duraciones: 150ms color/borde · 180ms fundidos · **260ms** diálogos, avisos y entradas de contenido ·
+  **650ms** conteo de cifras · tope 700ms por secuencia. Escalonado 40ms con techo de 220ms.
+- Lo que entra animado sale animado (`Dialog` usa `AnimatePresence`).
+- Botones: `active:scale-[0.98]`.
+- `prefers-reduced-motion`: duraciones a ~0, las cifras saltan al valor final.
+- Loader de marca (`LogoLoader`) para cargas de vista; spinner chico sólo dentro de botones.
+
+## 6. Feedback
+
+- **Avisos (sonner):** abajo a la derecha; en celular, encima de la barra inferior. Máximo 3. Éxito 4,5s,
+  error 7s. Nombran el registro ("\"Coto\" guardado").
+- **Errores de carga:** `ErrorState` (qué pasó + Reintentar) si no hay datos; `StaleDataBanner` si hay datos
+  viejos en pantalla. Nunca se muestra "sin movimientos" cuando en realidad falló la planilla.
+- **Formularios:** etiqueta arriba con `*` si es obligatorio; ayuda o error debajo (el error reemplaza a la ayuda).
+  Validación al enviar; el error del servidor (`{ detail, code, field }`) marca su campo; el foco va al primer
+  campo con error; editar un campo limpia su error.
+- **Confirmaciones destructivas:** `useConfirm()` con el nombre del registro, botón de peligro y "Cancelar"
+  fantasma. Nada de `window.confirm`.
+- **Estados vacíos:** `EmptyState` con mensaje y, si aplica, la acción que lo resuelve.
+
+## 7. Componentes (`src/components/ui/`)
+
+| Componente | Para qué |
+|---|---|
+| `Button` / `buttonClasses` | variantes `primario`, `secundario`, `fantasma`, `peligro`; `isLoading` con `aria-busy` |
+| `Field` | etiqueta + control + ayuda/error; entrega `{ id, aria-describedby, aria-invalid }` para esparcir |
+| `Dialog` / `DialogActions` | modal accesible: foco inicial, trampa de Tab, Escape, foco devuelto, hoja inferior en celular |
+| `useConfirm` | confirmación destructiva con promesa |
+| `Segmented` | elegir una de pocas opciones (voz de selección) |
+| `ErrorState` · `StaleDataBanner` · `EmptyState` | estados de vista |
+
+## Do / Don't
+
+- ✅ `bg-seleccion text-seleccion-tinta` para lo elegido · ❌ `bg-amber` en un filtro.
+- ✅ `<Monto>` en `paper` con signo · ❌ montos pintados de verde/rojo.
+- ✅ `PALETTE.serie` en un gráfico · ❌ `"#C9A24B"` suelto en un componente.
+- ✅ `text-xs` (13px) · ❌ `text-[10px]`.
+- ✅ `border-control` en campos · ❌ `border-ink-500` (1.6:1) delimitando un control.

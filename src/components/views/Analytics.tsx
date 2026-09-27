@@ -3,6 +3,7 @@
 import { useState, useMemo } from "react";
 import { motion } from "framer-motion";
 import LogoLoader from "@/components/LogoLoader";
+import { ErrorState, StaleDataBanner } from "@/components/ui/States";
 import {
   BarChart, Bar, LineChart, Line, AreaChart, Area,
   XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Cell,
@@ -14,11 +15,14 @@ import { formatPesos, formatPesosCompact, formatMes, fechaToMes, uniqueMonths } 
 import { getCategoryColor, CATEGORIES } from "@/lib/categories";
 import { useTransactions } from "@/components/DataProvider";
 import { impactoPesosDolar } from "@/lib/dolar-calc";
+import { PALETTE } from "@/lib/palette";
+import { EmptyState } from "@/components/ui/States";
+import type { ChartTooltipProps } from "@/components/ui/chart";
 
 interface Props { config: AppConfig; }
 
 export default function Analytics({ config }: Props) {
-  const { transactions, dolarOps, isLoading: loading } = useTransactions();
+  const { transactions, dolarOps, isLoading: loading, error, refresh } = useTransactions();
   const [tab, setTab] = useState<"tendencias" | "categorias" | "mercadopago" | "comparativa">("tendencias");
   const [selectedMonth, setSelectedMonth] = useState(() => {
     const d = new Date();
@@ -74,16 +78,20 @@ export default function Analytics({ config }: Props) {
   ] as const;
 
   if (loading) return <LogoLoader className="min-h-[60vh]" />;
+  if (error && transactions.length === 0 && dolarOps.length === 0) {
+    return <ErrorState message={error} onRetry={refresh} className="min-h-[60vh]" />;
+  }
 
   return (
     <div className="p-4 sm:p-6 lg:p-10 max-w-[1400px]">
+      {error && <StaleDataBanner message={error} onRetry={refresh} />}
       <header className="mb-10 flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
         <div>
           <div className="eyebrow mb-2">Análisis</div>
           <h1 className="display text-3xl sm:text-5xl text-paper">
-            Mirá los <em className="italic text-amber">patrones</em>
+            Mirá los <em className="italic">patrones</em>
           </h1>
-          <p className="text-[11px] text-ink-400 mt-2">
+          <p className="text-xs text-ink-300 mt-2">
             Valores en pesos · tus dólares se analizan en la pestaña Dólares
           </p>
         </div>
@@ -96,7 +104,7 @@ export default function Analytics({ config }: Props) {
               id="analytics-mes"
               value={selectedMonth}
               onChange={(e) => setSelectedMonth(e.target.value)}
-              className="select-native bg-ink-800 border border-ink-500 text-paper pl-4 pr-9 py-2 text-sm focus:border-amber cursor-pointer hover:border-ink-400 transition-colors"
+              className="select-native min-h-11 bg-ink-800 border border-control text-paper pl-4 pr-9 py-2 text-sm focus:border-amber cursor-pointer hover:border-ink-300 transition-colors"
             >
               {months.map(m => (
                 <option key={m} value={m}>{formatMes(m)}</option>
@@ -139,7 +147,16 @@ export default function Analytics({ config }: Props) {
 
 // ── Tendencias ───────────────────────────────────────────────────────────────
 
-function TendenciasTab({ evolution }: { evolution: any[] }) {
+interface EvolucionMes {
+  mes: string;
+  label: string;
+  ingresos: number;
+  egresos: number;
+  ahorro: number;
+  acumulado: number;
+}
+
+function TendenciasTab({ evolution }: { evolution: EvolucionMes[] }) {
   if (!evolution.length) return <Empty />;
 
   return (
@@ -149,13 +166,13 @@ function TendenciasTab({ evolution }: { evolution: any[] }) {
         <h3 className="display text-2xl text-paper mb-6">Ingresos vs Gastos</h3>
         <ResponsiveContainer width="100%" height={300}>
           <BarChart data={evolution}>
-            <CartesianGrid stroke="#252420" strokeDasharray="2 4" vertical={false} />
-            <XAxis dataKey="label" stroke="#8A8576" fontSize={10} tickLine={false} axisLine={false} />
-            <YAxis stroke="#8A8576" fontSize={10} tickLine={false} axisLine={false}
+            <CartesianGrid stroke={PALETTE.grilla} strokeDasharray="2 4" vertical={false} />
+            <XAxis dataKey="label" stroke={PALETTE.eje} fontSize={13} tickLine={false} axisLine={false} />
+            <YAxis stroke={PALETTE.eje} fontSize={13} tickLine={false} axisLine={false}
               tickFormatter={v => formatPesosCompact(v)} />
-            <Tooltip content={<ChartTooltip />} cursor={{ fill: "rgba(244,241,234,0.03)" }} />
-            <Bar dataKey="ingresos" fill="#6A8970" radius={[2,2,0,0]} name="Ingresos" />
-            <Bar dataKey="egresos" fill="#A04A2F" radius={[2,2,0,0]} name="Gastos" />
+            <Tooltip content={<ChartTooltip />} cursor={{ fill: PALETTE.cursor }} />
+            <Bar dataKey="ingresos" fill={PALETTE.positivo} radius={[2,2,0,0]} name="Ingresos" />
+            <Bar dataKey="egresos" fill={PALETTE.negativo} radius={[2,2,0,0]} name="Gastos" />
           </BarChart>
         </ResponsiveContainer>
       </div>
@@ -165,19 +182,19 @@ function TendenciasTab({ evolution }: { evolution: any[] }) {
         <h3 className="display text-2xl text-paper mb-6">Ahorro acumulado</h3>
         <ResponsiveContainer width="100%" height={300}>
           <AreaChart data={evolution}>
-            <CartesianGrid stroke="#252420" strokeDasharray="2 4" vertical={false} />
-            <XAxis dataKey="label" stroke="#8A8576" fontSize={10} tickLine={false} axisLine={false} />
-            <YAxis stroke="#8A8576" fontSize={10} tickLine={false} axisLine={false}
+            <CartesianGrid stroke={PALETTE.grilla} strokeDasharray="2 4" vertical={false} />
+            <XAxis dataKey="label" stroke={PALETTE.eje} fontSize={13} tickLine={false} axisLine={false} />
+            <YAxis stroke={PALETTE.eje} fontSize={13} tickLine={false} axisLine={false}
               tickFormatter={v => formatPesosCompact(v)} />
             <Tooltip content={<ChartTooltip />} cursor={false} />
             <defs>
               <linearGradient id="ahorroGrad" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="#C9A24B" stopOpacity={0.3} />
-                <stop offset="100%" stopColor="#C9A24B" stopOpacity={0} />
+                <stop offset="0%" stopColor={PALETTE.serie} stopOpacity={0.3} />
+                <stop offset="100%" stopColor={PALETTE.serie} stopOpacity={0} />
               </linearGradient>
             </defs>
-            <Area type="monotone" dataKey="acumulado" stroke="#C9A24B" fill="url(#ahorroGrad)"
-              strokeWidth={2} name="Acumulado" dot={{ fill: "#C9A24B", r: 3 }} />
+            <Area type="monotone" dataKey="acumulado" stroke={PALETTE.serie} fill="url(#ahorroGrad)"
+              strokeWidth={2} name="Acumulado" dot={{ fill: PALETTE.serie, r: 3 }} />
           </AreaChart>
         </ResponsiveContainer>
       </div>
@@ -187,14 +204,14 @@ function TendenciasTab({ evolution }: { evolution: any[] }) {
         <h3 className="display text-2xl text-paper mb-6">Ahorro mensual</h3>
         <ResponsiveContainer width="100%" height={250}>
           <BarChart data={evolution}>
-            <CartesianGrid stroke="#252420" strokeDasharray="2 4" vertical={false} />
-            <XAxis dataKey="label" stroke="#8A8576" fontSize={10} tickLine={false} axisLine={false} />
-            <YAxis stroke="#8A8576" fontSize={10} tickLine={false} axisLine={false}
+            <CartesianGrid stroke={PALETTE.grilla} strokeDasharray="2 4" vertical={false} />
+            <XAxis dataKey="label" stroke={PALETTE.eje} fontSize={13} tickLine={false} axisLine={false} />
+            <YAxis stroke={PALETTE.eje} fontSize={13} tickLine={false} axisLine={false}
               tickFormatter={v => formatPesosCompact(v)} />
-            <Tooltip content={<ChartTooltip />} cursor={{ fill: "rgba(244,241,234,0.03)" }} />
+            <Tooltip content={<ChartTooltip />} cursor={{ fill: PALETTE.cursor }} />
             <Bar dataKey="ahorro" name="Ahorro" radius={[2,2,0,0]}>
               {evolution.map((e, i) => (
-                <Cell key={i} fill={e.ahorro >= 0 ? "#6A8970" : "#A04A2F"} />
+                <Cell key={i} fill={e.ahorro >= 0 ? PALETTE.positivo : PALETTE.negativo} />
               ))}
             </Bar>
           </BarChart>
@@ -224,11 +241,11 @@ function CategoriasTab({ transactions, selectedMonth }: { transactions: Transact
         <h3 className="display text-2xl text-paper mb-6">Gastos por categoría</h3>
         <ResponsiveContainer width="100%" height={cats.length * 52 + 20}>
           <BarChart data={cats} layout="vertical" margin={{ left: 100 }}>
-            <XAxis type="number" stroke="#8A8576" fontSize={10} tickLine={false} axisLine={false}
+            <XAxis type="number" stroke={PALETTE.eje} fontSize={13} tickLine={false} axisLine={false}
               tickFormatter={v => formatPesosCompact(v)} />
-            <YAxis type="category" dataKey="name" stroke="#8A8576" fontSize={11}
+            <YAxis type="category" dataKey="name" stroke={PALETTE.eje} fontSize={13}
               tickLine={false} axisLine={false} width={95} />
-            <Tooltip content={<ChartTooltip />} cursor={{ fill: "rgba(244,241,234,0.03)" }} />
+            <Tooltip content={<ChartTooltip />} cursor={{ fill: PALETTE.cursor }} />
             <Bar dataKey="value" name="Gasto" radius={[0,3,3,0]} barSize={24}>
               {cats.map((c, i) => <Cell key={i} fill={c.color} />)}
             </Bar>
@@ -289,20 +306,20 @@ function MercadoPagoTab({ acumulado, tna }: { acumulado: number; tna: number }) 
       {/* KPI row */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-6 mb-8 [&>*]:min-w-0">
         {[
-          { label: "Capital en pesos", value: acumulado, color: "#8A8576" },
-          { label: "Ganancia 1 mes", value: g1, color: "#6A8970" },
-          { label: "Ganancia 6 meses", value: g6, color: "#C9A24B" },
-          { label: "Ganancia 12 meses", value: g12, color: "#E8C982" },
+          { label: "Capital en pesos", value: acumulado },
+          { label: "Ganancia 1 mes", value: g1 },
+          { label: "Ganancia 6 meses", value: g6 },
+          { label: "Ganancia 12 meses", value: g12 },
         ].map((kpi, i) => (
           <motion.div
             key={i}
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: i * 0.08 }}
+            transition={{ delay: i * 0.04, duration: 0.26 }}
             className="surface p-6 relative overflow-hidden"
           >
-            <div className="absolute top-0 left-0 right-0 h-px" style={{ background: kpi.color }} />
-            <div className="eyebrow mb-2" style={{ color: kpi.color }}>{kpi.label}</div>
+            <div className="absolute top-0 left-0 right-0 h-px bg-ink-300" />
+            <div className="eyebrow mb-2">{kpi.label}</div>
             <div className="display text-3xl text-paper tabular">
               {acumulado > 0 ? formatPesos(kpi.value) : "$0"}
             </div>
@@ -316,28 +333,28 @@ function MercadoPagoTab({ acumulado, tna }: { acumulado: number; tna: number }) 
             <div className="eyebrow mb-1">Interés compuesto</div>
             <h3 className="display text-2xl text-paper">Proyección a 12 meses</h3>
             <p className="text-xs text-ink-300 mt-1">TNA {tna}% · Capital en pesos: {formatPesos(acumulado)}</p>
-            <p className="text-[11px] text-ink-400 mt-1">No incluye lo que tenés en dólares, solo el ahorro que sigue en pesos.</p>
+            <p className="text-xs text-ink-300 mt-1">No incluye lo que tenés en dólares, solo el ahorro que sigue en pesos.</p>
           </div>
-          <Zap className="w-5 h-5 text-amber" strokeWidth={1.5} />
+          <Zap className="w-5 h-5 text-ink-300" strokeWidth={1.5} aria-hidden="true" />
         </div>
 
         {acumulado > 0 ? (
           <ResponsiveContainer width="100%" height={350}>
             <AreaChart data={projections}>
-              <CartesianGrid stroke="#252420" strokeDasharray="2 4" vertical={false} />
-              <XAxis dataKey="mes" stroke="#8A8576" fontSize={10} tickLine={false} axisLine={false} />
-              <YAxis stroke="#8A8576" fontSize={10} tickLine={false} axisLine={false}
+              <CartesianGrid stroke={PALETTE.grilla} strokeDasharray="2 4" vertical={false} />
+              <XAxis dataKey="mes" stroke={PALETTE.eje} fontSize={13} tickLine={false} axisLine={false} />
+              <YAxis stroke={PALETTE.eje} fontSize={13} tickLine={false} axisLine={false}
                 tickFormatter={v => formatPesosCompact(v)} />
               <Tooltip content={<ChartTooltip />} cursor={false} />
               <defs>
                 <linearGradient id="mpGrad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#E8C982" stopOpacity={0.3} />
-                  <stop offset="100%" stopColor="#E8C982" stopOpacity={0} />
+                  <stop offset="0%" stopColor={PALETTE.serie} stopOpacity={0.3} />
+                  <stop offset="100%" stopColor={PALETTE.serie} stopOpacity={0} />
                 </linearGradient>
               </defs>
-              <Area type="monotone" dataKey="capital" stroke="#E8C982" fill="url(#mpGrad)"
-                strokeWidth={2.5} name="Capital + interés" dot={{ fill: "#E8C982", r: 3 }} />
-              <Line type="monotone" dataKey="ganancia" stroke="#6A8970" strokeWidth={1.5}
+              <Area type="monotone" dataKey="capital" stroke={PALETTE.serie} fill="url(#mpGrad)"
+                strokeWidth={2.5} name="Capital + interés" dot={{ fill: PALETTE.serie, r: 3 }} />
+              <Line type="monotone" dataKey="ganancia" stroke={PALETTE.positivo} strokeWidth={1.5}
                 strokeDasharray="4 4" name="Ganancia" dot={false} />
             </AreaChart>
           </ResponsiveContainer>
@@ -387,12 +404,12 @@ function ComparativaTab({ transactions, selectedMonth }: { transactions: Transac
         <h3 className="display text-2xl text-paper mb-6">Comparativa mensual</h3>
         <ResponsiveContainer width="100%" height={data.length * 52 + 20}>
           <BarChart data={data} layout="vertical" margin={{ left: 100 }}>
-            <XAxis type="number" stroke="#8A8576" fontSize={10} tickLine={false} axisLine={false}
+            <XAxis type="number" stroke={PALETTE.eje} fontSize={13} tickLine={false} axisLine={false}
               tickFormatter={v => formatPesosCompact(v)} />
-            <YAxis type="category" dataKey="name" stroke="#8A8576" fontSize={11}
+            <YAxis type="category" dataKey="name" stroke={PALETTE.eje} fontSize={13}
               tickLine={false} axisLine={false} width={95} />
-            <Tooltip content={<ChartTooltip />} cursor={{ fill: "rgba(244,241,234,0.03)" }} />
-            <Bar dataKey="prev" fill="#5A574E" name={formatMes(prevMonth, true)} radius={[0,2,2,0]} barSize={14} />
+            <Tooltip content={<ChartTooltip />} cursor={{ fill: PALETTE.cursor }} />
+            <Bar dataKey="prev" fill={PALETTE.serieSecundaria} name={formatMes(prevMonth, true)} radius={[0,2,2,0]} barSize={14} />
             <Bar dataKey="curr" name={formatMes(selectedMonth, true)} radius={[0,2,2,0]} barSize={14}>
               {data.map((d, i) => <Cell key={i} fill={d.color} />)}
             </Bar>
@@ -415,8 +432,8 @@ function ComparativaTab({ transactions, selectedMonth }: { transactions: Transac
               <div className="w-2 h-2 rounded-full shrink-0" style={{ background: d.color }} />
               <div className="flex-1 text-sm text-paper">{d.name}</div>
               <div className="surface px-3 py-1 text-xs tabular font-mono min-w-[100px] text-right"
-                style={{ borderColor: d.variation <= 0 ? "#6A8970" : "#A04A2F" }}>
-                <span style={{ color: d.variation <= 0 ? "#6A8970" : "#D4886E" }}>
+                style={{ borderColor: d.variation <= 0 ? PALETTE.positivo : PALETTE.negativo }}>
+                <span style={{ color: d.variation <= 0 ? PALETTE.positivo : PALETTE.negativoTexto }}>
                   {d.variation > 0 ? "+" : ""}{d.variation.toFixed(1)}%
                 </span>
               </div>
@@ -433,18 +450,18 @@ function ComparativaTab({ transactions, selectedMonth }: { transactions: Transac
 
 // ── Shared ───────────────────────────────────────────────────────────────────
 
-function ChartTooltip({ active, payload, label }: any) {
+function ChartTooltip({ active, payload, label }: ChartTooltipProps) {
   if (!active || !payload?.length) return null;
   return (
     <div className="bg-ink-800/95 backdrop-blur-md border border-ink-500 rounded-sm shadow-2xl px-4 py-3">
-      {label && <div className="text-[10px] uppercase tracking-widest text-ink-300 mb-2 font-mono">{label}</div>}
-      {payload.map((e: any, i: number) => (
+      {label && <div className="text-xs uppercase tracking-widest text-ink-300 mb-2 font-mono">{label}</div>}
+      {payload.map((e, i) => (
         <div key={i} className="flex items-center justify-between gap-6 text-xs py-0.5">
           <div className="flex items-center gap-2">
             <div className="w-2 h-2 rounded-full" style={{ background: e.color }} />
             <span className="text-ink-200">{e.name || e.payload?.name}</span>
           </div>
-          <span className="text-paper tabular font-mono">{formatPesos(e.value)}</span>
+          <span className="text-paper tabular font-mono">{formatPesos(Number(e.value ?? 0))}</span>
         </div>
       ))}
     </div>
@@ -452,5 +469,9 @@ function ChartTooltip({ active, payload, label }: any) {
 }
 
 function Empty({ message = "Sin datos suficientes todavía" }: { message?: string }) {
-  return <div className="surface p-16 text-center text-ink-300 italic text-sm">{message}</div>;
+  return (
+    <div className="surface">
+      <EmptyState message={message} className="py-16" action={{ label: "Cargar un movimiento", href: "/transactions?nuevo=1" }} />
+    </div>
+  );
 }

@@ -5,24 +5,43 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
-/** Format as Argentine pesos: $1.234.567,89 */
+// Formateadores a nivel de módulo: crear un Intl.NumberFormat es caro y
+// estas funciones se llaman por cada fila en cada render.
+const FMT_ARS = new Intl.NumberFormat("es-AR", {
+  style: "currency",
+  currency: "ARS",
+  minimumFractionDigits: 0,
+  maximumFractionDigits: 0,
+});
+const FMT_USD = new Map<number, Intl.NumberFormat>();
+
+/** Format as Argentine pesos: $1.234.567 */
 export function formatPesos(n: number): string {
-  return new Intl.NumberFormat("es-AR", {
-    style: "currency",
-    currency: "ARS",
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
-  }).format(n);
+  return FMT_ARS.format(n);
 }
 
-/** Format as US dollars: US$1,234.56 */
+/** Format as US dollars: US$1.234,56 */
 export function formatUSD(n: number, decimals = 2): string {
-  return new Intl.NumberFormat("es-AR", {
-    style: "currency",
-    currency: "USD",
-    minimumFractionDigits: decimals,
-    maximumFractionDigits: decimals,
-  }).format(n);
+  let fmt = FMT_USD.get(decimals);
+  if (!fmt) {
+    fmt = new Intl.NumberFormat("es-AR", {
+      style: "currency",
+      currency: "USD",
+      minimumFractionDigits: decimals,
+      maximumFractionDigits: decimals,
+    });
+    FMT_USD.set(decimals, fmt);
+  }
+  return fmt.format(n);
+}
+
+/**
+ * Redondea un monto a centavos (half-up). Única regla de redondeo de dinero:
+ * se aplica en la frontera (schemas) y al derivar totales, así los floats no
+ * acumulan basura (0.1 + 0.2) en la planilla.
+ */
+export function roundMoney(n: number): number {
+  return Math.round((n + Number.EPSILON) * 100) / 100;
 }
 
 /** Compact format: $1.2M, $345K */

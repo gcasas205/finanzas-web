@@ -1,79 +1,120 @@
 ---
 name: "webapp-designer"
-description: Usa esta skill cuando el usuario pida evaluar, diseñar o mejorar la UI/UX de una webapp: sistema de diseño y tokens (Tailwind v4 `@theme`), paleta con separación entre color de marca y color de estado, tipografía, jerarquía visual, accesibilidad (WCAG, foco, teclado, contraste), responsive mobile-first, movimiento con `prefers-reduced-motion` y feedback (toasts, estados de carga).
+description: >-
+  Usa esta skill cuando el usuario pida evaluar, diseñar o mejorar la UI/UX de una webapp o de una
+  pantalla puntual: sistema de diseño y tokens (Tailwind v4 `@theme`), paleta con voces de color
+  separadas (marca / selección / estado), escala tipográfica, radios, sombras, layout responsive
+  mobile-first con riel y barra inferior, tablas que pasan a listas, formularios y sus estados de
+  error, movimiento con propósito (catálogo de animaciones, escalonado, conteo de cifras, gráficos
+  que crecen, arrastre) con `prefers-reduced-motion`, feedback (toasts, loaders de marca, estados
+  vacíos), visualización de datos accesible y contraste WCAG medido. Aplicala también cuando pidan
+  "que se vea mejor", "pulir la UI", un design review, un DESIGN.md, una paleta, animaciones o
+  microinteracciones, aunque no digan "sistema de diseño".
 ---
 
 # Diseñador de Webapps (UI/UX de Producto)
 
-Actúas como Product Designer Senior. Buscás que la app se vea deliberada y con carácter, y que sea rápida de usar, coherente y accesible (WCAG). Diseñás con un **sistema de tokens**, no con valores sueltos, y cada decisión tiene una razón que podés explicar.
+Actuás como Product Designer Senior. La app tiene que verse deliberada y con carácter propio, y usarse rápido, con apuro y en el celular. Diseñás con **tokens con nombre de rol**, cada decisión tiene una razón explicable, y medís (contraste, objetivos táctiles, duraciones) en vez de estimar.
 
-## 1. Sistema de diseño con tokens (Tailwind v4)
-Definí la paleta, tipografía, sombras, easings y animaciones como **custom properties** en `@theme`. Así el color y el espaciado se nombran por su rol, no por su valor.
+La implementación de referencia es **Corralap** (CRM de presupuestos para corralones: amarillo vial sobre acero pavonado). Sus tokens y reglas están acá como ejemplo trabajado; si el proyecto es otro, conservá la **estructura** (voces de color, familias, escalas, reglas con nombre) y cambiá los valores.
 
-```css
-@import "tailwindcss";
+Referencias (leé la que corresponda):
+- `references/tokens-corralap.md` — `@theme` completo, escalas y utilidades listas para pegar.
+- `references/movimiento.md` — catálogo de animaciones, keyframes, escalonado, conteo, arrastre, entradas y **salidas**.
+- `references/componentes.md` — anatomía y estados de cada componente (botones, campos, desplegables, calendario, chips, tablas, toasts, diálogos, navegación).
+- `references/datos-y-graficos.md` — color en gráficos, rampa secuencial, tooltip, "Ver tabla", embudo.
+- `references/auditoria.md` — checklist de review con los hallazgos típicos y cómo corregirlos.
 
-@theme {
-  --font-sans: var(--font-montserrat), ui-sans-serif, system-ui, sans-serif;
+## 1. Tres voces de color que no se mezclan
 
-  /* Neutros de superficie (claro): suelo (fondo), chapa (tarjeta), línea (borde), tinta/tiza (texto). */
-  --color-suelo: #eceeed;  --color-chapa: #ffffff;  --color-chapa-2: #f4f6f5;
-  --color-linea: #dce1df;  --color-linea-fuerte: #bfc7c4;
-  --color-tinta: #16212b;  --color-tiza: #5a666f;
+El error más caro en un producto es que un mismo color signifique dos cosas. Separá el color por **rol**, y dale a cada rol una regla con nombre para poder citarla en un review:
 
-  /* Marca: SOLO marca y acción principal. Nunca informa estado. */
-  --color-amarillo: #ffc20e;  --color-amarillo-2: #f2b400;
+| Voz | Corralap | Se usa para | Nunca para |
+|---|---|---|---|
+| **Marca / acción / ubicación** | `amarillo` | logo, el **único** botón primario de la vista, ítem activo de la navegación | estado, salud, selección |
+| **Selección del usuario** | `pavonado` | filtro activo, segmento activo, día elegido, switch encendido, `::selection` | acción principal |
+| **Estado (semáforo)** | `verde` / `ambar` (naranja) / `rojo` | salud de un registro, resultado (ganado/perdido), error y peligro (rojo) | magnitudes neutras, decoración |
+| **Neutros** | `suelo`, `chapa`, `linea`, `tinta`, `tiza` | todo lo demás | — |
 
-  /* Estado (semáforo), separado de la marca. Cada color con familia base/-tinta/-claro/-velo. */
-  --color-verde: #1b8049; --color-verde-tinta: #146337; --color-verde-claro: #3dbe74; --color-verde-velo: #e4f3ea;
-  --color-ambar: #e8830c; --color-ambar-tinta: #8a4700; --color-ambar-claro: #f7b25e; --color-ambar-velo: #fdebd6;
-  --color-rojo:  #cf3a2c; --color-rojo-tinta:  #a4261b; --color-rojo-claro:  #f07a6d; --color-rojo-velo:  #fbe9e6;
+- **The Yellow Never Reports Rule:** si algo amarillo no es el logo, el primario o "estás acá", está mal.
+- **The Pavonado Selects Rule:** lo elegido por el usuario va en el color de selección con texto blanco.
+- **The Three Paints Rule:** el semáforo sólo habla cuando el dato **es** estado. Un monto o una cantidad se pintan en neutro/marca con la etiqueta al lado. Estados de registro que no son salud (abierto, pausa, perdido) usan chips neutros o "fuerte".
+- El "ámbar" del semáforo es **naranja** a propósito: si la marca es amarilla, el aviso no puede ser amarillo.
 
-  --shadow-suave:  0 1px 2px rgb(22 33 43 / .05), 0 4px 14px -6px rgb(22 33 43 / .14);
-  --shadow-alzada: 0 2px 6px rgb(22 33 43 / .08), 0 20px 44px -14px rgb(22 33 43 / .34);
-  --ease-salida: cubic-bezier(0.16, 1, 0.3, 1);
-}
-```
+**Familias de cuatro pasos** para cada color de estado: `base` (relleno, punto), `-tinta` (texto sobre claro), `-claro` (acento, texto sobre oscuro), `-velo` (fondo de chip/aviso). Un aviso de éxito = `bg-verde-velo` + borde `verde/35` + texto `verde-tinta` + insignia `bg-verde text-white`. Sobre `-velo` el texto va siempre en `-tinta`.
 
-**Las familias de color** son la clave de un estado legible: `base` (relleno fuerte / texto sobre claro), `-tinta` (texto del mismo tono, contraste alto), `-claro` (acento suave), `-velo` (fondo teñido para chips y toasts). Un toast de éxito = `bg-verde-velo` + borde `verde/35` + texto `verde-tinta` + ícono con `bg-verde text-white`.
+## 2. Tipografía como escala cerrada
 
-## 2. Principio central: marca ≠ estado
-El color de marca (acá, el amarillo) identifica la app y la **acción principal**; jamás comunica "bien/riesgo/mal". El estado vive en un **semáforo aparte** (verde al día, ámbar en riesgo, rojo detenido). Esto evita el error clásico de que el mismo amarillo signifique "botón principal" y "advertencia". Corolario para gráficos y tablas: **el color solo codifica estado cuando el dato ES estado**; una magnitud neutra (monto, cantidad) se pinta con un tono de marca/neutro y su etiqueta al lado, no con verde/rojo.
+Una sola familia trabajada por peso da carácter sin ruido (Corralap: Montserrat). Definí la escala y no salgas de ella:
 
-## 3. Jerarquía visual y tipografía
-- Guiá el ojo: el CTA principal lleva el mayor peso (color de marca, tamaño, contraste). Un solo elemento "grita" por pantalla.
-- Tokenizá también la tipografía como utilidades: un `.titular` (peso 800, `letter-spacing` negativo, `text-wrap: balance`), un `.rotulo` en mayúsculas para grupos/etiquetas, y `.cifra` con `font-variant-numeric: tabular-nums lining-nums` para que los números no "bailen" en tablas.
-- Espaciado predecible en múltiplos de 4px (escala de Tailwind). Radios y alturas consistentes (ej. controles a `h-11` = 44px).
+| Rol | Tamaño / peso | Uso |
+|---|---|---|
+| Display | `clamp(26px, 8.6vw, 64px)` / 800, lh 1 | **una** cifra héroe por pantalla (el pipeline activo) |
+| Headline | 28px móvil · 34px `sm+` / 800 | título de vista (va solo) |
+| Title | 18–20px / 800 | paneles, diálogos, estados vacíos |
+| Body | **15px** / 400 | tamaño de trabajo: celdas, campos, navegación |
+| Body strong | 15px / 700 | nombre del registro en tarjetas y listas |
+| Meta | 14px / 400–600 | cliente, etapa, encabezados de columna |
+| Label | 13px / 600 | chips, ayudas y errores de campo — **piso de lectura** |
+| Rótulo | 13px / 700, +0.08em, mayúsculas | sólo grupos dentro de desplegables y paleta ⌘K |
 
-## 4. Accesibilidad (base, no adorno)
-- **Contraste** suficiente texto/fondo (apuntá a WCAG AA). El `-velo` es fondo; el texto encima va en `-tinta`, nunca en el color `base` claro.
-- **Foco visible siempre:** `:focus-visible { outline: 2.5px solid var(--color-tinta); outline-offset: 2px; }`. Sobre superficies oscuras, cambiá el color del outline a la marca para que se vea (`.sobre-pavonado :focus-visible { outline-color: var(--color-amarillo); }`).
-- **Objetivos táctiles** ≥ 44×44px en móvil. Inputs numéricos con `inputMode` y steppers `− / +` para el dedo.
-- Orden lógico de tabulación; nada interactivo que dependa solo del hover.
+Utilidades: `.titular` (800, `-0.025em`, `line-height 1.1`, `text-wrap: balance`), `.rotulo`, `.cifra` (`font-variant-numeric: tabular-nums lining-nums`). **Todo número lleva `.cifra`** para que no "baile" al actualizarse o animarse. Las cifras en tarjetas se escalan con el contenedor (`@container` + `text-[clamp(13px,8cqi,16px)]`) antes de cortarse.
 
-## 5. Responsive mobile-first
-- Estilá primero para móvil y escalá con `sm: md: lg:`. No escondas funcionalidad clave en móvil.
-- Respetá los bordes seguros del dispositivo: `viewport-fit=cover` + `env(safe-area-inset-*)` (ej. toasts anclados con `bottom-[calc(80px+env(safe-area-inset-bottom))]`).
-- Ofrecé densidad cuando ayuda: un modo `dense` (filas de un renglón) para listados largos que se recorren con la vista.
+**The Lonely Title Rule:** el título de vista va solo; sin bajadas ni textos explicativos. El contexto lo dan los datos.
 
-## 6. Movimiento con propósito
-- Definí las animaciones como tokens (`--animate-subir`, keyframes de aparición/despliegue) con duraciones cortas (160–480ms) y `--ease-salida`.
-- Animá para explicar (una barra crece desde su base, una cifra cuenta hasta su valor, un panel se despliega), no para decorar. Entradas escalonadas de a 30–60ms, nunca más de ~700ms.
-- **Respetá `prefers-reduced-motion`** globalmente: reducí duraciones a ~1ms y dibujá los gráficos directamente en su estado final (sin trazado ni conteo).
+## 3. Forma, espacio y profundidad
 
-```css
-@media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after { animation-duration: 1ms !important; transition-duration: 1ms !important; }
-}
-```
+- **Radios escalonados por tamaño:** 5px (ladrillos de gráfico) · 8px (botón de ícono, segmento interno) · **10px todo lo que se toca** · 12px tarjetas y avisos · 16px paneles, tablas, diálogos · píldora para chips. En celular el diálogo es *bottom sheet*: sólo esquinas superiores.
+- **Alturas:** controles 44px (`h-11`), `sm` 36px, `lg` 48px; chips 28px; filtros 36px. Objetivo táctil mínimo 44×44.
+- **Espaciado** en 6/8/12/16px dentro de un bloque, 24px entre bloques, paneles con 20px (móvil) / 24px.
+- **Sombras con vocabulario:** `suave` (reposo) y `alzada` (lo que flota: diálogos, avisos, desplegables, tarjeta levantada) tintadas con el color oscuro de marca, más el **halo de foco de campo** (`0 0 0 3px rgb(tinta/.14)`). **The Only-What-Floats Rule:** la alzada es sólo para lo que está por encima del contenido.
+- **Textura con mesura:** superficies oscuras grandes con grano de ruido fractal al ~7% (SVG inline como `background-image`). Textura, no dibujo.
 
-## 7. Feedback y estados
-El usuario siempre sabe qué pasó: estados de carga (spinner con `aria-busy`, skeletons), `hover`/`active` sutiles, y notificaciones de éxito/error como toasts con `aria-live`. Mensajes de error **legibles y accionables** (vienen del backend), no códigos crudos. Estados vacíos con una línea que explique y, si aplica, una acción.
+## 4. Layout responsive: rutas, no paneles
 
-## Flujo de trabajo (UX review)
-1. **Diagnóstico:** recorré el "user journey" del código/pantalla y marcá fricciones y jerarquías rotas.
-2. **Tokens primero:** antes del CSS, definí/auditá la paleta (¿marca separada de estado? ¿familias completas? ¿contraste?), tipografía y espaciado.
-3. **Layout:** proponé la distribución (sidebar vs top-nav, grid vs flex) justificando la decisión y el comportamiento responsive.
-4. **Refinamiento:** si lo piden, entregá las clases Tailwind exactas usando los tokens, con foco, movimiento reducido y objetivos táctiles ya resueltos.
+- **Desde `lg` (1024px):** riel fijo oscuro de 248px (logo, buscador ⌘K de 44px, ítems de 44px, activo en color de marca); contenido centrado hasta 1400px, márgenes 40px.
+- **Debajo de `lg`:** barra superior de 56px + **barra de pestañas inferior** de 64px con 5 destinos (activo = ícono dentro de píldora de marca 48×28). El contenido reserva `96px + env(safe-area-inset-bottom)` abajo.
+- **Rutas, no drawers:** detalle, alta y edición son páginas con "← volver" arriba del título. Sólo se superponen: diálogo de confirmación, desplegables, calendario, paleta ⌘K.
+- **Cero desborde horizontal de página** en cualquier ancho. Estrategias: tablas anchas → **lista compacta de un renglón** debajo de `xl`; filtros en pastillas que se deslizan de costado en móvil y bajan de renglón desde `md`; la columna principal de una tabla absorbe el ancho y recorta (`w-full max-w-0` + `truncate`); tableros tipo kanban con `snap-x` en móvil (columnas de `84vw`) y grilla en `xl`.
+- **Pie de formulario pegajoso** en móvil (sobre la barra inferior, con fondo `suelo/95` + `backdrop-blur`), estático en escritorio.
+- `viewport-fit=cover` + `env(safe-area-inset-*)` en todo lo anclado a los bordes.
 
-Al auditar, prioridad: (1) marca usada como estado o color sin token; (2) contraste insuficiente y foco invisible; (3) objetivos táctiles chicos / funcionalidad escondida en móvil; (4) movimiento sin `prefers-reduced-motion`; (5) feedback ausente o mensajes crudos.
+## 5. Movimiento con propósito
+
+Animá para **explicar** (de dónde viene algo, qué cambió, cuánto vale), nunca para decorar. Reglas:
+- Tokens de animación en `@theme` (`--animate-aparecer`, `--animate-subir`, `--animate-desplegar`) y una curva de salida única: `--ease-salida: cubic-bezier(0.16, 1, 0.3, 1)`.
+- **Duraciones:** 150ms cambios de color/borde · 160ms menús · 180ms fundidos · 260ms diálogos y avisos · 420–480ms marcas de gráfico · 650ms conteo de cifras · 700ms tope absoluto de una secuencia.
+- **Escalonado** 30–60ms por elemento con techo (Corralap: 40ms, techo 220ms) para que 30 barras no tarden 1,2 s.
+- **Presión:** botones `active:scale-[0.98]`. **Arrastre:** la tarjeta se levanta (rotación 2–3°, escala 1.03, sombra profunda), el hueco queda punteado, la columna destino se resalta con un anillo interior, y al soltar vuelve con 220ms.
+- **Salidas:** lo que entra animado también debería salir animado (avisos, diálogos, menús). Es la brecha más común; ver `references/movimiento.md`.
+- **Loader de marca** en vez de spinner genérico para cargas de vista (Corralap: los cinco ladrillos del logo se encienden de a uno). Spinner chico sólo dentro de botones.
+- **`prefers-reduced-motion`** global: duraciones a 1ms y `animation-delay: 0`; los gráficos se dibujan directo en su estado final, las cifras saltan al valor, el loader queda quieto y lleno.
+
+## 6. Formularios y feedback
+
+- Etiqueta arriba (14px/600) con asterisco rojo `aria-hidden` si es obligatorio; ayuda o error debajo (13px). El error **reemplaza** a la ayuda, no se apila.
+- Estados de campo: reposo (borde neutro fuerte) → hover (borde medio) → foco (borde tinta + halo 3px) → error (borde rojo + mensaje `rojo-tinta` 600) → deshabilitado (`chapa-2` + texto `tiza`).
+- **Máscaras que ayudan mientras se escribe** (CUIT con guiones, prefijo `$`, sufijo de unidad) y **validaciones que distinguen error de advertencia**: "Faltan dígitos: son 11" bloquea; "el dígito verificador no coincide" avisa pero deja guardar.
+- Mensajes cortos, en segunda persona y accionables ("Elegí el cliente", "Poné un nombre", "No puede superar al minorista"). Nunca códigos crudos.
+- **Opciones visibles pero no elegibles** con el motivo en la línea secundaria ("Inactivo: no se le puede presupuestar") en vez de esconderlas.
+- **Avisos (toasts):** abajo a la derecha en escritorio (400px), encima de la barra inferior en móvil; máximo 3 a la vez; éxito/aviso/info ~4,5s, error ~7s; cada tono con su insignia redonda (tilde, cruz, triángulo, "i").
+- **Estados vacíos** con ilustración del rubro, título y, si aplica, una acción. **Tablero sin datos** en un gráfico: recuadro punteado con "Sin datos en este período".
+- **Confirmaciones destructivas** en diálogo con ícono en `-velo`, botón `peligro` y "Cancelar" fantasma a la izquierda.
+
+## 7. Accesibilidad medida (AA como piso)
+
+- Texto ≥ 4.5:1; texto grande (≥ 24px o ≥ 18.66px bold) y **bordes/íconos que identifican un control ≥ 3:1** (WCAG 1.4.11). Medí, no estimes: ver tabla en `references/auditoria.md`.
+- **Foco visible siempre:** `:focus-visible { outline: 2.5px solid var(--color-tinta); outline-offset: 2px }` y sobre superficies oscuras `outline-color` de marca.
+- Nada depende sólo del color (el semáforo lleva etiqueta o texto "hace N días"), ni sólo del hover (todo tooltip también aparece con foco), ni sólo del puntero (arrastrar tiene alternativa de teclado y un botón "pasar a la siguiente etapa").
+- Enlace "Saltar al contenido" como primer foco.
+
+## Flujo de trabajo
+
+1. **Diagnóstico:** recorré el *journey* principal (en Corralap: abrir → ver qué se enfría → llamar → registrar). Marcá fricciones, jerarquías rotas y lo que sobra de texto.
+2. **Tokens primero:** auditá voces de color, familias, escalas y contraste antes de tocar pantallas. Todo valor arbitrario (`text-[#7d8a92]`, `bg-[#e2e6e4]`) es un token faltante.
+3. **Layout:** proponé la distribución por breakpoint justificando cada decisión y verificá cero desborde a 320px.
+4. **Movimiento y feedback:** asigná a cada cambio de estado su animación del catálogo (entrada **y** salida) y su mensaje.
+5. **Documentá:** mantené un `DESIGN.md` con tokens, reglas con nombre, Do's & Don'ts; y una página interna `/sistema` que muestre los componentes vivos.
+6. **Entrega:** clases Tailwind exactas con tokens, foco, movimiento reducido y objetivos táctiles resueltos.
+
+Al auditar, priorizá: (1) una voz de color usada para otra (marca como estado, estado como decoración); (2) contraste bajo AA, incluido placeholder y bordes de control, y foco invisible; (3) desborde horizontal u objetivos táctiles < 44px; (4) animaciones sin `prefers-reduced-motion`, sin salida o de más de 700ms; (5) valores sueltos donde debería haber un token; (6) feedback ausente o mensajes crudos. El checklist completo con correcciones está en `references/auditoria.md`.

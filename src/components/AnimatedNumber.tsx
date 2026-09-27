@@ -9,7 +9,7 @@ import { UsdAmount } from "@/components/UsdAmount";
  * a una sección, los números "cargan" hasta su valor real). Usa easeOutCubic
  * y respeta prefers-reduced-motion saltando directo al valor final.
  */
-export function useAnimatedNumber(value: number, durationMs = 800): number {
+export function useAnimatedNumber(value: number, durationMs = 650): number {
   const [display, setDisplay] = useState(0);
   const rafRef = useRef<number | null>(null);
 
@@ -56,7 +56,7 @@ export function useAnimatedNumber(value: number, durationMs = 800): number {
 export default function AnimatedNumber({
   value,
   format,
-  durationMs = 800,
+  durationMs = 650,
   className,
 }: {
   value: number;
@@ -65,7 +65,13 @@ export default function AnimatedNumber({
   className?: string;
 }) {
   const display = useAnimatedNumber(value, durationMs);
-  return <span className={className}>{format(display)}</span>;
+  // El lector de pantalla lee sólo el valor final; el conteo es decorativo.
+  return (
+    <span className={className}>
+      <span className="sr-only">{format(value)}</span>
+      <span aria-hidden="true">{format(display)}</span>
+    </span>
+  );
 }
 
 /** Igual que AnimatedNumber, pero formateado como monto en USD (vía UsdAmount). */
@@ -73,7 +79,7 @@ export function AnimatedUsdAmount({
   value,
   symbol,
   className,
-  durationMs = 800,
+  durationMs = 650,
 }: {
   value: number;
   symbol?: boolean;
@@ -81,5 +87,10 @@ export function AnimatedUsdAmount({
   durationMs?: number;
 }) {
   const display = useAnimatedNumber(value, durationMs);
-  return <UsdAmount value={display} symbol={symbol} className={className} />;
+  return (
+    <span className={className}>
+      <span className="sr-only"><UsdAmount value={value} symbol={symbol} /></span>
+      <span aria-hidden="true"><UsdAmount value={display} symbol={symbol} /></span>
+    </span>
+  );
 }
