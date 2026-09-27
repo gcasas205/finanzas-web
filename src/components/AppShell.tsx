@@ -79,7 +79,9 @@ export default function AppShell({ initialConfig, children }: { initialConfig: A
     </a>
     <div className="min-h-screen flex flex-col lg:flex-row">
       {/* ── Mobile top bar ──────────────────────────────────── */}
-      <header className="lg:hidden flex items-center justify-between px-4 h-14 hairline-b bg-ink-900/80 backdrop-blur-md sticky top-0 z-40 pt-[env(safe-area-inset-top)]">
+      {/* Sólida y con el fondo extendido hacia arriba (before:): en iOS la zona del reloj
+          y el rebote del scroll dejaban ver el contenido pasando por detrás. */}
+      <header className="lg:hidden flex items-center justify-between px-4 h-[calc(3.5rem+env(safe-area-inset-top))] pt-[env(safe-area-inset-top)] hairline-b bg-ink-900 sticky top-0 z-40 before:pointer-events-none before:absolute before:inset-x-0 before:bottom-full before:h-40 before:bg-ink-900">
         <Link href="/dashboard" className="display text-lg text-paper leading-none">
           {nombre || "Finanzas"}<span className="text-amber italic">.</span>
         </Link>
@@ -137,7 +139,9 @@ export default function AppShell({ initialConfig, children }: { initialConfig: A
       {/* ── Mobile bottom nav: 5 pestañas, activo en píldora de marca ── */}
       <nav
         aria-label="Principal"
-        className="lg:hidden fixed bottom-0 left-0 right-0 bg-ink-900/95 backdrop-blur-md hairline-t z-40 flex pb-[env(safe-area-inset-bottom)]"
+        // Fondo sólido y extendido hacia abajo (after:): en Safari de iOS la barra del
+        // navegador flota sobre la página y, sin esto, se veía el contenido moverse debajo.
+        className="lg:hidden fixed bottom-0 left-0 right-0 bg-ink-900 hairline-t z-40 flex pb-[env(safe-area-inset-bottom)] after:pointer-events-none after:absolute after:inset-x-0 after:top-full after:h-40 after:bg-ink-900"
       >
         {MOBILE_MAIN.map((item) => (
           <TabLink key={item.href} item={item} active={isActive(pathname, item.href)} />
