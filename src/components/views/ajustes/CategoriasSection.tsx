@@ -1,12 +1,12 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type TextareaHTMLAttributes } from "react";
 import { Plus, Trash2, Check } from "lucide-react";
 import { toast } from "sonner";
 import { useCategorias } from "@/components/DataProvider";
 import { categoriasApi, errorMessage } from "@/lib/api";
 import { CATEGORIA_COLORES } from "@/lib/categories";
-import { Field, focusFirstInvalid } from "@/components/ui/Field";
+import { focusFirstInvalid } from "@/components/ui/Field";
 import { Button } from "@/components/ui/Button";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 
@@ -97,45 +97,91 @@ export function CategoriasSection() {
         y las reglas que la usaban. Las subcategorías van separadas por coma.
       </p>
       <form ref={formRef} onSubmit={guardar} noValidate className="space-y-4">
-        {filas.map((f, i) => {
-          const fija = FIJAS.has(f.original);
-          return (
-            <div key={f.original || `nueva-${i}`} className="hairline-t pt-4 grid grid-cols-1 gap-3 sm:grid-cols-12 sm:items-end">
-              <div className="sm:col-span-3">
-                <Field label="Nombre" error={errors[`name-${i}`]} hint={fija ? "La usa la app: no se renombra." : undefined}>
-                  {(c) => <input {...c} type="text" maxLength={40} value={f.name} disabled={fija}
-                    onChange={(e) => cambiar(i, { name: e.target.value })} className="form-input disabled:opacity-60" />}
-                </Field>
-              </div>
-              <div className="sm:col-span-6">
-                <Field label="Subcategorías" error={errors[`subs-${i}`]}>
-                  {(c) => <input {...c} type="text" value={f.subs}
-                    onChange={(e) => cambiar(i, { subs: e.target.value })} className="form-input" />}
-                </Field>
-              </div>
-              <div className="sm:col-span-2">
-                <Field label="Color">
-                  {(c) => (
-                    <div className="flex items-center gap-2">
-                      <span className="w-4 h-4 rounded-full shrink-0 border border-ink-500" style={{ background: f.color }} aria-hidden="true" />
-                      <select {...c} value={f.color} onChange={(e) => cambiar(i, { color: e.target.value })} className="form-input">
-                        {CATEGORIA_COLORES.map((col, n) => <option key={col} value={col}>Color {n + 1}</option>)}
-                      </select>
-                    </div>
-                  )}
-                </Field>
-              </div>
-              <div className="sm:col-span-1 flex justify-end">
-                {!fija && (
-                  <button type="button" onClick={() => quitar(i)} className="p-3 text-ink-300 hover:text-terra-light"
-                    aria-label={`Quitar la categoría ${f.name || i + 1}`}>
-                    <Trash2 className="w-4 h-4" aria-hidden="true" />
-                  </button>
+        <div className="divide-y divide-ink-600/60 hairline-t hairline-b">
+          {filas.map((f, i) => {
+            const fija = FIJAS.has(f.original);
+            const idNombre = `cat-nombre-${i}`;
+            const idSubs = `cat-subs-${i}`;
+            return (
+              <div key={f.original || `nueva-${i}`} className="py-5 space-y-3">
+                {/* Nombre con su color al lado, y quitar a la derecha */}
+                <div className="flex items-center gap-3">
+                  <span className="w-3 h-3 rounded-full shrink-0" style={{ background: f.color }} aria-hidden="true" />
+                  <label htmlFor={idNombre} className="sr-only">Nombre de la categoría</label>
+                  <input
+                    id={idNombre}
+                    type="text"
+                    maxLength={40}
+                    value={f.name}
+                    disabled={fija}
+                    placeholder="Nombre de la categoría"
+                    aria-invalid={Boolean(errors[`name-${i}`]) || undefined}
+                    aria-describedby={errors[`name-${i}`] ? `${idNombre}-error` : undefined}
+                    onChange={(e) => cambiar(i, { name: e.target.value })}
+                    className="form-input flex-1 min-w-0 font-medium disabled:opacity-100 disabled:cursor-not-allowed"
+                  />
+                  {/* Mismo ancho para "Fija" y la papelera: los nombres quedan alineados */}
+                  <div className="w-11 shrink-0 flex justify-center">
+                    {fija ? (
+                      <span className="text-xs text-ink-300 px-1.5 py-1 border border-control" title="La usa la app: no se renombra ni se quita">
+                        Fija
+                      </span>
+                    ) : (
+                      <button type="button" onClick={() => quitar(i)} className="w-11 h-11 inline-flex items-center justify-center text-ink-300 hover:text-terra-light"
+                        aria-label={`Quitar la categoría ${f.name || i + 1}`}>
+                        <Trash2 className="w-4 h-4" aria-hidden="true" />
+                      </button>
+                    )}
+                  </div>
+                </div>
+                {errors[`name-${i}`] && (
+                  <p id={`${idNombre}-error`} className="text-xs text-terra-light pl-6">{errors[`name-${i}`]}</p>
                 )}
+
+                <div className="pl-6 pr-14 space-y-3 max-sm:pr-0">
+                  <div>
+                    <label htmlFor={idSubs} className="eyebrow block mb-1.5">Subcategorías</label>
+                    {/* textarea que crece con el texto (Safari no soporta field-sizing): la lista nunca queda cortada */}
+                    <AutoTextarea
+                      id={idSubs}
+                      value={f.subs}
+                      aria-invalid={Boolean(errors[`subs-${i}`]) || undefined}
+                      aria-describedby={errors[`subs-${i}`] ? `${idSubs}-error` : undefined}
+                      onChange={(e) => cambiar(i, { subs: e.target.value })}
+                      className="form-input w-full resize-none leading-relaxed"
+                    />
+                    {errors[`subs-${i}`] && <p id={`${idSubs}-error`} className="text-xs text-terra-light mt-1">{errors[`subs-${i}`]}</p>}
+                  </div>
+
+                  <div>
+                  <span className="eyebrow block" aria-hidden="true">Color</span>
+                  <div role="radiogroup" aria-label={`Color de ${f.name || "la categoría"}`} className="flex flex-wrap items-center -ml-3">
+                    {CATEGORIA_COLORES.map((col, n) => {
+                      const elegido = f.color.toLowerCase() === col.toLowerCase();
+                      return (
+                        <button
+                          key={col}
+                          type="button"
+                          role="radio"
+                          aria-checked={elegido}
+                          aria-label={`Color ${n + 1}`}
+                          onClick={() => cambiar(i, { color: col })}
+                          className="w-11 h-11 inline-flex items-center justify-center rounded-full"
+                        >
+                          <span
+                            className={`w-5 h-5 rounded-full transition-shadow ${elegido ? "ring-2 ring-paper ring-offset-2 ring-offset-ink-800" : ""}`}
+                            style={{ background: col }}
+                          />
+                        </button>
+                      );
+                    })}
+                  </div>
+                  </div>
+                </div>
               </div>
-            </div>
-          );
-        })}
+            );
+          })}
+        </div>
         <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
           <Button variant="secundario" onClick={() => setFilas((p) => [...p, {
             original: "", name: "", subs: "General", color: CATEGORIA_COLORES[p.length % CATEGORIA_COLORES.length],
@@ -151,4 +197,20 @@ export function CategoriasSection() {
       {dialog}
     </section>
   );
+}
+
+/** Textarea que crece con su contenido (mide scrollHeight; Safari no soporta field-sizing). */
+function AutoTextarea(props: TextareaHTMLAttributes<HTMLTextAreaElement>) {
+  const ref = useRef<HTMLTextAreaElement>(null);
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const ajustar = () => { el.style.height = "auto"; el.style.height = `${el.scrollHeight + 2}px`; };
+    ajustar();
+    // También al cambiar el ancho (rotar el celular, achicar la ventana)
+    const ro = new ResizeObserver(ajustar);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [props.value]);
+  return <textarea ref={ref} rows={1} {...props} />;
 }

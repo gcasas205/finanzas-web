@@ -257,12 +257,12 @@ export default function Dolares() {
       {/* Gráfico de evolución */}
       {evolucion.length > 0 && (
         <div className="surface p-6 sm:p-8 mb-8">
-          <div className="flex items-start justify-between mb-6">
+          <div className="flex flex-wrap items-start justify-between gap-3 mb-6">
             <div>
               <div className="eyebrow mb-1">Evolución</div>
               <h2 className="display text-2xl text-paper">Tenencia y flujo mensual</h2>
             </div>
-            <div className="flex gap-4 text-xs">
+            <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs">
               <LegendDot color={PALETTE.positivo} label="Compras" />
               <LegendDot color={PALETTE.negativo} label="Salidas" />
               <LegendDot color={PALETTE.serie} label="Tenencia" />

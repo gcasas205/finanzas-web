@@ -150,7 +150,7 @@ export default function Transactions({ config }: Props) {
   return (
     <div className="p-4 sm:p-6 lg:p-10 max-w-[1400px]">
       {error && <StaleDataBanner message={error} onRetry={refresh} />}
-      <header className="mb-10 flex items-end justify-between">
+      <header className="mb-8 sm:mb-10 flex flex-wrap items-end justify-between gap-4">
         <div>
           <div className="eyebrow mb-2">Movimientos</div>
           <h1 className="display text-3xl sm:text-5xl text-paper">
@@ -176,87 +176,97 @@ export default function Transactions({ config }: Props) {
 
       <RecurrentesPendientes onCargados={refresh} />
 
-      {/* Filters */}
-      <div className="surface p-3 sm:p-5 mb-4 sm:mb-6 flex flex-wrap gap-3 sm:gap-4 items-center">
-        <div className="flex items-center gap-2 flex-1 min-w-[200px]">
-          <Search className="w-4 h-4 text-ink-300" aria-hidden="true" />
+      {/* Filtros: búsqueda arriba, desplegables en grilla y segmentados abajo */}
+      <div className="surface mb-4 sm:mb-6" role="search" aria-label="Filtrar movimientos">
+        <div className="flex items-center gap-3 px-4 sm:px-5 hairline-b">
+          <Search className="w-4 h-4 text-ink-300 shrink-0" aria-hidden="true" />
           <input
             type="search"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Buscar descripción o categoría…"
-            aria-label="Buscar por descripción o categoría"
-            className="min-h-11 flex-1 bg-transparent text-sm text-paper placeholder:text-ink-400"
+            placeholder="Buscar por descripción, categoría o notas…"
+            aria-label="Buscar por descripción, categoría o notas"
+            className="min-h-12 flex-1 min-w-0 bg-transparent text-sm text-paper placeholder:text-ink-400"
           />
+          {hasFilters && (
+            <button
+              type="button"
+              onClick={clearFilters}
+              className="min-h-11 shrink-0 text-ink-300 hover:text-paper text-sm flex items-center gap-1"
+            >
+              <X className="w-4 h-4" aria-hidden="true" /> Limpiar filtros
+            </button>
+          )}
         </div>
 
-        <select
-          value={filterMonth}
-          onChange={(e) => setFilterMonth(e.target.value)}
-          aria-label="Filtrar por mes"
-          className="select-native min-h-11 bg-ink-900/60 border border-control text-paper pl-3 pr-9 py-2 text-sm focus:border-amber cursor-pointer"
-        >
-          <option value="">Todos los meses</option>
-          {months.map(m => <option key={m} value={m}>{formatMes(m)}</option>)}
-        </select>
+        <div className="p-3 sm:p-5 space-y-3 sm:space-y-4">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <select
+              value={filterMonth}
+              onChange={(e) => setFilterMonth(e.target.value)}
+              aria-label="Filtrar por mes"
+              className="select-native w-full min-h-11 bg-ink-900/60 border border-control text-paper pl-3 pr-9 py-2 text-sm focus:border-amber cursor-pointer"
+            >
+              <option value="">Todos los meses</option>
+              {months.map(m => <option key={m} value={m}>{formatMes(m)}</option>)}
+            </select>
 
-        <Segmented
-          label="Filtrar por tipo"
-          size="sm"
-          className="w-auto"
-          value={filterType}
-          onChange={setFilterType}
-          options={[
-            { value: "todos", label: "Todos" },
-            { value: "ingreso", label: "Ingresos" },
-            { value: "egreso", label: "Gastos" },
-          ]}
-        />
+            <select
+              value={filterCategoria}
+              onChange={(e) => setFilterCategoria(e.target.value)}
+              aria-label="Filtrar por categoría"
+              className="select-native w-full min-h-11 bg-ink-900/60 border border-control text-paper pl-3 pr-9 py-2 text-sm focus:border-amber cursor-pointer"
+            >
+              <option value="">Todas las categorías</option>
+              {categorias.map(c => <option key={c.name} value={c.name}>{c.name}</option>)}
+            </select>
 
-        <select
-          value={filterCategoria}
-          onChange={(e) => setFilterCategoria(e.target.value)}
-          aria-label="Filtrar por categoría"
-          className="select-native min-h-11 bg-ink-900/60 border border-control text-paper pl-3 pr-9 py-2 text-sm focus:border-amber cursor-pointer"
-        >
-          <option value="">Todas las categorías</option>
-          {categorias.map(c => <option key={c.name} value={c.name}>{c.name}</option>)}
-        </select>
+            <select
+              value={filterFuente}
+              onChange={(e) => setFilterFuente(e.target.value as "" | TransactionSource)}
+              aria-label="Filtrar por fuente"
+              className="select-native w-full min-h-11 bg-ink-900/60 border border-control text-paper pl-3 pr-9 py-2 text-sm focus:border-amber cursor-pointer"
+            >
+              <option value="">Todas las fuentes</option>
+              <option value="manual">Manual / Efectivo</option>
+              <option value="tarjeta">Tarjeta</option>
+              <option value="recibo">Recibo de sueldo</option>
+            </select>
+          </div>
 
-        <select
-          value={filterFuente}
-          onChange={(e) => setFilterFuente(e.target.value as "" | TransactionSource)}
-          aria-label="Filtrar por fuente"
-          className="select-native min-h-11 bg-ink-900/60 border border-control text-paper pl-3 pr-9 py-2 text-sm focus:border-amber cursor-pointer"
-        >
-          <option value="">Todas las fuentes</option>
-          <option value="manual">Manual / Efectivo</option>
-          <option value="tarjeta">Tarjeta</option>
-          <option value="recibo">Recibo de sueldo</option>
-        </select>
-
-        <Segmented
-          label="Filtrar por moneda"
-          size="sm"
-          className="w-auto"
-          value={filterMoneda}
-          onChange={setFilterMoneda}
-          options={[
-            { value: "todas", label: "Todas" },
-            { value: "ARS", label: "ARS" },
-            { value: "USD", label: "USD" },
-          ]}
-        />
-
-        {hasFilters && (
-          <button
-            type="button"
-            onClick={clearFilters}
-            className="min-h-11 text-ink-300 hover:text-paper text-sm flex items-center gap-1"
-          >
-            <X className="w-4 h-4" aria-hidden="true" /> Limpiar
-          </button>
-        )}
+          <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-center gap-x-6 gap-y-3">
+            <div className="flex flex-col sm:flex-row sm:items-center gap-1.5 sm:gap-3">
+              <span className="eyebrow" aria-hidden="true">Tipo</span>
+              <Segmented
+                label="Filtrar por tipo"
+                size="sm"
+                className="w-full sm:w-auto"
+                value={filterType}
+                onChange={setFilterType}
+                options={[
+                  { value: "todos", label: "Todos" },
+                  { value: "ingreso", label: "Ingresos" },
+                  { value: "egreso", label: "Gastos" },
+                ]}
+              />
+            </div>
+            <div className="flex flex-col sm:flex-row sm:items-center gap-1.5 sm:gap-3">
+              <span className="eyebrow" aria-hidden="true">Moneda</span>
+              <Segmented
+                label="Filtrar por moneda"
+                size="sm"
+                className="w-full sm:w-auto"
+                value={filterMoneda}
+                onChange={setFilterMoneda}
+                options={[
+                  { value: "todas", label: "Todas" },
+                  { value: "ARS", label: "ARS" },
+                  { value: "USD", label: "USD" },
+                ]}
+              />
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* Summary */}

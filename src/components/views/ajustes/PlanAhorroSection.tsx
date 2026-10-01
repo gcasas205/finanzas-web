@@ -107,7 +107,7 @@ export function PlanAhorroSection() {
               {(c) => <input {...c} type="number" min="0" step="1" inputMode="decimal" value={piso}
                 onChange={(e) => { setPiso(e.target.value); setErrors({}); }} className="form-input tabular font-mono" />}
             </Field>
-            <Field label="Rendimiento supuesto S&P (% anual)" error={errors.retorno} hint="Sólo para la proyección ilustrativa.">
+            <Field label="Rendimiento S&P (% anual)" error={errors.retorno} hint="Supuesto, sólo para la proyección ilustrativa.">
               {(c) => <input {...c} type="number" step="0.1" inputMode="decimal" value={retorno}
                 onChange={(e) => { setRetorno(e.target.value); setErrors({}); }} className="form-input tabular font-mono" />}
             </Field>
