@@ -56,6 +56,20 @@ describe("resumenDolar", () => {
   });
 });
 
+describe("resultado realizado", () => {
+  it("vender por encima del costo promedio realiza ganancia", () => {
+    const r = resumenDolar([
+      op({ fecha: "2026-01-01", montoUSD: 100, precioARS: 1000, totalARS: 100000 }),
+      op({ fecha: "2026-02-01", montoUSD: 100, precioARS: 1200, totalARS: 120000 }),
+      op({ fecha: "2026-03-01", tipo: "venta", montoUSD: 50, precioARS: 1300, totalARS: 65000 }),
+    ]);
+    // costo promedio 1100 → 50 USD costaron 55.000 y se vendieron a 65.000
+    expect(r.resultadoRealizadoARS).toBeCloseTo(10000, 2);
+    expect(r.tenenciaUSD).toBe(150);
+    expect(r.precioPromedioCompra).toBeCloseTo(1100, 2);
+  });
+});
+
 describe("computeAhorro", () => {
   const cfg: AhorroConfig = {
     emergenciaObjetivo: 1000,

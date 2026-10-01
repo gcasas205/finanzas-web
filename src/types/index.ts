@@ -70,16 +70,18 @@ export interface DolarOperacion {
   origen?: BucketOrigen;
 }
 
-/** Cotización oficial scrapeada de dolarhoy.com */
+/** Cotización oficial (dolarapi.com, con dolarhoy.com de respaldo) */
 export interface Cotizacion {
   compra: number;
   venta: number;
-  /** Texto "dd/mm/aa hh:mm AM" que informa dolarhoy */
+  /** Momento que informa la fuente (ISO en dolarapi), si lo da */
   actualizado: string | null;
   /** ISO en que la app trajo el dato */
   fetchedAt: string;
   /** true si es un valor de respaldo porque falló el scraping */
   fallback?: boolean;
+  /** De dónde salió el dato */
+  fuente?: "dolarapi" | "dolarhoy";
 }
 
 export interface AppConfig {

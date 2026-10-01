@@ -17,6 +17,8 @@ export interface DolarResumen {
   totalVendidoARS: number;
   /** Total de USD gastados directamente desde la tenencia (egresos en USD) */
   totalGastadoUSD: number;
+  /** Ganancia (o pérdida) ya realizada en las ventas: pesos recibidos − costo promedio de lo vendido */
+  resultadoRealizadoARS: number;
 }
 
 /** Evento normalizado sobre la tenencia de dólares, ordenable por fecha */
@@ -64,6 +66,7 @@ export function resumenDolar(ops: DolarOperacion[], usdTxs: Transaction[] = []):
 
   let totalCompradoUSD = 0, totalVendidoUSD = 0, totalGastadoUSD = 0;
   let totalCompradoARS = 0, totalVendidoARS = 0;
+  let resultadoRealizadoARS = 0;
 
   const ppcVigente = () => (tenencia > 0 ? costoAcumARS / tenencia : 0);
 
@@ -78,6 +81,8 @@ export function resumenDolar(ops: DolarOperacion[], usdTxs: Transaction[] = []):
       const usdSalen = Math.min(ev.usd, tenencia);
       tenencia -= ev.usd;
       costoAcumARS -= ppc * usdSalen;
+      // Sólo cuenta lo vendido que tenía costo (si se vende de más, no hay base)
+      if (ev.usd > 0) resultadoRealizadoARS += ev.totalARS * (usdSalen / ev.usd) - ppc * usdSalen;
       totalVendidoUSD += ev.usd;
       totalVendidoARS += ev.totalARS;
     } else if (ev.tipo === "gastoUSD") {
@@ -105,6 +110,7 @@ export function resumenDolar(ops: DolarOperacion[], usdTxs: Transaction[] = []):
     totalCompradoARS,
     totalVendidoARS,
     totalGastadoUSD,
+    resultadoRealizadoARS,
   };
 }
 

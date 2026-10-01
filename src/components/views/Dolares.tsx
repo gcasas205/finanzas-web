@@ -154,6 +154,18 @@ export default function Dolares() {
     }
   };
 
+  const vacio = selectedMonth === ALL ? (
+    <EmptyState
+      message="Todavía no registraste operaciones ni gastos en dólares"
+      action={{ label: "Registrar una compra", onClick: () => { setEditing(null); setShowForm(true); } }}
+    />
+  ) : (
+    <EmptyState
+      message="Sin movimientos en dólares para este mes"
+      action={{ label: "Ver todo el histórico", onClick: () => setSelectedMonth(ALL) }}
+    />
+  );
+
   if (isLoading) return <LogoLoader className="min-h-[70vh]" />;
   if (error && dolarOps.length === 0 && transactions.length === 0) {
     return <ErrorState message={error} onRetry={refresh} className="min-h-[70vh]" />;
@@ -211,7 +223,7 @@ export default function Dolares() {
         <KPICard
           eyebrow="Resultado por T.C."
           value={<AnimatedNumber value={resultadoARS} format={formatPesos} />}
-          subtitle={`${resultadoARS >= 0 ? "+" : ""}${resultadoPct.toFixed(1)}% vs. costo`}
+          subtitle={`latente ${resultadoARS >= 0 ? "+" : ""}${resultadoPct.toFixed(1)}% · realizado ${resumen.resultadoRealizadoARS >= 0 ? "+" : "−"}${formatPesosCompact(Math.abs(resumen.resultadoRealizadoARS))}`}
           accent={resultadoARS >= 0 ? "moss" : "terra"}
           icon={resultadoARS >= 0 ? TrendingUp : TrendingDown}
           className="col-span-1 sm:col-span-3"
@@ -276,7 +288,8 @@ export default function Dolares() {
       {/* Tabla de operaciones + movimientos USD */}
       <div className="surface overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full">
+          <table className="hidden md:table w-full">
+            <caption className="sr-only">Operaciones y movimientos en dólares</caption>
             <thead>
               <tr className="hairline-b">
                 <th className="eyebrow text-left px-6 py-4">Fecha</th>
@@ -291,17 +304,7 @@ export default function Dolares() {
             <tbody>
               {filas.length === 0 ? (
                 <tr><td colSpan={7}>
-                  {selectedMonth === ALL ? (
-                    <EmptyState
-                      message="Todavía no registraste operaciones ni gastos en dólares"
-                      action={{ label: "Registrar una compra", onClick: () => { setEditing(null); setShowForm(true); } }}
-                    />
-                  ) : (
-                    <EmptyState
-                      message="Sin movimientos en dólares para este mes"
-                      action={{ label: "Ver todo el histórico", onClick: () => setSelectedMonth(ALL) }}
-                    />
-                  )}
+                  {vacio}
                 </td></tr>
               ) : filas.map((f) => (
                 <tr key={f.id} className="hairline-b last:border-0 hover:bg-ink-700/20 transition-colors group">
@@ -348,6 +351,47 @@ export default function Dolares() {
               ))}
             </tbody>
           </table>
+
+          {/* Celular: la tabla pasa a lista */}
+          <div className="md:hidden flex flex-col divide-y divide-ink-600/60">
+            {filas.length === 0 ? vacio : filas.map((f) => (
+              <div key={f.id} className="p-4 flex flex-col gap-2">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <ConceptoBadge tipo={f.tipo} />
+                    <div className="text-xs text-ink-300 tabular font-mono mt-1.5">{formatFecha(f.fecha)}</div>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-sm text-paper tabular font-mono"><UsdAmount value={f.usd} /></div>
+                    {f.kind === "op" && (
+                      <div className={`text-xs tabular font-mono mt-0.5 ${f.tipo === "compra" ? "text-terra-light" : "text-moss-light"}`}>
+                        <span aria-hidden="true">{f.tipo === "compra" ? "−" : "+"}</span>
+                        <span className="sr-only">{f.tipo === "compra" ? "pagaste " : "recibiste "}</span>
+                        {formatPesos(f.totalARS)} <span className="text-ink-300">@ {formatPesos(f.precio)}</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+                <div className="flex items-center justify-between gap-3">
+                  <div className="text-xs text-ink-300 truncate">{f.notas || "—"}</div>
+                  {f.kind === "op" ? (
+                    <div className="flex gap-1 -mr-3.5 shrink-0">
+                      <button onClick={() => { setEditing(f.raw as DolarOperacion); setShowForm(true); }}
+                        className="p-3.5 text-ink-300 hover:text-paper" aria-label="Editar operación">
+                        <Edit2 className="w-4 h-4" />
+                      </button>
+                      <button onClick={() => handleDelete(f.raw as DolarOperacion)}
+                        className="p-3.5 text-ink-300 hover:text-terra-light" aria-label="Eliminar operación">
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ) : (
+                    <span className="text-xs text-ink-300 italic shrink-0">en Movimientos</span>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       </div>
 
@@ -411,7 +455,7 @@ function CotizacionBanner({ cot, onRefresh, refreshing }: {
   return (
     <div className="surface p-5 mb-6 flex flex-col sm:flex-row sm:items-center gap-4 sm:gap-8">
       <div className="flex items-center gap-3">
-        <div className="eyebrow">Dólar oficial · dolarhoy</div>
+        <div className="eyebrow">Dólar oficial · {cot?.fuente === "dolarhoy" ? "dolarhoy" : "dolarapi"}</div>
         <button type="button" onClick={onRefresh} disabled={refreshing}
           className="p-2.5 -m-2.5 text-ink-300 hover:text-paper transition-colors disabled:opacity-50"
           aria-label="Actualizar cotización">
@@ -434,7 +478,7 @@ function CotizacionBanner({ cot, onRefresh, refreshing }: {
           </div>
           {cot!.actualizado && (
             <div className="ml-auto text-xs text-ink-400 hidden sm:block">
-              Actualizado {cot!.actualizado}
+              Actualizado {formatActualizado(cot!.actualizado)}
             </div>
           )}
         </div>
@@ -721,4 +765,10 @@ function DolarFormBody({ editing, cotizacion, onClose, onSaved }: {
       </DialogActions>
     </form>
   );
+}
+
+/** "2026-10-01T14:30:00Z" → "1/10/26, 11:30" (si no es una fecha, se muestra tal cual). */
+function formatActualizado(v: string): string {
+  const d = new Date(v);
+  return Number.isNaN(d.getTime()) ? v : d.toLocaleString("es-AR", { dateStyle: "short", timeStyle: "short" });
 }

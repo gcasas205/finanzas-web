@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/Button";
 import { CATEGORIES } from "@/lib/categories";
 import { useTransactions } from "@/components/DataProvider";
 import { separarDuplicados } from "@/lib/duplicados";
+import { UsdAmount } from "@/components/UsdAmount";
 
 interface Props { config: AppConfig; }
 
@@ -109,7 +110,7 @@ export default function ImportView({ config }: Props) {
           onClick={() => { setDocType("tarjeta"); setResult(null); setFile(null); }}
           icon={CreditCard}
           label="Resumen de Tarjeta"
-          description="VISA ICBC · Importa todos los consumos como egresos"
+          description="VISA ICBC · Consumos en pesos y dólares, impuestos y créditos"
         />
         <TypeCard
           active={docType === "sueldo"}
@@ -239,7 +240,12 @@ function TypeCard({ active, onClick, icon: Icon, label, description }: {
 function VisaPreview({ result, txs, onChange }: {
   result: VisaParsedResult; txs: Transaction[]; onChange: (t: Transaction[]) => void;
 }) {
-  const total = txs.reduce((s, t) => s + t.monto, 0);
+  // Total a pagar: consumos − créditos, separado por moneda
+  const neto = (moneda: Transaction["moneda"]) =>
+    txs.filter(t => t.moneda === moneda).reduce((s, t) => s + (t.tipo === "ingreso" ? -t.monto : t.monto), 0);
+  const total = neto("ARS");
+  const totalUSD = neto("USD");
+  const hayUSD = txs.some(t => t.moneda === "USD");
 
   const update = (i: number, patch: Partial<Transaction>) => {
     onChange(txs.map((t, idx) => idx === i ? { ...t, ...patch } : t));
@@ -261,11 +267,23 @@ function VisaPreview({ result, txs, onChange }: {
           </div>
           <p className="text-xs text-ink-300 mt-2">
             Revisá antes de importar: podés corregir descripción, categoría y monto, o quitar filas con la papelera.
+            Los consumos en dólares se descuentan de tu tenencia de USD; impuestos y comisiones van a Finanzas.
           </p>
         </div>
         <div className="text-left sm:text-right shrink-0">
           <div className="eyebrow text-terra-light mb-1">Total</div>
           <div className="display text-2xl text-terra-light tabular">{formatPesos(total)}</div>
+          {hayUSD && (
+            <div className="text-sm text-terra-light tabular font-mono mt-1"><UsdAmount value={totalUSD} /></div>
+          )}
+          {result.saldoTotal > 0 && (
+            <div className="text-xs text-ink-300 mt-2 tabular">
+              Saldo del resumen: {formatPesos(result.saldoTotal)}
+              {Math.abs(result.saldoTotal - total) >= 1 && (
+                <span className="block">Difieren en {formatPesos(Math.abs(result.saldoTotal - total))}: revisá si falta alguna línea (o si incluye saldo anterior).</span>
+              )}
+            </div>
+          )}
         </div>
       </div>
 
@@ -299,7 +317,7 @@ function VisaPreview({ result, txs, onChange }: {
                 <td className="px-2 py-2">
                   <select
                     value={tx.categoria}
-                    onChange={(e) => update(i, { categoria: e.target.value })}
+                    onChange={(e) => update(i, { categoria: e.target.value, subcategoria: CATEGORIES.find(c => c.name === e.target.value)?.subcategories[0] ?? "Sin categoría" })}
                     aria-label={`Categoría de ${tx.descripcion}`}
                     className="select-native bg-ink-800 border border-control text-xs text-ink-100 pl-2 pr-8 py-1.5 focus:border-amber cursor-pointer max-w-[150px]"
                   >
@@ -307,12 +325,19 @@ function VisaPreview({ result, txs, onChange }: {
                   </select>
                 </td>
                 <td className="px-2 py-2 text-right">
-                  <input
-                    type="number" step="0.01" value={tx.monto}
-                    onChange={(e) => update(i, { monto: parseFloat(e.target.value) || 0 })}
-                    aria-label={`Monto de ${tx.descripcion}`}
-                    className="w-28 bg-transparent border-b border-control/60 hover:border-control focus:border-amber text-sm text-right font-mono tabular text-terra-light py-1 transition-colors"
-                  />
+                  <div className="inline-flex items-center justify-end gap-1">
+                    <span className={`text-xs ${tx.tipo === "ingreso" ? "text-moss-light" : "text-terra-light"}`}>
+                      <span aria-hidden="true">{tx.tipo === "ingreso" ? "+" : "−"}</span>
+                      <span className="sr-only">{tx.tipo === "ingreso" ? "crédito" : "consumo"}</span>
+                      {tx.moneda === "USD" ? "US$" : "$"}
+                    </span>
+                    <input
+                      type="number" step="0.01" value={tx.monto}
+                      onChange={(e) => update(i, { monto: parseFloat(e.target.value) || 0 })}
+                      aria-label={`Monto de ${tx.descripcion} en ${tx.moneda === "USD" ? "dólares" : "pesos"}`}
+                      className={`w-28 bg-transparent border-b border-control/60 hover:border-control focus:border-amber text-sm text-right font-mono tabular py-1 transition-colors ${tx.tipo === "ingreso" ? "text-moss-light" : "text-terra-light"}`}
+                    />
+                  </div>
                 </td>
                 <td className="px-2 py-2 text-right">
                   <button
