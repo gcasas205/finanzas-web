@@ -68,7 +68,11 @@ export const TransactionSchema = z
   .refine((t) => t.cuotaNumero <= t.cuotaTotal, {
     message: "La cuota no puede ser mayor que el total de cuotas",
     path: ["cuotaNumero"],
-  });
+  })
+  .refine(
+    (t) => t.moneda !== "USD" || t.tipo !== "ingreso" || roundMoney((t.asigMediano ?? 0) + (t.asigLargo ?? 0)) <= t.monto,
+    { message: "Lo asignado a mediano y largo supera el monto del ingreso", path: ["asigMediano"] },
+  );
 
 export type TransactionInput = z.infer<typeof TransactionSchema>;
 

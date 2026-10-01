@@ -85,4 +85,14 @@ describe("computeAhorro", () => {
     expect(r.tenenciaNeta).toBe(1300);
     expect(Math.abs(r.descuadre)).toBeLessThan(0.01);
   });
+  it("un ingreso USD de Movimientos respeta su reparto", () => {
+    const r = computeAhorro(
+      [op({ montoUSD: 1000 })],
+      [usdTx({ tipo: "ingreso", monto: 500, asigMediano: 100, asigLargo: 400 })],
+      cfg,
+    );
+    expect(r.emergencia.balance).toBe(1000);
+    expect(r.largo.balance).toBe(400);
+    expect(r.mediano.balance).toBe(100);
+  });
 });

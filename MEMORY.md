@@ -5,7 +5,8 @@ Memoria del proyecto entre sesiones. Máximo ~50 líneas: resumí o borrá lo qu
 - En producción en Vercel. Secciones: Resumen, Movimientos, Dólares, Ahorro, Análisis, Importar y Ajustes.
 - Los 33 hallazgos de `docs/auditoria-skills.md` (backend, frontend y diseño) están implementados y mergeados en `main`.
 - Últimos cambios: barras móviles sólidas para iOS y vuelta del verde/rojo en montos y confirmaciones.
-- `typecheck` y `lint` limpios, y 35 tests de Vitest en verde (cálculos, validaciones, seguridad).
+- Ingresos USD de Movimientos permiten repartir mediano/largo (columnas P y Q de `Transacciones`), igual que la compra de USD. Filas viejas sin reparto: el excedente va a mediano, como antes.
+- `typecheck` y `lint` limpios, y 40 tests de Vitest en verde (cálculos, validaciones, seguridad).
 - ESLint configurado con `next/core-web-vitals` en `.eslintrc.js` (sin hallazgos al activarlo).
 
 ## Decisiones (y por qué)
@@ -27,7 +28,7 @@ Memoria del proyecto entre sesiones. Máximo ~50 líneas: resumí o borrá lo qu
 - Regresión de v3.3: una página de `(app)` devolvía `null` en vez de su vista. Revisarlas al tocar el routing.
 
 ## Pendientes / a revisar
-- Ingresos en USD cargados desde Movimientos: `buildTransaction` acepta `asigMediano`/`asigLargo`, pero la hoja `Transacciones` no tiene esas columnas y el formulario no las envía. En la práctica, el excedente tras el piso siempre va a mediano, aunque el README sugiere que se puede elegir. Confirmar si es intencional.
+- Probar en el navegador el bloque "Destino del ahorro" de Movimientos (320px, desktop y teclado): no se pudo sin credenciales.
 
 ## Próximos pasos
 - (vacío por ahora)

@@ -41,6 +41,16 @@ describe("TransactionSchema", () => {
     expect(r.success).toBe(false);
     if (!r.success) expect(zodToAppError(r.error).field).toBe("cuotaNumero");
   });
+  it("en un ingreso USD, lo asignado no puede superar el monto", () => {
+    const ingreso = { ...base, tipo: "ingreso", moneda: "USD", monto: 100 };
+    const r = TransactionSchema.safeParse({ ...ingreso, asigMediano: 80, asigLargo: 30 });
+    expect(r.success).toBe(false);
+    if (!r.success) expect(zodToAppError(r.error).field).toBe("asigMediano");
+    expect(TransactionSchema.safeParse({ ...ingreso, asigMediano: 70, asigLargo: 30 }).success).toBe(true);
+  });
+  it("el reparto no se controla fuera de los ingresos USD", () => {
+    expect(TransactionSchema.safeParse({ ...base, monto: 100, asigMediano: 500 }).success).toBe(true);
+  });
   it("la importación tiene tope", () => {
     const muchos = Array.from({ length: 501 }, () => base);
     expect(TransactionImportSchema.safeParse(muchos).success).toBe(false);
