@@ -7,8 +7,8 @@ App de finanzas personales (ARS/USD) para uso propio: movimientos, importación 
 - `DESIGN.md` manda en lo visual. Criterio por área: `.claude/skills/{backend-engineer,frontend-engineer,webapp-designer}`, aplicadas sin migrar el stack.
 
 ## Comandos
-- `npm run dev` · `npm test` · `npm run typecheck` · `npm run build`
-- `npm run lint` no está configurado (abre un asistente interactivo de ESLint): no lo uses.
+- `npm run dev` · `npm test` · `npm run typecheck` · `npm run lint` · `npm run build`
+- ESLint usa `next/core-web-vitals` y se configura en `.eslintrc.js` (no en `.json`, ver Límites).
 
 ## Convenciones
 - Textos de UI y errores en castellano rioplatense con voseo ("Probá", "Elegí").
@@ -29,12 +29,12 @@ App de finanzas personales (ARS/USD) para uso propio: movimientos, importación 
 - Al terminar: qué cambiaste, cómo lo verificaste y qué decisiones debo revisar.
 
 ## Límites
-- ✅ Siempre: validar con Zod en el servidor, dejar `typecheck` y `test` en verde, actualizar `MEMORY.md` al terminar cada tarea.
-- ⚠️ Preguntá antes: dependencias nuevas, columnas o pestañas nuevas en la planilla, cambios de auth o del contrato de errores, actualizar Next/React/Tailwind.
+- ✅ Siempre: validar con Zod en el servidor, dejar `typecheck`, `lint` y `test` en verde, actualizar `MEMORY.md` al terminar cada tarea.
+- ⚠️ Preguntá antes: dependencias nuevas, columnas o pestañas nuevas en la planilla, cambios de auth o del contrato de errores, actualizar Next/React/Tailwind, sumar un `.json` al repo (`.gitignore` ignora todos salvo excepciones explícitas, para no subir credenciales).
 - 🚫 Nunca: commitear `.env*` ni credenciales, debilitar `ALLOWED_EMAILS` (falla cerrado), mover ajustes de `Config` a variables de entorno.
 
 ## Verificación
-- `npm run typecheck && npm test`. Lógica nueva en `lib/` lleva su test en `src/lib/__tests__/`.
+- `npm run typecheck && npm run lint && npm test`. Lógica nueva en `lib/` lleva su test en `src/lib/__tests__/`.
 - UI: probar a 320px y en desktop, navegando también con teclado. Local requiere `.env.local` (ver `.env.example`).
 
 ## Memoria
