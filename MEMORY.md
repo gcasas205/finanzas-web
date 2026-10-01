@@ -37,6 +37,7 @@ Memoria del proyecto entre sesiones. Máximo ~50 líneas: resumí o borrá lo qu
 - Categorías en la pestaña `Categorias` (cliente: `useCategorias()`, no la constante `CATEGORIES`, que es sólo el valor por defecto). Reglas aprendidas en `Reglas`; gastos fijos en `Recurrentes`.
 
 ## Aprendizajes y errores a evitar
+- Responsive: verificar con capturas reales (Playwright) a 320/360/390/768/1024/1280 y medir `scrollWidth - innerWidth`. Culpables típicos: leyendas de gráficos sin `flex-wrap`, segmentados anchos, rótulos `whitespace-nowrap` largos.
 - Los `route.ts` de Next sólo pueden exportar handlers y config (`dynamic`): otra constante exportada rompe el build.
 - `new Date("AAAA-MM-DD")` es UTC: para comparar días usar textos `AAAA-MM-DD` con `hoyLocal()`/`sumarDias()`.
 - `outline-none` de Tailwind pisaba el anillo de foco: usar `.form-input` y `:focus-visible`.

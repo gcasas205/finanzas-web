@@ -281,12 +281,12 @@ export default function Dashboard({ config }: Props) {
       <div className="grid grid-cols-2 sm:grid-cols-12 gap-3 sm:gap-6 mb-8 lg:mb-12">
         {/* Bar chart - evolution */}
         <div className="col-span-2 sm:col-span-8 surface p-4 sm:p-8">
-          <div className="flex items-start justify-between mb-6">
+          <div className="flex flex-wrap items-start justify-between gap-3 mb-6">
             <div>
               <div className="eyebrow mb-1">Evolución</div>
               <h2 className="display text-2xl text-paper">Últimos 6 meses</h2>
             </div>
-            <div className="flex gap-4 text-xs">
+            <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs">
               <LegendDot color={PALETTE.positivo} label="Ingresos" />
               <LegendDot color={PALETTE.negativo} label="Gastos" />
               <LegendDot color={PALETTE.serie} label="Ahorro" />

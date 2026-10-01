@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type TextareaHTMLAttributes } from "react";
 import { Plus, Trash2, Check } from "lucide-react";
 import { toast } from "sonner";
 import { useCategorias } from "@/components/DataProvider";
@@ -120,38 +120,42 @@ export function CategoriasSection() {
                     onChange={(e) => cambiar(i, { name: e.target.value })}
                     className="form-input flex-1 min-w-0 font-medium disabled:opacity-100 disabled:cursor-not-allowed"
                   />
-                  {fija ? (
-                    <span className="text-xs text-ink-300 px-2 py-1 border border-control shrink-0" title="La usa la app: no se renombra ni se quita">
-                      Fija
-                    </span>
-                  ) : (
-                    <button type="button" onClick={() => quitar(i)} className="p-3 -mr-3 text-ink-300 hover:text-terra-light shrink-0"
-                      aria-label={`Quitar la categoría ${f.name || i + 1}`}>
-                      <Trash2 className="w-4 h-4" aria-hidden="true" />
-                    </button>
-                  )}
+                  {/* Mismo ancho para "Fija" y la papelera: los nombres quedan alineados */}
+                  <div className="w-11 shrink-0 flex justify-center">
+                    {fija ? (
+                      <span className="text-xs text-ink-300 px-1.5 py-1 border border-control" title="La usa la app: no se renombra ni se quita">
+                        Fija
+                      </span>
+                    ) : (
+                      <button type="button" onClick={() => quitar(i)} className="w-11 h-11 inline-flex items-center justify-center text-ink-300 hover:text-terra-light"
+                        aria-label={`Quitar la categoría ${f.name || i + 1}`}>
+                        <Trash2 className="w-4 h-4" aria-hidden="true" />
+                      </button>
+                    )}
+                  </div>
                 </div>
                 {errors[`name-${i}`] && (
                   <p id={`${idNombre}-error`} className="text-xs text-terra-light pl-6">{errors[`name-${i}`]}</p>
                 )}
 
-                <div className="pl-6 space-y-3">
+                <div className="pl-6 pr-14 space-y-3 max-sm:pr-0">
                   <div>
-                    <label htmlFor={idSubs} className="eyebrow block mb-1.5">Subcategorías (separadas por coma)</label>
-                    <input
+                    <label htmlFor={idSubs} className="eyebrow block mb-1.5">Subcategorías</label>
+                    {/* textarea que crece con el texto (Safari no soporta field-sizing): la lista nunca queda cortada */}
+                    <AutoTextarea
                       id={idSubs}
-                      type="text"
                       value={f.subs}
                       aria-invalid={Boolean(errors[`subs-${i}`]) || undefined}
                       aria-describedby={errors[`subs-${i}`] ? `${idSubs}-error` : undefined}
                       onChange={(e) => cambiar(i, { subs: e.target.value })}
-                      className="form-input w-full"
+                      className="form-input w-full resize-none leading-relaxed"
                     />
                     {errors[`subs-${i}`] && <p id={`${idSubs}-error`} className="text-xs text-terra-light mt-1">{errors[`subs-${i}`]}</p>}
                   </div>
 
-                  <div role="radiogroup" aria-label={`Color de ${f.name || "la categoría"}`} className="flex flex-wrap items-center gap-1">
-                    <span className="eyebrow mr-2" aria-hidden="true">Color</span>
+                  <div>
+                  <span className="eyebrow block" aria-hidden="true">Color</span>
+                  <div role="radiogroup" aria-label={`Color de ${f.name || "la categoría"}`} className="flex flex-wrap items-center -ml-3">
                     {CATEGORIA_COLORES.map((col, n) => {
                       const elegido = f.color.toLowerCase() === col.toLowerCase();
                       return (
@@ -171,6 +175,7 @@ export function CategoriasSection() {
                         </button>
                       );
                     })}
+                  </div>
                   </div>
                 </div>
               </div>
@@ -192,4 +197,20 @@ export function CategoriasSection() {
       {dialog}
     </section>
   );
+}
+
+/** Textarea que crece con su contenido (mide scrollHeight; Safari no soporta field-sizing). */
+function AutoTextarea(props: TextareaHTMLAttributes<HTMLTextAreaElement>) {
+  const ref = useRef<HTMLTextAreaElement>(null);
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const ajustar = () => { el.style.height = "auto"; el.style.height = `${el.scrollHeight + 2}px`; };
+    ajustar();
+    // También al cambiar el ancho (rotar el celular, achicar la ventana)
+    const ro = new ResizeObserver(ajustar);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [props.value]);
+  return <textarea ref={ref} rows={1} {...props} />;
 }

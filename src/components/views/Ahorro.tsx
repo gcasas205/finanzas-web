@@ -84,7 +84,7 @@ export default function Ahorro() {
       </header>
 
       {/* Reconciliación */}
-      <div className="surface p-4 sm:p-5 mb-8 flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-8">
+      <div className="surface p-4 sm:p-5 mb-8 flex flex-col sm:flex-row sm:flex-wrap sm:items-center gap-3 sm:gap-x-8">
         <ReconItem label="Tenencia neta" value={r.tenenciaNeta} strong />
         <div className="hidden sm:block flex-1" />
         <ReconItem label="Piso" value={emergencia.balance} />

@@ -150,7 +150,7 @@ export default function Transactions({ config }: Props) {
   return (
     <div className="p-4 sm:p-6 lg:p-10 max-w-[1400px]">
       {error && <StaleDataBanner message={error} onRetry={refresh} />}
-      <header className="mb-10 flex items-end justify-between">
+      <header className="mb-8 sm:mb-10 flex flex-wrap items-end justify-between gap-4">
         <div>
           <div className="eyebrow mb-2">Movimientos</div>
           <h1 className="display text-3xl sm:text-5xl text-paper">
@@ -234,13 +234,13 @@ export default function Transactions({ config }: Props) {
             </select>
           </div>
 
-          <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
-            <div className="flex items-center gap-3">
+          <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-center gap-x-6 gap-y-3">
+            <div className="flex flex-col sm:flex-row sm:items-center gap-1.5 sm:gap-3">
               <span className="eyebrow" aria-hidden="true">Tipo</span>
               <Segmented
                 label="Filtrar por tipo"
                 size="sm"
-                className="w-auto"
+                className="w-full sm:w-auto"
                 value={filterType}
                 onChange={setFilterType}
                 options={[
@@ -250,12 +250,12 @@ export default function Transactions({ config }: Props) {
                 ]}
               />
             </div>
-            <div className="flex items-center gap-3">
+            <div className="flex flex-col sm:flex-row sm:items-center gap-1.5 sm:gap-3">
               <span className="eyebrow" aria-hidden="true">Moneda</span>
               <Segmented
                 label="Filtrar por moneda"
                 size="sm"
-                className="w-auto"
+                className="w-full sm:w-auto"
                 value={filterMoneda}
                 onChange={setFilterMoneda}
                 options={[
