@@ -128,4 +128,30 @@ describe("computeAhorro", () => {
     expect(r.largo.balance).toBe(50);
     expect(r.mediano.balance).toBe(150);
   });
+  it("el aporte promedio a largo cuenta todos los meses, no sólo los que hubo aporte", () => {
+    const r = computeAhorro(
+      [
+        op({ fecha: "2026-01-01", montoUSD: 1000 }),
+        op({ fecha: "2026-01-15", montoUSD: 400, asigLargo: 400 }),
+        op({ fecha: "2026-04-10", montoUSD: 100 }),
+      ],
+      [],
+      cfg,
+    );
+    expect(r.largo.mesesConAporte).toBe(4); // enero a abril
+    expect(r.largo.aporteMensualProm).toBe(100);
+  });
+  it("arma el historial por bucket, del más nuevo al más viejo", () => {
+    const r = computeAhorro(
+      [
+        op({ fecha: "2026-01-01", montoUSD: 1000 }),
+        op({ fecha: "2026-02-01", montoUSD: 300, asigLargo: 100 }),
+      ],
+      [usdTx({ fechaConsumo: "2026-03-01", fechaPago: "2026-03-01", tipo: "egreso", monto: 50, descripcion: "Libro", origen: "largo" })],
+      cfg,
+    );
+    expect(r.historial[0]).toEqual({ fecha: "2026-03-01", concepto: "Gasto: Libro", cambios: { largo: -50 } });
+    expect(r.historial[1].cambios.largo).toBe(100);
+    expect(r.historial[2].cambios.emergencia).toBe(1000);
+  });
 });

@@ -65,7 +65,7 @@ export async function request<T>(url: string, init?: RequestInit): Promise<T> {
   return (await r.json()) as T;
 }
 
-function sendJson<T>(url: string, method: "POST" | "PUT" | "DELETE", body: unknown): Promise<T> {
+function sendJson<T>(url: string, method: "POST" | "PUT" | "PATCH" | "DELETE", body: unknown): Promise<T> {
   return request<T>(url, {
     method,
     headers: { "Content-Type": "application/json" },
@@ -96,6 +96,8 @@ export const transactionsApi = {
   update: (tx: TransactionPayload & { id: string }) =>
     sendJson<{ ok: true; transaction: Transaction }>("/api/transactions", "PUT", tx),
   remove: (id: string) => sendJson<{ ok: true }>("/api/transactions", "DELETE", { id }),
+  recategorize: (ids: string[], categoria: string, subcategoria: string) =>
+    sendJson<{ ok: true; updated: number }>("/api/transactions", "PATCH", { ids, categoria, subcategoria }),
 };
 
 // ─── Dólares ────────────────────────────────────────────────────────────────

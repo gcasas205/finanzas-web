@@ -1,10 +1,11 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { PiggyBank, ShieldCheck, TrendingUp, AlertTriangle } from "lucide-react";
 import { useAhorro } from "@/components/DataProvider";
 import { UsdAmount } from "@/components/UsdAmount";
-import { computeAhorro, type SobreResultado } from "@/lib/ahorro-calc";
+import { computeAhorro, type SobreResultado, type BucketKey, type MovimientoAhorro } from "@/lib/ahorro-calc";
+import { formatFecha } from "@/lib/utils";
 import type { SobreKey } from "@/types";
 import LogoLoader from "@/components/LogoLoader";
 import { ErrorState, StaleDataBanner } from "@/components/ui/States";
@@ -145,8 +146,8 @@ export default function Ahorro() {
             <AnimatedUsdAmount value={largo.balance} />
           </div>
           <div className="text-xs text-ink-300 mt-2">
-            promedio actual ~<UsdAmount value={largo.aporteMensualProm} />/mes en {largo.mesesConAporte}{" "}
-            {largo.mesesConAporte === 1 ? "mes" : "meses"}
+            promedio ~<UsdAmount value={largo.aporteMensualProm} />/mes en los últimos {largo.mesesConAporte}{" "}
+            {largo.mesesConAporte === 1 ? "mes" : "meses"} (desde el primer aporte)
           </div>
         </div>
         <div className="lg:border-l lg:border-ink-600/60 lg:pl-10">
@@ -162,6 +163,15 @@ export default function Ahorro() {
           </p>
         </div>
       </div>
+
+      <Historial
+        movimientos={r.historial}
+        nombres={{
+          emergencia: "Piso",
+          largo: "Largo plazo",
+          ...Object.fromEntries(mediano.sobres.map((s) => [s.key, s.nombre])),
+        } as Record<BucketKey, string>}
+      />
 
       <p className="mt-8 text-xs text-ink-400 leading-relaxed max-w-2xl">
         Los aportes se cargan al comprar dólares (pestaña Dólares) o al recibir USD (Movimientos). Los gastos y
@@ -256,5 +266,63 @@ function ProjRow({ label, value }: { label: string; value: number }) {
       <span className="text-xs text-ink-200">{label}</span>
       <span className="display text-xl text-paper tabular"><UsdAmount value={value} /></span>
     </div>
+  );
+}
+
+/** Qué entró y salió de cada bucket, filtrable por bucket. */
+function Historial({ movimientos, nombres }: { movimientos: MovimientoAhorro[]; nombres: Record<BucketKey, string> }) {
+  const [bucket, setBucket] = useState<BucketKey | "">("");
+  const [visibles, setVisibles] = useState(15);
+  const filas = bucket ? movimientos.filter((m) => m.cambios[bucket] !== undefined) : movimientos;
+  if (!movimientos.length) return null;
+
+  return (
+    <section className="mt-10" aria-labelledby="historial-titulo">
+      <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3 mb-4">
+        <div>
+          <div className="eyebrow mb-1">Historial</div>
+          <h2 id="historial-titulo" className="display text-2xl sm:text-3xl text-paper">Qué entró y qué salió</h2>
+        </div>
+        <select
+          value={bucket}
+          onChange={(e) => { setBucket(e.target.value as BucketKey | ""); setVisibles(15); }}
+          aria-label="Filtrar el historial por destino"
+          className="select-native min-h-11 bg-ink-800 border border-control text-paper pl-3 pr-9 py-2 text-sm focus:border-amber cursor-pointer"
+        >
+          <option value="">Todos los destinos</option>
+          {(Object.keys(nombres) as BucketKey[]).map((k) => <option key={k} value={k}>{nombres[k]}</option>)}
+        </select>
+      </div>
+      <div className="surface divide-y divide-ink-600/60">
+        {filas.length === 0 ? (
+          <p className="p-6 text-sm text-ink-300 italic">Sin movimientos para este destino.</p>
+        ) : filas.slice(0, visibles).map((m, i) => (
+          <div key={`${m.fecha}-${i}`} className="p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+            <div className="min-w-0">
+              <div className="text-sm text-paper truncate">{m.concepto}</div>
+              <div className="text-xs text-ink-300 tabular font-mono">{formatFecha(m.fecha)}</div>
+            </div>
+            <div className="flex flex-wrap gap-x-4 gap-y-1 sm:justify-end">
+              {(Object.entries(m.cambios) as Array<[BucketKey, number]>)
+                .filter(([k]) => !bucket || k === bucket)
+                .map(([k, v]) => (
+                  <span key={k} className={`text-xs tabular font-mono whitespace-nowrap ${v >= 0 ? "text-moss-light" : "text-terra-light"}`}>
+                    <span className="text-ink-300 font-sans">{nombres[k] ?? k} </span>
+                    {v >= 0 ? "+" : "−"}<UsdAmount value={Math.abs(v)} />
+                  </span>
+                ))}
+            </div>
+          </div>
+        ))}
+      </div>
+      {filas.length > visibles && (
+        <div className="mt-3 text-center">
+          <button type="button" onClick={() => setVisibles((v) => v + 15)}
+            className="min-h-11 px-4 text-sm text-ink-200 hover:text-paper">
+            Mostrar más ({filas.length - visibles} restantes)
+          </button>
+        </div>
+      )}
+    </section>
   );
 }

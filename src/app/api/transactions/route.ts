@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
-import { listTransactions, addTransaction, updateTransaction, deleteTransaction, loadConfig } from "@/lib/sheets";
+import { listTransactions, addTransaction, updateTransaction, updateTransactionsBulk, deleteTransaction, loadConfig } from "@/lib/sheets";
 import { buildTransaction } from "@/lib/transactions";
 import { cacheOrFetch, cacheInvalidate } from "@/lib/cache";
-import { TransactionSchema, IdSchema } from "@/lib/validations";
+import { TransactionSchema, IdSchema, RecategorizarSchema } from "@/lib/validations";
 import { AppError, NotFoundError, readJson, withErrors } from "@/lib/errors";
 
 // Siempre dinámica: los datos viven en Sheets, nunca se generan en el build.
@@ -32,6 +32,17 @@ export const PUT = withErrors(async (req) => {
   if (!found) throw new NotFoundError("Movimiento");
   cacheInvalidate(CACHE_KEY);
   return NextResponse.json({ ok: true, transaction: tx });
+});
+
+/** Recategoriza varios movimientos. Lee la planilla fresca (no la caché) para no pisar cambios. */
+export const PATCH = withErrors(async (req) => {
+  const { ids, categoria, subcategoria } = await readJson(req, RecategorizarSchema);
+  const pedidos = new Set(ids);
+  const txs = (await listTransactions()).filter((t) => pedidos.has(t.id));
+  if (txs.length !== pedidos.size) throw new NotFoundError("Movimiento");
+  await updateTransactionsBulk(txs.map((t) => ({ ...t, categoria, subcategoria })));
+  cacheInvalidate(CACHE_KEY);
+  return NextResponse.json({ ok: true, updated: txs.length });
 });
 
 export const DELETE = withErrors(async (req) => {

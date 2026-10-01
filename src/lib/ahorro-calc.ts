@@ -47,6 +47,7 @@ export interface AhorroResultado {
   largo: {
     balance: number;
     aporteMensualProm: number;
+    /** Meses desde el primer aporte a largo plazo hasta el último movimiento */
     mesesConAporte: number;
     proyeccion15: number;
     proyeccion20: number;
@@ -57,10 +58,24 @@ export interface AhorroResultado {
   asignado: number;
   /** tenenciaNeta − asignado (idealmente 0) */
   descuadre: number;
+  /** Qué entró y salió de cada bucket, del más nuevo al más viejo */
+  historial: MovimientoAhorro[];
+}
+
+/** Bucket del ahorro: el piso, un sobre del mediano plazo o el largo plazo. */
+export type BucketKey = "emergencia" | "largo" | SobreKey;
+
+export interface MovimientoAhorro {
+  fecha: string;
+  /** Ej. "Compra de USD", "Gasto: Notebook" */
+  concepto: string;
+  /** Cambio en USD de cada bucket afectado (positivo entra, negativo sale) */
+  cambios: Partial<Record<BucketKey, number>>;
 }
 
 type Evento = {
   fecha: string;
+  concepto: string;
   flow: "in" | "out";
   usd: number;
   mediano?: number; // intención de reparto (solo entradas)
@@ -171,6 +186,7 @@ export function computeAhorro(
     if (op.tipo === "compra") {
       eventos.push({
         fecha: op.fecha,
+        concepto: "Compra de USD",
         flow: "in",
         usd: op.montoUSD,
         mediano: op.asigMediano ?? 0,
@@ -179,6 +195,7 @@ export function computeAhorro(
     } else {
       eventos.push({
         fecha: op.fecha,
+        concepto: "Venta de USD",
         flow: "out",
         usd: op.montoUSD,
         origen: op.origen ?? "regla",
@@ -192,6 +209,7 @@ export function computeAhorro(
     if (t.tipo === "ingreso") {
       eventos.push({
         fecha,
+        concepto: `Ingreso: ${t.descripcion}`,
         flow: "in",
         usd: t.monto,
         mediano: t.asigMediano ?? 0,
@@ -200,6 +218,7 @@ export function computeAhorro(
     } else {
       eventos.push({
         fecha,
+        concepto: `Gasto: ${t.descripcion}`,
         flow: "out",
         usd: t.monto,
         origen: t.origen ?? "regla",
@@ -214,9 +233,12 @@ export function computeAhorro(
   let entradas = 0;
   let salidas = 0;
   let largoIn = 0;
-  const mesesLargo = new Set<string>();
+  let primerMesLargo: string | null = null;
+  const historial: MovimientoAhorro[] = [];
+  const foto = (): Record<BucketKey, number> => ({ emergencia: st.emerg, largo: st.largo, ...st.sub });
 
   for (const ev of eventos) {
+    const antes = foto();
     if (ev.flow === "in") {
       entradas += ev.usd;
       const gap = Math.max(0, cfg.emergenciaObjetivo - st.emerg);
@@ -233,7 +255,7 @@ export function computeAhorro(
         st.largo += toLargo;
         if (toLargo > 0) {
           largoIn += toLargo;
-          mesesLargo.add(ev.fecha.slice(0, 7));
+          primerMesLargo ??= ev.fecha.slice(0, 7);
         }
         libre += repartirEnSobres(toMed, cfg, st.sub);
       }
@@ -241,7 +263,20 @@ export function computeAhorro(
       salidas += ev.usd;
       retirar(ev.usd, ev.origen ?? "regla", st);
     }
+
+    const despues = foto();
+    const cambios: Partial<Record<BucketKey, number>> = {};
+    for (const k of Object.keys(despues) as BucketKey[]) {
+      const d = despues[k] - antes[k];
+      if (Math.abs(d) >= 0.005) cambios[k] = d;
+    }
+    if (Object.keys(cambios).length) historial.push({ fecha: ev.fecha, concepto: ev.concepto, cambios });
   }
+
+  // Aporte mensual a largo plazo: promedio sobre TODOS los meses desde el primer
+  // aporte hasta el último movimiento (un aporte aislado no infla la proyección).
+  const ultimoMes = eventos.length ? eventos[eventos.length - 1].fecha.slice(0, 7) : null;
+  const mesesLargo = primerMesLargo && ultimoMes ? mesesEntre(primerMesLargo, ultimoMes) + 1 : 0;
 
   const medianoBalance = SOBRE_KEYS.reduce((a, k) => a + st.sub[k], 0);
   const sobres: SobreResultado[] = cfg.sobres.map((s) => {
@@ -260,7 +295,7 @@ export function computeAhorro(
 
   const ret = cfg.sp500RetornoAnual; // fracción anual, ej 0.07
   const rm = ret / 12;
-  const aporteProm = mesesLargo.size > 0 ? largoIn / mesesLargo.size : 0;
+  const aporteProm = mesesLargo > 0 ? largoIn / mesesLargo : 0;
   const fv = (n: number) =>
     st.largo * Math.pow(1 + rm, n) +
     (rm > 0 ? aporteProm * ((Math.pow(1 + rm, n) - 1) / rm) : aporteProm * n);
@@ -280,12 +315,20 @@ export function computeAhorro(
     largo: {
       balance: st.largo,
       aporteMensualProm: aporteProm,
-      mesesConAporte: mesesLargo.size,
+      mesesConAporte: mesesLargo,
       proyeccion15: fv(180),
       proyeccion20: fv(240),
     },
     tenenciaNeta,
     asignado,
     descuadre: tenenciaNeta - asignado,
+    historial: historial.reverse(),
   };
+}
+
+/** Meses entre dos "AAAA-MM" (b − a). */
+function mesesEntre(a: string, b: string): number {
+  const [ya, ma] = a.split("-").map(Number);
+  const [yb, mb] = b.split("-").map(Number);
+  return (yb - ya) * 12 + (mb - ma);
 }

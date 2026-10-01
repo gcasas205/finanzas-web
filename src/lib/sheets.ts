@@ -482,6 +482,29 @@ async function updateRowById(tab: string, lastCol: string, id: string, row: Shee
   });
 }
 
+/** Actualiza varias filas en una sola escritura. Devuelve los ids que no existían. */
+async function updateRowsByIds(tab: string, lastCol: string, rows: Array<{ id: string; row: SheetRow }>): Promise<string[]> {
+  if (!rows.length) return [];
+  return sheetsCall(`actualizar filas en ${tab}`, async (ctx) => {
+    const r = await ctx.client.spreadsheets.values.get({ spreadsheetId: ctx.sheetId, range: `${tab}!A2:A` });
+    const index = new Map<string, number>();
+    (r.data.values ?? []).forEach((v, i) => { if (v[0]) index.set(String(v[0]), i + 2); });
+    const faltan: string[] = [];
+    const data = rows.flatMap(({ id, row }) => {
+      const n = index.get(id);
+      if (n === undefined) { faltan.push(id); return []; }
+      return [{ range: `${tab}!A${n}:${lastCol}${n}`, values: [row] }];
+    });
+    if (data.length) {
+      await ctx.client.spreadsheets.values.batchUpdate({
+        spreadsheetId: ctx.sheetId,
+        requestBody: { valueInputOption: "RAW", data },
+      });
+    }
+    return faltan;
+  });
+}
+
 async function deleteRowById(tab: string, id: string): Promise<boolean> {
   return sheetsCall(`borrar fila en ${tab}`, async (ctx) => {
     const rowNumber = await findRowNumber(ctx, tab, id);
@@ -545,6 +568,11 @@ export async function addTransactionsBulk(txs: Transaction[]): Promise<number> {
 /** false si el id no existe. */
 export async function updateTransaction(tx: Transaction): Promise<boolean> {
   return updateRowById("Transacciones", "Q", tx.id, transactionToRow(tx));
+}
+
+/** Actualiza varios movimientos en una sola escritura. Devuelve los ids que no existían. */
+export async function updateTransactionsBulk(txs: Transaction[]): Promise<string[]> {
+  return updateRowsByIds("Transacciones", "Q", txs.map((t) => ({ id: t.id, row: transactionToRow(t) })));
 }
 
 /** false si el id no existe. */

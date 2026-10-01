@@ -76,6 +76,13 @@ export const TransactionSchema = z
 
 export type TransactionInput = z.infer<typeof TransactionSchema>;
 
+/** Cambio de categoría de varios movimientos a la vez. */
+export const RecategorizarSchema = z.object({
+  ids: z.array(z.string().trim().min(1).max(64)).min(1, "Elegí al menos un movimiento").max(500, "Máximo 500 movimientos a la vez"),
+  categoria: z.string().trim().min(1, "Elegí una categoría").max(60),
+  subcategoria: z.string().trim().min(1, "Elegí una subcategoría").max(60),
+});
+
 /** Lista revisada que manda la pantalla de importación. */
 export const TransactionImportSchema = z
   .array(TransactionSchema)
