@@ -39,7 +39,8 @@ const montoOpcional = z
   .transform(roundMoney)
   .optional();
 
-const ORIGENES = ["regla", "emergencia", "auto", "mud", "vac", "tec", "largo"] as const;
+/** "regla", "emergencia", "largo" o la clave de un sobre. */
+const origen = z.string().trim().regex(/^[a-z0-9_]{1,24}$/, "Origen inválido");
 
 /** Datos opcionales del recibo al cargar un sueldo a mano. */
 export const DatosReciboSchema = z.object({
@@ -77,7 +78,7 @@ export const TransactionSchema = z
     cuotaNumero: z.number().int("La cuota es un número entero").min(1, "La cuota empieza en 1").max(120).default(1),
     notas: z.string().trim().max(500, "Las notas no pueden superar los 500 caracteres").optional(),
     createdAt: z.string().max(40).optional(),
-    origen: z.enum(ORIGENES).optional(),
+    origen: origen.optional(),
     asigMediano: montoOpcional,
     asigLargo: montoOpcional,
     grupoCuotas: z.string().trim().max(64).optional(),
@@ -98,6 +99,45 @@ export const TransactionSchema = z
   );
 
 export type TransactionInput = z.infer<typeof TransactionSchema>;
+
+/** Plan de ahorro editable (Ajustes). */
+export const AhorroConfigSchema = z.object({
+  emergenciaObjetivo: z.number({ invalid_type_error: "Tiene que ser un número" }).min(0, "No puede ser negativo").max(10_000_000),
+  /** En % (7 = 7% anual) */
+  sp500RetornoPct: z.number({ invalid_type_error: "Tiene que ser un número" }).min(-50, "Demasiado bajo").max(100, "Demasiado alto"),
+  sobres: z
+    .array(z.object({
+      key: z.string().trim().regex(/^[a-z0-9_]{1,24}$/)
+        .refine((k) => !["regla", "emergencia", "largo"].includes(k), "Clave reservada").optional(),
+      nombre: z.string().trim().min(1, "Poné un nombre").max(40, "Máximo 40 caracteres"),
+      pct: z.number({ invalid_type_error: "Tiene que ser un número" }).min(0, "No puede ser negativo").max(100, "Máximo 100%"),
+      objetivo: z.number({ invalid_type_error: "Tiene que ser un número" }).min(0, "No puede ser negativo").max(10_000_000),
+      fechaObjetivo: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/, "Elegí un mes válido").optional().or(z.literal("").transform(() => undefined)),
+    }))
+    .max(20, "Máximo 20 sobres"),
+});
+
+export type AhorroConfigInput = z.infer<typeof AhorroConfigSchema>;
+
+/** Pase de plata entre destinos del ahorro. */
+export const MovAhorroSchema = z
+  .object({
+    fecha: fechaISO("fecha del pase"),
+    desde: origen,
+    hacia: origen,
+    montoUSD: montoPositivo("Poné un monto en USD mayor a 0"),
+    notas: z.string().trim().max(200, "Máximo 200 caracteres").optional(),
+  })
+  .refine((m) => m.desde !== m.hacia, { message: "Elegí un destino distinto del origen", path: ["hacia"] })
+  .refine((m) => m.desde !== "regla" && m.hacia !== "regla", { message: "Elegí un destino concreto", path: ["desde"] });
+
+/** Presupuesto mensual por categoría, en pesos (0 = sin presupuesto). */
+export const PresupuestosSchema = z.object({
+  presupuestos: z.record(
+    z.string().trim().min(1).max(60),
+    z.number({ invalid_type_error: "Tiene que ser un número" }).min(0, "No puede ser negativo").max(MAX_MONTO),
+  ),
+});
 
 /** Cambio de categoría de varios movimientos a la vez. */
 export const RecategorizarSchema = z.object({
@@ -129,7 +169,7 @@ export const DolarOpSchema = z
     createdAt: z.string().max(40).optional(),
     asigMediano: montoOpcional,
     asigLargo: montoOpcional,
-    origen: z.enum(ORIGENES).optional(),
+    origen: origen.optional(),
   })
   .refine(
     (op) => op.tipo !== "compra" || roundMoney((op.asigMediano ?? 0) + (op.asigLargo ?? 0)) <= op.montoUSD,

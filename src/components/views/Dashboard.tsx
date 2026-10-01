@@ -17,6 +17,9 @@ import {
 } from "@/lib/utils";
 import { UsdAmount } from "@/components/UsdAmount";
 import { proximoResumen } from "@/lib/tarjeta";
+import useSWR from "swr";
+import Link from "next/link";
+import { presupuestosApi } from "@/lib/api";
 import { CreditCard } from "lucide-react";
 import { getCategoryColor } from "@/lib/categories";
 import { useTransactions } from "@/components/DataProvider";
@@ -50,6 +53,7 @@ export default function Dashboard({ config }: Props) {
   }, [transactions, selectedMonth]);
 
   const resumenTarjeta = useMemo(() => proximoResumen(transactions, hoyLocal()), [transactions]);
+  const presupuestos = useSWR("/api/presupuestos", () => presupuestosApi.list(), { revalidateOnFocus: false }).data?.presupuestos;
 
   const monthTransactions = useMemo(
     () => transactions.filter(t => fechaToMes(t.fechaPago) === selectedMonth),
@@ -359,6 +363,11 @@ export default function Dashboard({ config }: Props) {
         </div>
       </div>
 
+      {/* Presupuesto del mes */}
+      {presupuestos && Object.keys(presupuestos).length > 0 && (
+        <PresupuestoCard presupuestos={presupuestos} gastos={categories} mes={selectedMonth} />
+      )}
+
       {/* Upcoming payments */}
       <div className="surface p-4 sm:p-8">
         {resumenTarjeta && (
@@ -511,4 +520,63 @@ function EditorialTooltip({ active, payload, label }: ChartTooltipProps) {
   );
 }
 
+/** Avance del gasto del mes contra el presupuesto de cada categoría. */
+function PresupuestoCard({ presupuestos, gastos, mes }: {
+  presupuestos: Record<string, number>;
+  gastos: Array<{ name: string; value: number; color: string }>;
+  mes: string;
+}) {
+  const filas = Object.entries(presupuestos)
+    .map(([cat, tope]) => {
+      const gastado = gastos.find((g) => g.name === cat)?.value ?? 0;
+      return { cat, tope, gastado, pct: tope > 0 ? gastado / tope : 0 };
+    })
+    .sort((a, b) => b.pct - a.pct);
+  const totalTope = filas.reduce((a, f) => a + f.tope, 0);
+  const totalGastado = filas.reduce((a, f) => a + f.gastado, 0);
 
+  return (
+    <div className="surface p-4 sm:p-8 mb-8 lg:mb-12">
+      <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-2 mb-6">
+        <div>
+          <div className="eyebrow mb-1">Presupuesto · {formatMes(mes)}</div>
+          <h2 className="display text-2xl text-paper">Cómo venís</h2>
+        </div>
+        <div className="text-xs text-ink-300 tabular">
+          {formatPesos(totalGastado)} de {formatPesos(totalTope)} ·{" "}
+          <Link href="/settings#presupuesto" className="underline underline-offset-2 hover:text-paper">editar</Link>
+        </div>
+      </div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-12 gap-y-4">
+        {filas.map((f) => {
+          const pasado = f.gastado > f.tope;
+          return (
+            <div key={f.cat}>
+              <div className="flex items-baseline justify-between gap-3 text-xs mb-1.5">
+                <span className="text-paper">{f.cat}</span>
+                <span className={`tabular ${pasado ? "text-terra-light" : "text-ink-200"}`}>
+                  {formatPesosCompact(f.gastado)} / {formatPesosCompact(f.tope)}
+                  {pasado && <> · <span>te pasaste {formatPesosCompact(f.gastado - f.tope)}</span></>}
+                </span>
+              </div>
+              <div
+                className="relative h-2 w-full overflow-hidden rounded-sm border border-ink-600"
+                style={{ background: PALETTE.pista }}
+                role="meter"
+                aria-label={`${f.cat}: ${Math.round(f.pct * 100)}% del presupuesto`}
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-valuenow={Math.min(100, Math.round(f.pct * 100))}
+              >
+                <div
+                  className="absolute inset-y-0 left-0 transition-all duration-500"
+                  style={{ width: `${Math.min(1, f.pct) * 100}%`, background: pasado ? PALETTE.negativo : f.pct >= 0.85 ? PALETTE.serie : PALETTE.positivo }}
+                />
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}

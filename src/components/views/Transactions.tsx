@@ -5,7 +5,7 @@ import { Plus, Search, Edit2, Trash2, X, Copy, Download, ListChecks } from "luci
 import { toast } from "sonner";
 import type { Transaction, AppConfig, BucketOrigen, TransactionSource } from "@/types";
 import { formatPesos, formatFecha, fechaToMes, formatMes, uniqueMonths, calcularFechaPagoTarjeta, hoyLocal } from "@/lib/utils";
-import { ORIGEN_LABEL } from "@/lib/ahorro-calc";
+import { origenesDisponibles } from "@/lib/ahorro-calc";
 import { CATEGORIES, autoCategorizar, getCategoryColor } from "@/lib/categories";
 import { useTransactions } from "@/components/DataProvider";
 import { UsdAmount } from "@/components/UsdAmount";
@@ -567,7 +567,6 @@ interface FormProps {
 
 type Errors = Partial<Record<string, string>>;
 
-const ORIGENES: BucketOrigen[] = ["regla", "emergencia", "auto", "mud", "vac", "tec", "largo"];
 
 function TransactionForm({ open, editing, prefill, config, onClose, onSaved }: FormProps) {
   return (
@@ -588,6 +587,7 @@ function TransactionForm({ open, editing, prefill, config, onClose, onSaved }: F
 }
 
 function TransactionFormBody({ editing, prefill, config, onClose, onSaved }: Omit<FormProps, "open">) {
+  const { ahorroConfig } = useTransactions();
   const today = hoyLocal();
   // Valores iniciales: el registro que se edita, o el que se duplica (con fecha de hoy)
   const base = editing ?? (prefill ? { ...prefill, fechaConsumo: today, fechaPago: today } : null);
@@ -825,7 +825,7 @@ function TransactionFormBody({ editing, prefill, config, onClose, onSaved }: Omi
           >
             {(c) => (
               <select {...c} value={origen} onChange={(e) => setOrigen(e.target.value as BucketOrigen)} className="form-input">
-                {ORIGENES.map(o => <option key={o} value={o}>{ORIGEN_LABEL[o]}</option>)}
+                {origenesDisponibles(ahorroConfig).map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
               </select>
             )}
           </Field>

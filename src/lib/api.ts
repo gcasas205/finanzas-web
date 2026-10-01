@@ -10,6 +10,7 @@ import type {
   AppConfig,
   Cotizacion,
   DolarOperacion,
+  MovAhorro,
   Sueldo,
   Transaction,
 } from "@/types";
@@ -107,6 +108,23 @@ export const transactionsApi = {
     sendJson<{ ok: true; borrados: number }>("/api/transactions", "DELETE", { id, grupo }),
   recategorize: (ids: string[], categoria: string, subcategoria: string) =>
     sendJson<{ ok: true; updated: number }>("/api/transactions", "PATCH", { ids, categoria, subcategoria }),
+};
+
+export const ahorroApi = {
+  guardarConfig: (cfg: {
+    emergenciaObjetivo: number;
+    sp500RetornoPct: number;
+    sobres: Array<{ key?: string; nombre: string; pct: number; objetivo: number; fechaObjetivo?: string }>;
+  }) => sendJson<{ ok: true; config: AhorroConfig }>("/api/ahorro/config", "PUT", cfg),
+  crearPase: (m: Omit<MovAhorro, "id" | "createdAt">) =>
+    sendJson<{ ok: true; movimiento: MovAhorro }>("/api/ahorro/movimientos", "POST", m),
+  borrarPase: (id: string) => sendJson<{ ok: true }>("/api/ahorro/movimientos", "DELETE", { id }),
+};
+
+export const presupuestosApi = {
+  list: () => request<{ presupuestos: Record<string, number> }>("/api/presupuestos"),
+  guardar: (presupuestos: Record<string, number>) =>
+    sendJson<{ ok: true; presupuestos: Record<string, number> }>("/api/presupuestos", "PUT", { presupuestos }),
 };
 
 export const sueldosApi = {

@@ -121,18 +121,14 @@ export interface CategoryTotal {
 
 // ─── Ahorro ───────────────────────────────────────────────────────────────
 
-/** Sobres del mediano plazo */
-export type SobreKey = "auto" | "mud" | "vac" | "tec";
+/** Sobre del mediano plazo: clave estable (ej. "auto", o una generada al crearlo) */
+export type SobreKey = string;
 
-/** De dónde sale una salida de USD */
-export type BucketOrigen =
-  | "regla"        // automático (mediano proporcional → largo → piso)
-  | "emergencia"
-  | "auto"
-  | "mud"
-  | "vac"
-  | "tec"
-  | "largo";
+/**
+ * De dónde sale una salida de USD: "regla" (automático: mediano proporcional →
+ * largo → piso), "emergencia", "largo" o la clave de un sobre.
+ */
+export type BucketOrigen = "regla" | "emergencia" | "largo" | SobreKey;
 
 export interface AhorroSobreConfig {
   key: SobreKey;
@@ -141,6 +137,20 @@ export interface AhorroSobreConfig {
   pct: number;
   /** objetivo en USD */
   objetivo: number;
+  /** Mes objetivo "AAAA-MM" (opcional): para calcular cuánto ahorrar por mes */
+  fechaObjetivo?: string;
+}
+
+/** Pase de plata entre destinos del ahorro (no cambia la tenencia de USD). */
+export interface MovAhorro {
+  id: string;
+  fecha: string;
+  /** "emergencia", "largo" o la clave de un sobre */
+  desde: string;
+  hacia: string;
+  montoUSD: number;
+  notas: string;
+  createdAt: string;
 }
 
 /**

@@ -9,6 +9,8 @@ import { useRefreshConfig } from "@/components/ConfigProvider";
 import { configApi, ApiError, errorMessage, request } from "@/lib/api";
 import { descargarArchivo } from "@/lib/csv";
 import { hoyLocal } from "@/lib/utils";
+import { PlanAhorroSection } from "@/components/views/ajustes/PlanAhorroSection";
+import { PresupuestoSection } from "@/components/views/ajustes/PresupuestoSection";
 import { Field, focusFirstInvalid } from "@/components/ui/Field";
 import { Button } from "@/components/ui/Button";
 
@@ -204,6 +206,9 @@ export default function SettingsView({ config }: Props) {
           </Button>
         </div>
       </form>
+
+      <PlanAhorroSection />
+      <PresupuestoSection />
 
       <section className="surface p-5 sm:p-8 mt-8">
         <div className="eyebrow mb-1">Tus datos</div>

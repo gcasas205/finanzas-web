@@ -13,9 +13,8 @@ import { toast } from "sonner";
 import type { DolarOperacion, Cotizacion, Transaction, BucketOrigen } from "@/types";
 import { formatPesos, formatPesosCompact, formatFecha, formatMes, fechaToMes, uniqueMonths, hoyLocal } from "@/lib/utils";
 import { resumenDolar } from "@/lib/dolar-calc";
-import { ORIGEN_LABEL } from "@/lib/ahorro-calc";
+import { origenesDisponibles } from "@/lib/ahorro-calc";
 
-const ORIGENES: BucketOrigen[] = ["regla", "emergencia", "auto", "mud", "vac", "tec", "largo"];
 import { useDolar, useTransactions } from "@/components/DataProvider";
 import { UsdAmount } from "@/components/UsdAmount";
 import LogoLoader from "@/components/LogoLoader";
@@ -568,6 +567,7 @@ function DolarFormBody({ editing, cotizacion, onClose, onSaved }: {
   onClose: () => void;
   onSaved: () => void;
 }) {
+  const { ahorroConfig } = useTransactions();
   const today = hoyLocal();
   const formRef = useRef<HTMLFormElement>(null);
   const [tipo, setTipo] = useState<"compra" | "venta">(editing?.tipo || "compra");
@@ -744,7 +744,7 @@ function DolarFormBody({ editing, cotizacion, onClose, onSaved }: {
           >
             {(c) => (
               <select {...c} value={origen} onChange={(e) => setOrigen(e.target.value as BucketOrigen)} className="form-input">
-                {ORIGENES.map(o => <option key={o} value={o}>{ORIGEN_LABEL[o]}</option>)}
+                {origenesDisponibles(ahorroConfig).map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
               </select>
             )}
           </Field>

@@ -106,6 +106,10 @@ Reglas con nombre, para citar en un review:
 - **Detalle desplegable:** una fila de lista que abre su detalle es un `button` con `aria-expanded`; lo abierto
   se marca con fondo `ink-700/50` (voz de selección, nunca ámbar).
 - **Historiales:** lista con fecha en mono, cambios con signo y color de dirección, y "Mostrar más" de a 15.
+- **Presupuesto:** barra `role="meter"` sobre la pista; verde (`positivo`) hasta 85%, neutra (`serie`) de 85% a 100%
+  y roja (`negativo`) al pasarse, siempre con el texto "gastado / tope" y "te pasaste $X" al lado.
+- **Un primario por vista:** en Ajustes el primario es "Guardar ajustes"; las secciones extra (plan de ahorro,
+  presupuesto, backup) guardan con botón secundario.
 
 ## 7. Componentes (`src/components/ui/`)
 

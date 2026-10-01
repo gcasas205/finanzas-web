@@ -154,4 +154,22 @@ describe("computeAhorro", () => {
     expect(r.historial[1].cambios.largo).toBe(100);
     expect(r.historial[2].cambios.emergencia).toBe(1000);
   });
+  it("los pases mueven plata entre destinos sin cambiar la tenencia", () => {
+    const r = computeAhorro(
+      [op({ fecha: "2026-01-01", montoUSD: 2000 })],
+      [],
+      cfg,
+      [{ id: "p1", fecha: "2026-02-01", desde: "auto", hacia: "largo", montoUSD: 200, notas: "", createdAt: "" }],
+    );
+    expect(r.largo.balance).toBe(200);
+    expect(r.mediano.sobres.find((x) => x.key === "auto")?.balance).toBe(300);
+    expect(r.tenenciaNeta).toBe(2000);
+    expect(Math.abs(r.descuadre)).toBeLessThan(0.01);
+    expect(r.historial[0]).toMatchObject({ paseId: "p1", cambios: { auto: -200, largo: 200 } });
+  });
+  it("funciona con sobres propios", () => {
+    const propio: AhorroConfig = { ...cfg, sobres: [{ key: "viaje_ab12", nombre: "Viaje", pct: 100, objetivo: 5000 }] };
+    const r = computeAhorro([op({ montoUSD: 1500 })], [], propio);
+    expect(r.mediano.sobres[0]).toMatchObject({ key: "viaje_ab12", balance: 500 });
+  });
 });

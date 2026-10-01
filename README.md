@@ -15,7 +15,7 @@ Web app de seguimiento financiero personal con importación automática de resú
 | **Dashboard** | KPIs en tiempo real: ingresos, gastos, ahorro, tasa de ahorro, acumulado histórico y proyección Mercado Pago |
 | **Movimientos** | Carga manual con auto-categorización inteligente. Filtros por mes, tipo y búsqueda libre. Gastos en USD con origen de ahorro e ingresos en USD con reparto entre mediano y largo plazo |
 | **Dólares** | Compra/venta de USD con costo promedio ponderado, cotización oficial en vivo (dolarhoy), tenencia y resultado por tipo de cambio. Reparto de ahorro al comprar y origen al vender |
-| **Ahorro** | Ahorro por objetivos sobre tu tenencia de USD: piso de emergencia (se llena primero), sobres de mediano plazo por % y objetivo, y largo plazo (S&P). Todo configurable desde el Sheets |
+| **Ahorro** | Ahorro por objetivos sobre tu tenencia de USD: piso de emergencia (se llena primero), sobres de mediano plazo por % y objetivo (editables desde Ajustes, con fecha objetivo), pases entre destinos y largo plazo (S&P) |
 | **Importar PDF** | Parsea automáticamente resúmenes VISA ICBC y recibos de sueldo (incluye PDFs con encoding PUA) |
 | **Análisis BI** | 4 tabs: Tendencias, Categorías (con filtro por mes), Proyección Mercado Pago, Comparativa mensual |
 | **Fechas duales** | Cada gasto tiene fecha de consumo + fecha de pago real. Sueldos se asignan al mes de cobro |
@@ -394,6 +394,9 @@ Algunos PDFs usan fuentes con encoding especial. La app soporta Unicode PUA pero
 - **Sueldo cargado a mano**: un ingreso en Ingresos → Sueldo se guarda también en la hoja `Sueldos` (como al importar el recibo), con datos opcionales del recibo (empresa, bruto, descuentos, período trabajado). Editarlo o borrarlo mantiene la hoja al día. Nueva pestaña **Sueldo** en Análisis con la evolución del neto y el bruto, también en pesos de hoy.
 - **Cuotas futuras**: al cargar una compra en cuotas con tarjeta (o importar un resumen) se crean también las cuotas que faltan, una por mes. Se pueden editar o borrar juntas.
 - Columnas nuevas al final: `Transacciones` R (`grupoCuotas`) y `Sueldos` N (`txId`, vincula el sueldo con su movimiento).
+- **Plan de ahorro desde Ajustes**: piso, rendimiento supuesto y sobres editables (crear, renombrar, quitar), cada uno con fecha objetivo opcional y cuánto juntar por mes para llegar. Se sigue guardando en la hoja `Config` (claves nuevas `sobres_lista`, `sobre_<clave>_nombre`, `sobre_<clave>_fecha`; las planillas viejas siguen funcionando).
+- **Mover entre destinos**: pases de plata entre piso, sobres y largo plazo sin tocar la tenencia (pestaña nueva `MovAhorro`).
+- **Presupuesto mensual por categoría**: se define en Ajustes (claves `presupuesto:<Categoría>` en `Config`) y el Resumen muestra cuánto llevás gastado de cada uno.
 
 ### v6.0
 

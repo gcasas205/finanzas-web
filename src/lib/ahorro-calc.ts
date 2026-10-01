@@ -4,20 +4,23 @@ import type {
   AhorroConfig,
   SobreKey,
   BucketOrigen,
+  MovAhorro,
 } from "@/types";
 
-/** Nombre legible de cada destino, para los textos de "efecto" */
-export const ORIGEN_LABEL: Record<BucketOrigen, string> = {
-  regla: "Automático (regla)",
-  emergencia: "Piso emergencia",
-  auto: "Cambiar el auto",
-  mud: "Mudanza",
-  vac: "Vacaciones",
-  tec: "Tecnología",
-  largo: "Largo plazo",
-};
+/** Opciones de origen para una salida de USD, en orden, con su nombre legible. */
+export function origenesDisponibles(cfg: AhorroConfig | null): Array<{ value: BucketOrigen; label: string }> {
+  return [
+    { value: "regla", label: "Automático (regla)" },
+    { value: "emergencia", label: "Piso emergencia" },
+    ...(cfg?.sobres ?? []).map((s) => ({ value: s.key, label: s.nombre })),
+    { value: "largo", label: "Largo plazo" },
+  ];
+}
 
-export const SOBRE_KEYS: SobreKey[] = ["auto", "mud", "vac", "tec"];
+/** Destinos entre los que se puede mover plata (todo menos "regla"). */
+export function destinosAhorro(cfg: AhorroConfig | null): Array<{ value: BucketKey; label: string }> {
+  return origenesDisponibles(cfg).filter((o) => o.value !== "regla") as Array<{ value: BucketKey; label: string }>;
+}
 
 export interface SobreResultado {
   key: SobreKey;
@@ -71,21 +74,26 @@ export interface MovimientoAhorro {
   concepto: string;
   /** Cambio en USD de cada bucket afectado (positivo entra, negativo sale) */
   cambios: Partial<Record<BucketKey, number>>;
+  /** Si es un pase entre destinos, su id (para poder borrarlo) */
+  paseId?: string;
 }
 
 type Evento = {
   fecha: string;
   concepto: string;
-  flow: "in" | "out";
+  flow: "in" | "out" | "mov";
   usd: number;
   mediano?: number; // intención de reparto (solo entradas)
   largo?: number;
   origen?: BucketOrigen; // solo salidas
+  desde?: string; // solo pases entre destinos
+  hacia?: string;
+  paseId?: string;
 };
 
 type Estado = {
   emerg: number;
-  sub: Record<SobreKey, number>;
+  sub: Record<SobreKey, number>; // un saldo por sobre configurado
   largo: number;
 };
 
@@ -130,7 +138,7 @@ function retirar(usd: number, origen: BucketOrigen, st: Estado): void {
   let left = usd;
 
   if (origen && origen !== "regla") {
-    if ((SOBRE_KEYS as string[]).includes(origen)) {
+    if (origen in st.sub) {
       const k = origen as SobreKey;
       const t = Math.min(left, st.sub[k]);
       st.sub[k] -= t;
@@ -148,10 +156,11 @@ function retirar(usd: number, origen: BucketOrigen, st: Estado): void {
 
   if (left > 0.005) {
     // Regla: primero el pozo de mediano, proporcional entre sus sobres
-    const medTotal = SOBRE_KEYS.reduce((a, k) => a + st.sub[k], 0);
+    const keys = Object.keys(st.sub);
+    const medTotal = keys.reduce((a, k) => a + st.sub[k], 0);
     if (medTotal > 0) {
       const take = Math.min(left, medTotal);
-      for (const k of SOBRE_KEYS) st.sub[k] -= take * (st.sub[k] / medTotal);
+      for (const k of keys) st.sub[k] -= take * (st.sub[k] / medTotal);
       left -= take;
     }
     if (left > 0.005 && st.largo > 0) {
@@ -179,6 +188,7 @@ export function computeAhorro(
   dolarOps: DolarOperacion[],
   transactions: Transaction[],
   cfg: AhorroConfig,
+  movimientos: MovAhorro[] = [],
 ): AhorroResultado {
   const eventos: Evento[] = [];
 
@@ -226,9 +236,25 @@ export function computeAhorro(
     }
   }
 
+  // Pases entre destinos: van al final para que, en el mismo día, se procesen
+  // después de las entradas (el sort es estable).
+  const nombre = (k: string) =>
+    k === "emergencia" ? "Piso" : k === "largo" ? "Largo plazo" : cfg.sobres.find((s) => s.key === k)?.nombre ?? k;
+  for (const m of movimientos) {
+    eventos.push({
+      fecha: m.fecha,
+      concepto: `Pase: ${nombre(m.desde)} → ${nombre(m.hacia)}`,
+      flow: "mov",
+      usd: m.montoUSD,
+      desde: m.desde,
+      hacia: m.hacia,
+      paseId: m.id,
+    });
+  }
+
   eventos.sort((a, b) => a.fecha.localeCompare(b.fecha));
 
-  const st: Estado = { emerg: 0, sub: { auto: 0, mud: 0, vac: 0, tec: 0 }, largo: 0 };
+  const st: Estado = { emerg: 0, sub: Object.fromEntries(cfg.sobres.map((s) => [s.key, 0])), largo: 0 };
   let libre = 0;
   let entradas = 0;
   let salidas = 0;
@@ -259,6 +285,13 @@ export function computeAhorro(
         }
         libre += repartirEnSobres(toMed, cfg, st.sub);
       }
+    } else if (ev.flow === "mov") {
+      // Mueve hasta lo que haya en el origen; no cambia la tenencia
+      const monto = Math.min(ev.usd, saldo(st, ev.desde!));
+      if (monto > 0 && existe(st, ev.hacia!)) {
+        sumar(st, ev.desde!, -monto);
+        sumar(st, ev.hacia!, monto);
+      }
     } else {
       salidas += ev.usd;
       retirar(ev.usd, ev.origen ?? "regla", st);
@@ -270,7 +303,9 @@ export function computeAhorro(
       const d = despues[k] - antes[k];
       if (Math.abs(d) >= 0.005) cambios[k] = d;
     }
-    if (Object.keys(cambios).length) historial.push({ fecha: ev.fecha, concepto: ev.concepto, cambios });
+    if (Object.keys(cambios).length || ev.paseId) {
+      historial.push({ fecha: ev.fecha, concepto: ev.concepto, cambios, ...(ev.paseId ? { paseId: ev.paseId } : {}) });
+    }
   }
 
   // Aporte mensual a largo plazo: promedio sobre TODOS los meses desde el primer
@@ -278,7 +313,7 @@ export function computeAhorro(
   const ultimoMes = eventos.length ? eventos[eventos.length - 1].fecha.slice(0, 7) : null;
   const mesesLargo = primerMesLargo && ultimoMes ? mesesEntre(primerMesLargo, ultimoMes) + 1 : 0;
 
-  const medianoBalance = SOBRE_KEYS.reduce((a, k) => a + st.sub[k], 0);
+  const medianoBalance = Object.values(st.sub).reduce((a, v) => a + v, 0);
   const sobres: SobreResultado[] = cfg.sobres.map((s) => {
     const balance = st.sub[s.key] ?? 0;
     const progreso = s.objetivo > 0 ? balance / s.objetivo : 0;
@@ -331,4 +366,20 @@ function mesesEntre(a: string, b: string): number {
   const [ya, ma] = a.split("-").map(Number);
   const [yb, mb] = b.split("-").map(Number);
   return (yb - ya) * 12 + (mb - ma);
+}
+
+function existe(st: Estado, k: string): boolean {
+  return k === "emergencia" || k === "largo" || k in st.sub;
+}
+
+function saldo(st: Estado, k: string): number {
+  if (k === "emergencia") return st.emerg;
+  if (k === "largo") return st.largo;
+  return st.sub[k] ?? 0;
+}
+
+function sumar(st: Estado, k: string, v: number): void {
+  if (k === "emergencia") st.emerg += v;
+  else if (k === "largo") st.largo += v;
+  else if (k in st.sub) st.sub[k] += v;
 }

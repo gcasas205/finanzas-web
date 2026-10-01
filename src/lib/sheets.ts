@@ -2,7 +2,8 @@ import { google, sheets_v4 } from "googleapis";
 import fs from "fs/promises";
 import path from "path";
 import os from "os";
-import type { Transaction, Sueldo, AppConfig, DolarOperacion, AhorroConfig, SobreKey } from "@/types";
+import type { Transaction, Sueldo, AppConfig, DolarOperacion, AhorroConfig, MovAhorro } from "@/types";
+import { parseAhorroConfig, ahorroConfigToEntries, parsePresupuestos, presupuestosToEntries } from "@/lib/ahorro-config";
 import { AppError, SheetsError } from "@/lib/errors";
 
 /**
@@ -250,6 +251,8 @@ const DOLAR_HEADERS = [
 
 const CONFIG_HEADERS = ["parametro", "valor"];
 
+const MOV_AHORRO_HEADERS = ["id", "fecha", "desde", "hacia", "montoUSD", "notas", "createdAt"];
+
 /** Parámetros por defecto del plan de ahorro (se siembran al crear la hoja Config) */
 const AHORRO_DEFAULTS: Array<[string, number]> = [
   ["emergencia_objetivo", 3000],
@@ -264,12 +267,6 @@ const AHORRO_DEFAULTS: Array<[string, number]> = [
   ["objetivo_tec", 600],
 ];
 
-const SOBRE_NOMBRES: Record<SobreKey, string> = {
-  auto: "Cambiar el auto",
-  mud: "Mudanza",
-  vac: "Vacaciones",
-  tec: "Tecnología",
-};
 
 async function ensureSheets(client: sheets_v4.Sheets, sheetId: string) {
   const meta = await client.spreadsheets.get({ spreadsheetId: sheetId });
@@ -281,6 +278,7 @@ async function ensureSheets(client: sheets_v4.Sheets, sheetId: string) {
     { name: "Sueldos", headers: SUELDO_HEADERS },
     { name: "Dolares", headers: DOLAR_HEADERS },
     { name: "Config", headers: CONFIG_HEADERS, seedRows: AHORRO_DEFAULTS.map(([k, v]) => [k, v]) },
+    { name: "MovAhorro", headers: MOV_AHORRO_HEADERS },
   ];
 
   for (const { name, headers, seedRows } of required) {
@@ -652,34 +650,76 @@ export async function deleteDolarOp(id: string): Promise<boolean> {
 
 // ─── Config del plan de ahorro (hoja "Config") ──────────────────────────────
 
-function buildAhorroConfig(map: Record<string, number>): AhorroConfig {
-  const g = (k: string, def: number) =>
-    map[k] !== undefined && isFinite(map[k]) ? map[k] : def;
-  return {
-    emergenciaObjetivo: g("emergencia_objetivo", 3000),
-    // En la hoja se guarda como porcentaje (7); acá lo pasamos a fracción (0.07)
-    sp500RetornoAnual: g("sp500_retorno_anual", 7) / 100,
-    sobres: [
-      { key: "auto", nombre: SOBRE_NOMBRES.auto, pct: g("mediano_auto_pct", 40), objetivo: g("objetivo_auto", 4000) },
-      { key: "mud", nombre: SOBRE_NOMBRES.mud, pct: g("mediano_mud_pct", 25), objetivo: g("objetivo_mud", 3000) },
-      { key: "vac", nombre: SOBRE_NOMBRES.vac, pct: g("mediano_vac_pct", 20), objetivo: g("objetivo_vac", 1000) },
-      { key: "tec", nombre: SOBRE_NOMBRES.tec, pct: g("mediano_tec_pct", 15), objetivo: g("objetivo_tec", 600) },
-    ],
-  };
+/** Hoja Config como mapa clave → valor (texto). */
+async function readConfigRaw(): Promise<Record<string, string>> {
+  const raw: Record<string, string> = {};
+  for (const row of await readRows("Config", "A2:B")) {
+    const key = String(row[0] ?? "").trim();
+    if (key) raw[key] = String(row[1] ?? "");
+  }
+  return raw;
+}
+
+/** Escribe claves en Config sin tocar las demás filas. */
+async function writeConfigEntries(entries: Array<[string, string]>): Promise<void> {
+  if (!entries.length) return;
+  await sheetsCall("guardar en Config", async (ctx) => {
+    await ensureSheetsOnce(ctx);
+    await upsertConfigRows(ctx.client, ctx.sheetId, entries);
+  });
 }
 
 /** Lee la hoja Config (clave/valor) y devuelve la configuración del ahorro con defaults.
  *  Si Sheets falla se propaga el error: mostrar los defaults como si fueran tus
  *  objetivos reales sería engañoso. */
 export async function getAhorroConfig(): Promise<AhorroConfig> {
-  const map: Record<string, number> = {};
-  for (const row of await readRows("Config", "A2:B")) {
-    const key = String(row[0] ?? "").trim();
-    if (!key) continue;
-    const val = parseFloat(String(row[1]).replace(",", "."));
-    if (isFinite(val)) map[key] = val;
-  }
-  return buildAhorroConfig(map);
+  return parseAhorroConfig(await readConfigRaw());
+}
+
+/** Guarda el plan de ahorro completo (piso, rendimiento y sobres) en Config. */
+export async function saveAhorroConfig(cfg: AhorroConfig): Promise<void> {
+  await writeConfigEntries(ahorroConfigToEntries(cfg));
+}
+
+/** Presupuesto mensual por categoría (en pesos). */
+export async function getPresupuestos(): Promise<Record<string, number>> {
+  return parsePresupuestos(await readConfigRaw());
+}
+
+export async function savePresupuestos(presupuestos: Record<string, number>): Promise<void> {
+  const anteriores = await getPresupuestos();
+  await writeConfigEntries(presupuestosToEntries(presupuestos, anteriores));
+}
+
+// ─── Pases entre destinos del ahorro (hoja "MovAhorro") ─────────────────────
+
+function rowToMovAhorro(row: SheetRow): MovAhorro {
+  return {
+    id: str(row[0]),
+    fecha: str(row[1]),
+    desde: str(row[2]),
+    hacia: str(row[3]),
+    montoUSD: num(row[4]),
+    notas: str(row[5]),
+    createdAt: str(row[6], new Date().toISOString()),
+  };
+}
+
+function movAhorroToRow(m: MovAhorro): SheetRow {
+  return [m.id, m.fecha, m.desde, m.hacia, m.montoUSD, m.notas, m.createdAt];
+}
+
+export async function listMovAhorro(): Promise<MovAhorro[]> {
+  return (await readRows("MovAhorro", "A2:G")).map(rowToMovAhorro);
+}
+
+export async function addMovAhorro(m: MovAhorro): Promise<void> {
+  await appendRows("MovAhorro", "G", [movAhorroToRow(m)]);
+}
+
+/** false si el id no existe. */
+export async function deleteMovAhorro(id: string): Promise<boolean> {
+  return deleteRowById("MovAhorro", id);
 }
 
 export async function testConnection(): Promise<{ ok: boolean; error?: string }> {
