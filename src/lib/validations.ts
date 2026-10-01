@@ -41,6 +41,22 @@ const montoOpcional = z
 
 const ORIGENES = ["regla", "emergencia", "auto", "mud", "vac", "tec", "largo"] as const;
 
+/** Datos opcionales del recibo al cargar un sueldo a mano. */
+export const DatosReciboSchema = z.object({
+  empresa: z.string().trim().max(80, "Máximo 80 caracteres").optional(),
+  cargo: z.string().trim().max(80, "Máximo 80 caracteres").optional(),
+  periodoTrabajado: z
+    .string()
+    .regex(/^\d{4}-(0[1-9]|1[0-2])$/, "Elegí un mes válido")
+    .optional()
+    .or(z.literal("").transform(() => undefined)),
+  bruto: montoOpcional,
+  jubilacion: montoOpcional,
+  obraSocial: montoOpcional,
+  ley19032: montoOpcional,
+  otrosDescuentos: montoOpcional,
+});
+
 export const TransactionSchema = z
   .object({
     id: z.string().trim().min(1).max(64).optional(),
@@ -64,6 +80,13 @@ export const TransactionSchema = z
     origen: z.enum(ORIGENES).optional(),
     asigMediano: montoOpcional,
     asigLargo: montoOpcional,
+    grupoCuotas: z.string().trim().max(64).optional(),
+    /** Alta en cuotas: crear también las cuotas que faltan (por defecto sí) */
+    crearCuotas: z.boolean().optional(),
+    /** Edición de una cuota: aplicar los cambios también a las siguientes del grupo */
+    aplicarAGrupo: z.boolean().optional(),
+    /** Sueldo cargado a mano: datos del recibo para la hoja Sueldos */
+    recibo: DatosReciboSchema.optional(),
   })
   .refine((t) => t.cuotaNumero <= t.cuotaTotal, {
     message: "La cuota no puede ser mayor que el total de cuotas",
@@ -91,6 +114,9 @@ export const TransactionImportSchema = z
 export const IdSchema = z.object({
   id: z.string({ required_error: "Falta el id" }).trim().min(1, "Falta el id").max(64),
 });
+
+/** Borrar un movimiento; con `grupo`, también las cuotas siguientes de su compra. */
+export const DeleteTransactionSchema = IdSchema.extend({ grupo: z.boolean().optional() });
 
 export const DolarOpSchema = z
   .object({

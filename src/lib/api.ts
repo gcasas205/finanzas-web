@@ -10,8 +10,10 @@ import type {
   AppConfig,
   Cotizacion,
   DolarOperacion,
+  Sueldo,
   Transaction,
 } from "@/types";
+import type { DatosRecibo } from "@/lib/sueldos";
 
 export class ApiError extends Error {
   constructor(
@@ -87,17 +89,28 @@ export type TransactionPayload = Omit<Transaction, "id" | "createdAt" | "fechaPa
   createdAt?: string;
   fechaPago?: string;
   notas?: string;
+  /** Alta en cuotas: crear también las que faltan */
+  crearCuotas?: boolean;
+  /** Edición: aplicar los cambios a las cuotas siguientes del grupo */
+  aplicarAGrupo?: boolean;
+  /** Sueldo cargado a mano: datos del recibo */
+  recibo?: DatosRecibo;
 };
 
 export const transactionsApi = {
   list: () => request<{ transactions: Transaction[] }>("/api/transactions"),
   create: (tx: TransactionPayload) =>
-    sendJson<{ ok: true; transaction: Transaction }>("/api/transactions", "POST", tx),
+    sendJson<{ ok: true; transaction: Transaction; creados: number }>("/api/transactions", "POST", tx),
   update: (tx: TransactionPayload & { id: string }) =>
-    sendJson<{ ok: true; transaction: Transaction }>("/api/transactions", "PUT", tx),
-  remove: (id: string) => sendJson<{ ok: true }>("/api/transactions", "DELETE", { id }),
+    sendJson<{ ok: true; transaction: Transaction; actualizados: number }>("/api/transactions", "PUT", tx),
+  remove: (id: string, grupo = false) =>
+    sendJson<{ ok: true; borrados: number }>("/api/transactions", "DELETE", { id, grupo }),
   recategorize: (ids: string[], categoria: string, subcategoria: string) =>
     sendJson<{ ok: true; updated: number }>("/api/transactions", "PATCH", { ids, categoria, subcategoria }),
+};
+
+export const sueldosApi = {
+  list: () => request<{ sueldos: Sueldo[] }>("/api/sueldos"),
 };
 
 // ─── Dólares ────────────────────────────────────────────────────────────────

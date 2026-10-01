@@ -391,6 +391,9 @@ Algunos PDFs usan fuentes con encoding especial. La app soporta Unicode PUA pero
 - **Análisis**: vista "pesos de hoy" ajustada por inflación (IPC INDEC vía argentinadatos.com), comparativa contra hace un año o el promedio de 3 meses, detalle por categoría y nueva pestaña Hábitos (suscripciones y gastos hormiga).
 - **Resumen**: próximo resumen de tarjeta a pagar y meses futuros en el selector.
 - **Ajustes**: copia de seguridad de toda la planilla en un archivo.
+- **Sueldo cargado a mano**: un ingreso en Ingresos → Sueldo se guarda también en la hoja `Sueldos` (como al importar el recibo), con datos opcionales del recibo (empresa, bruto, descuentos, período trabajado). Editarlo o borrarlo mantiene la hoja al día. Nueva pestaña **Sueldo** en Análisis con la evolución del neto y el bruto, también en pesos de hoy.
+- **Cuotas futuras**: al cargar una compra en cuotas con tarjeta (o importar un resumen) se crean también las cuotas que faltan, una por mes. Se pueden editar o borrar juntas.
+- Columnas nuevas al final: `Transacciones` R (`grupoCuotas`) y `Sueldos` N (`txId`, vincula el sueldo con su movimiento).
 
 ### v6.0
 

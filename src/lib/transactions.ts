@@ -34,5 +34,6 @@ export function buildTransaction(
     origen: esUSD && body.tipo === "egreso" ? body.origen || "regla" : undefined,
     asigMediano: esUSD && body.tipo === "ingreso" ? body.asigMediano || 0 : undefined,
     asigLargo: esUSD && body.tipo === "ingreso" ? body.asigLargo || 0 : undefined,
+    grupoCuotas: body.cuotaTotal > 1 ? body.grupoCuotas || undefined : undefined,
   };
 }

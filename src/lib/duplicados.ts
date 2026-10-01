@@ -1,10 +1,15 @@
 import { roundMoney } from "@/lib/utils";
 import type { Transaction } from "@/types";
 
-type Comparable = Pick<Transaction, "fechaConsumo" | "monto" | "descripcion" | "cuotaNumero">;
+type Comparable = Pick<Transaction, "fechaConsumo" | "monto" | "descripcion" | "cuotaNumero"> &
+  Partial<Pick<Transaction, "cuotaTotal">>;
 
+// Una cuota se reconoce por fecha de compra, monto y "n/total" aunque la descripción
+// difiera (ej. cargada a mano y después importada del resumen).
 const clave = (t: Comparable) =>
-  [t.fechaConsumo, roundMoney(t.monto), t.cuotaNumero || 1, t.descripcion.trim().toLowerCase().replace(/\s+/g, " ")].join("|");
+  (t.cuotaTotal ?? 1) > 1
+    ? ["cuota", t.fechaConsumo, roundMoney(t.monto), t.cuotaNumero, t.cuotaTotal].join("|")
+    : [t.fechaConsumo, roundMoney(t.monto), t.cuotaNumero || 1, t.descripcion.trim().toLowerCase().replace(/\s+/g, " ")].join("|");
 
 /**
  * Separa los movimientos a importar en nuevos y ya cargados, comparando fecha de

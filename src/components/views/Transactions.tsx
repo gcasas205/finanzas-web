@@ -21,6 +21,9 @@ import { Segmented } from "@/components/ui/Segmented";
 import { EmptyState } from "@/components/ui/States";
 import { useSearchParams, useRouter } from "next/navigation";
 import { transactionsToCsv, descargarArchivo } from "@/lib/csv";
+import { esSueldo, type DatosRecibo } from "@/lib/sueldos";
+import { sueldosApi } from "@/lib/api";
+import useSWR from "swr";
 
 interface Props { config: AppConfig; }
 
@@ -40,7 +43,7 @@ export default function Transactions({ config }: Props) {
   const [showForm, setShowForm] = useState(false);
 
   const [visibleCount, setVisibleCount] = useState(50);
-  const { confirm, dialog: confirmDialog } = useConfirm();
+  const { confirmar, dialog: confirmDialog } = useConfirm();
 
   // `/transactions?nuevo=1` abre el alta directo (lo usan los estados vacíos de otras vistas).
   const searchParams = useSearchParams();
@@ -110,19 +113,27 @@ export default function Transactions({ config }: Props) {
   }, [filtered]);
 
   const handleDelete = async (tx: Transaction) => {
-    const ok = await confirm({
+    // Cuotas siguientes de la misma compra (generadas juntas)
+    const siguientes = tx.grupoCuotas
+      ? transactions.filter(t => t.grupoCuotas === tx.grupoCuotas && t.cuotaNumero > tx.cuotaNumero).length
+      : 0;
+    const { ok, opcion } = await confirmar({
       title: "Eliminar movimiento",
       description: (
         <>
           Vas a eliminar <strong className="text-paper">{tx.descripcion}</strong> (
-          {tx.moneda === "USD" ? <UsdAmount value={tx.monto} /> : formatPesos(tx.monto)}). No se puede deshacer.
+          {tx.moneda === "USD" ? <UsdAmount value={tx.monto} /> : formatPesos(tx.monto)}
+          {tx.cuotaTotal > 1 ? `, cuota ${tx.cuotaNumero}/${tx.cuotaTotal}` : ""}). No se puede deshacer.
         </>
       ),
+      ...(siguientes > 0
+        ? { opcion: { label: `Eliminar también las ${siguientes} cuota${siguientes === 1 ? "" : "s"} siguiente${siguientes === 1 ? "" : "s"}`, marcada: true } }
+        : {}),
     });
     if (!ok) return;
     try {
-      await transactionsApi.remove(tx.id);
-      toast.success(`"${tx.descripcion}" eliminado`);
+      const r = await transactionsApi.remove(tx.id, siguientes > 0 && opcion);
+      toast.success(r.borrados > 1 ? `"${tx.descripcion}" eliminado (${r.borrados} cuotas)` : `"${tx.descripcion}" eliminado`);
       refresh();
     } catch (e) {
       toast.error(errorMessage(e, "No se pudo eliminar el movimiento"), { duration: 7000 });
@@ -598,6 +609,30 @@ function TransactionFormBody({ editing, prefill, config, onClose, onSaved }: Omi
   const [origen, setOrigen] = useState<BucketOrigen>(base?.origen ?? "regla");
   const [asigMediano, setAsigMediano] = useState(base?.asigMediano ? String(base.asigMediano) : "");
   const [asigLargo, setAsigLargo] = useState(base?.asigLargo ? String(base.asigLargo) : "");
+  // Cuotas: al dar de alta, crear las que faltan; al editar, aplicar a las siguientes
+  const [crearCuotas, setCrearCuotas] = useState(true);
+  const [aplicarAGrupo, setAplicarAGrupo] = useState(false);
+  // Sueldo: datos opcionales del recibo (van a la hoja Sueldos)
+  const [recibo, setRecibo] = useState<Record<keyof DatosRecibo, string>>({
+    empresa: "", cargo: "", periodoTrabajado: "", bruto: "", jubilacion: "", obraSocial: "", ley19032: "", otrosDescuentos: "",
+  });
+  const setReciboCampo = (k: keyof DatosRecibo, v: string) => setRecibo(prev => ({ ...prev, [k]: v }));
+  const esSueldoForm = esSueldo({ tipo, categoria, subcategoria, moneda });
+
+  // Al editar un sueldo, se traen los datos del recibo que ya estaban
+  const sueldos = useSWR(editing && esSueldo(editing) ? "/api/sueldos" : null, () => sueldosApi.list(), { revalidateOnFocus: false });
+  const reciboCargado = useRef(false);
+  useEffect(() => {
+    const previo = sueldos.data?.sueldos.find(sd => sd.txId === editing?.id);
+    if (!previo || reciboCargado.current) return;
+    reciboCargado.current = true;
+    const n = (v: number) => (v ? String(v) : "");
+    setRecibo({
+      empresa: previo.empresa, cargo: previo.cargo, periodoTrabajado: previo.periodoTrabajado,
+      bruto: n(previo.bruto), jubilacion: n(previo.jubilacion), obraSocial: n(previo.obraSocial),
+      ley19032: n(previo.ley19032), otrosDescuentos: n(previo.otrosDescuentos),
+    });
+  }, [sueldos.data, editing?.id]);
   const [saving, setSaving] = useState(false);
   const [errors, setErrors] = useState<Errors>({});
 
@@ -679,12 +714,23 @@ function TransactionFormBody({ editing, prefill, config, onClose, onSaved }: Omi
       notas,
       origen,
       ...(esIngresoUSD ? { asigMediano: parseFloat(asigMediano) || 0, asigLargo: parseFloat(asigLargo) || 0 } : {}),
+      ...(editing?.grupoCuotas ? { grupoCuotas: editing.grupoCuotas, aplicarAGrupo } : {}),
+      ...(!editing && esTarjeta ? { crearCuotas } : {}),
+      ...(esSueldoForm ? { recibo: reciboPayload(recibo) } : {}),
     };
 
     try {
-      if (editing) await transactionsApi.update({ ...payload, id: editing.id });
-      else await transactionsApi.create(payload);
-      toast.success(editing ? `"${payload.descripcion}" actualizado` : `"${payload.descripcion}" guardado`);
+      if (editing) {
+        const r = await transactionsApi.update({ ...payload, id: editing.id });
+        toast.success(r.actualizados > 1
+          ? `"${payload.descripcion}" actualizado en ${r.actualizados} cuotas`
+          : `"${payload.descripcion}" actualizado`);
+      } else {
+        const r = await transactionsApi.create(payload);
+        toast.success(r.creados > 1
+          ? `"${payload.descripcion}" guardado con ${r.creados} cuotas`
+          : `"${payload.descripcion}" guardado`);
+      }
       onSaved();
     } catch (e) {
       // El error del servidor marca su campo; si no tiene campo, va al aviso.
@@ -862,7 +908,11 @@ function TransactionFormBody({ editing, prefill, config, onClose, onSaved }: Omi
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field label="Categoría" error={errors.categoria}>
             {(c) => (
-              <select {...c} value={categoria} onChange={(e) => { setCategoria(e.target.value); clear("categoria"); }} className="form-input">
+              <select {...c} value={categoria} onChange={(e) => {
+                setCategoria(e.target.value);
+                setSubcategoria(CATEGORIES.find(cat => cat.name === e.target.value)?.subcategories[0] ?? "Sin categoría");
+                clear("categoria");
+              }} className="form-input">
                 {CATEGORIES.map(cat => <option key={cat.name} value={cat.name}>{cat.name}</option>)}
               </select>
             )}
@@ -893,7 +943,77 @@ function TransactionFormBody({ editing, prefill, config, onClose, onSaved }: Omi
                   className="form-input tabular font-mono" />
               )}
             </Field>
+            {(() => {
+              const tot = parseInt(cuotaTotal, 10), num = parseInt(cuotaNumero, 10);
+              if (!(tot > 1) || !(num >= 1) || num > tot) return null;
+              const faltan = tot - num;
+              return (
+                <div className="col-span-2 -mt-1 space-y-2">
+                  <p className="text-xs text-ink-300">
+                    El monto es el de <span className="text-ink-100">cada cuota</span>
+                    {montoNum > 0 && <> · total de la compra {formatPesos(montoNum * tot)}</>}.
+                  </p>
+                  {!editing && faltan > 0 && (
+                    <label className="flex min-h-11 items-center gap-3 text-sm text-ink-100 cursor-pointer">
+                      <input type="checkbox" checked={crearCuotas} onChange={(e) => setCrearCuotas(e.target.checked)}
+                        className="w-4 h-4 accent-paper" />
+                      Crear también las {faltan} cuota{faltan === 1 ? "" : "s"} que faltan, una por mes
+                    </label>
+                  )}
+                  {editing?.grupoCuotas && num < tot && (
+                    <label className="flex min-h-11 items-center gap-3 text-sm text-ink-100 cursor-pointer">
+                      <input type="checkbox" checked={aplicarAGrupo} onChange={(e) => setAplicarAGrupo(e.target.checked)}
+                        className="w-4 h-4 accent-paper" />
+                      Aplicar descripción, categoría y monto también a las cuotas siguientes
+                    </label>
+                  )}
+                </div>
+              );
+            })()}
           </div>
+        )}
+
+        {esSueldoForm && (
+          <fieldset className="surface p-4 space-y-3">
+            <legend className="eyebrow px-1">Datos del recibo (opcional)</legend>
+            <p className="text-xs text-ink-300 leading-relaxed">
+              Este ingreso también se guarda en la hoja Sueldos, como si importaras el recibo. El monto es el neto.
+            </p>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <Field label="Empresa">
+                {(c) => <input {...c} type="text" maxLength={80} value={recibo.empresa}
+                  onChange={(e) => setReciboCampo("empresa", e.target.value)} className="form-input" />}
+              </Field>
+              <Field label="Cargo">
+                {(c) => <input {...c} type="text" maxLength={80} value={recibo.cargo}
+                  onChange={(e) => setReciboCampo("cargo", e.target.value)} className="form-input" />}
+              </Field>
+              <Field label="Período trabajado" hint="Si lo dejás vacío, se toma el mes anterior al cobro (según Ajustes).">
+                {(c) => <input {...c} type="month" value={recibo.periodoTrabajado}
+                  onChange={(e) => setReciboCampo("periodoTrabajado", e.target.value)} className="form-input tabular" />}
+              </Field>
+              <Field label="Bruto">
+                {(c) => <input {...c} type="number" step="0.01" min="0" inputMode="decimal" value={recibo.bruto}
+                  onChange={(e) => setReciboCampo("bruto", e.target.value)} placeholder="0,00" className="form-input tabular font-mono" />}
+              </Field>
+              <Field label="Jubilación">
+                {(c) => <input {...c} type="number" step="0.01" min="0" inputMode="decimal" value={recibo.jubilacion}
+                  onChange={(e) => setReciboCampo("jubilacion", e.target.value)} placeholder="0,00" className="form-input tabular font-mono" />}
+              </Field>
+              <Field label="Obra social">
+                {(c) => <input {...c} type="number" step="0.01" min="0" inputMode="decimal" value={recibo.obraSocial}
+                  onChange={(e) => setReciboCampo("obraSocial", e.target.value)} placeholder="0,00" className="form-input tabular font-mono" />}
+              </Field>
+              <Field label="Ley 19032 (PAMI)">
+                {(c) => <input {...c} type="number" step="0.01" min="0" inputMode="decimal" value={recibo.ley19032}
+                  onChange={(e) => setReciboCampo("ley19032", e.target.value)} placeholder="0,00" className="form-input tabular font-mono" />}
+              </Field>
+              <Field label="Otros descuentos">
+                {(c) => <input {...c} type="number" step="0.01" min="0" inputMode="decimal" value={recibo.otrosDescuentos}
+                  onChange={(e) => setReciboCampo("otrosDescuentos", e.target.value)} placeholder="0,00" className="form-input tabular font-mono" />}
+              </Field>
+            </div>
+          </fieldset>
         )}
 
         <Field label="Notas (opcional)" error={errors.notas}>
@@ -912,4 +1032,15 @@ function TransactionFormBody({ editing, prefill, config, onClose, onSaved }: Omi
       </DialogActions>
     </form>
   );
+}
+
+/** Campos del recibo del formulario → payload: los vacíos no se mandan (conservan lo guardado). */
+function reciboPayload(r: Record<keyof DatosRecibo, string>): DatosRecibo {
+  const num = (v: string) => (v.trim() === "" ? undefined : parseFloat(v) || 0);
+  const txt = (v: string) => (v.trim() === "" ? undefined : v.trim());
+  return {
+    empresa: txt(r.empresa), cargo: txt(r.cargo), periodoTrabajado: txt(r.periodoTrabajado),
+    bruto: num(r.bruto), jubilacion: num(r.jubilacion), obraSocial: num(r.obraSocial),
+    ley19032: num(r.ley19032), otrosDescuentos: num(r.otrosDescuentos),
+  };
 }

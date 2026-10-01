@@ -234,13 +234,13 @@ const TX_HEADERS = [
   "id", "fechaConsumo", "fechaPago", "tipo", "descripcion", "monto",
   "moneda", "categoria", "subcategoria", "fuente", "cuotaTotal",
   "cuotaNumero", "notas", "createdAt", "origen",
-  "asigMediano", "asigLargo"
+  "asigMediano", "asigLargo", "grupoCuotas"
 ];
 
 const SUELDO_HEADERS = [
   "id", "periodoTrabajado", "periodoPago", "empresa", "cargo",
   "bruto", "neto", "jubilacion", "obraSocial", "ley19032",
-  "otrosDescuentos", "fechaPago", "createdAt"
+  "otrosDescuentos", "fechaPago", "createdAt", "txId"
 ];
 
 const DOLAR_HEADERS = [
@@ -357,6 +357,7 @@ export function rowToTransaction(row: SheetRow): Transaction {
     origen: (str(row[14]) || undefined) as Transaction["origen"],
     asigMediano: optNum(row[15]),
     asigLargo: optNum(row[16]),
+    grupoCuotas: str(row[17]) || undefined,
   };
 }
 
@@ -366,11 +367,12 @@ export function transactionToRow(t: Transaction): SheetRow {
     t.id, t.fechaConsumo, t.fechaPago, t.tipo, t.descripcion, t.monto,
     t.moneda, t.categoria, t.subcategoria, t.fuente, t.cuotaTotal,
     t.cuotaNumero, t.notas, t.createdAt, t.origen ?? "",
-    t.asigMediano ?? "", t.asigLargo ?? ""
+    t.asigMediano ?? "", t.asigLargo ?? "", t.grupoCuotas ?? ""
   ];
 }
 
-function rowToSueldo(row: SheetRow): Sueldo {
+/** Convierte una fila plana a Sueldo (exportada para tests) */
+export function rowToSueldo(row: SheetRow): Sueldo {
   return {
     id: str(row[0]),
     periodoTrabajado: str(row[1]),
@@ -385,14 +387,16 @@ function rowToSueldo(row: SheetRow): Sueldo {
     otrosDescuentos: num(row[10]),
     fechaPago: str(row[11]),
     createdAt: str(row[12], new Date().toISOString()),
+    txId: str(row[13]) || undefined,
   };
 }
 
-function sueldoToRow(s: Sueldo): SheetRow {
+/** Convierte un Sueldo a fila plana (exportada para tests) */
+export function sueldoToRow(s: Sueldo): SheetRow {
   return [
     s.id, s.periodoTrabajado, s.periodoPago, s.empresa, s.cargo,
     s.bruto, s.neto, s.jubilacion, s.obraSocial, s.ley19032,
-    s.otrosDescuentos, s.fechaPago, s.createdAt
+    s.otrosDescuentos, s.fechaPago, s.createdAt, s.txId ?? ""
   ];
 }
 
@@ -529,6 +533,29 @@ async function deleteRowById(tab: string, id: string): Promise<boolean> {
   });
 }
 
+/** Borra varias filas en una sola llamada. Devuelve cuántas encontró y borró. */
+async function deleteRowsByIds(tab: string, ids: string[]): Promise<number> {
+  if (!ids.length) return 0;
+  return sheetsCall(`borrar filas en ${tab}`, async (ctx) => {
+    const r = await ctx.client.spreadsheets.values.get({ spreadsheetId: ctx.sheetId, range: `${tab}!A2:A` });
+    const buscados = new Set(ids);
+    const indices: number[] = [];
+    (r.data.values ?? []).forEach((v, i) => { if (buscados.has(String(v[0]))) indices.push(i + 1); }); // 0-based con header
+    if (!indices.length) return 0;
+
+    const meta = await ctx.client.spreadsheets.get({ spreadsheetId: ctx.sheetId });
+    const innerSheetId = meta.data.sheets?.find((s) => s.properties?.title === tab)?.properties?.sheetId;
+    if (innerSheetId == null) throw new SheetsError(`No se encontró la pestaña "${tab}" en la planilla.`);
+
+    // De abajo hacia arriba, para que borrar una fila no corra las siguientes
+    const requests = indices.sort((a, b) => b - a).map((i) => ({
+      deleteDimension: { range: { sheetId: innerSheetId, dimension: "ROWS", startIndex: i, endIndex: i + 1 } },
+    }));
+    await ctx.client.spreadsheets.batchUpdate({ spreadsheetId: ctx.sheetId, requestBody: { requests } });
+    return indices.length;
+  });
+}
+
 async function appendRows(tab: string, lastCol: string, rows: SheetRow[]): Promise<void> {
   if (!rows.length) return;
   await sheetsCall(`agregar filas en ${tab}`, async (ctx) => {
@@ -553,26 +580,31 @@ async function readRows(tab: string, range: string): Promise<SheetRow[]> {
 // ─── API pública ────────────────────────────────────────────────────────────
 
 export async function listTransactions(): Promise<Transaction[]> {
-  return (await readRows("Transacciones", "A2:Q")).map(rowToTransaction);
+  return (await readRows("Transacciones", "A2:R")).map(rowToTransaction);
 }
 
 export async function addTransaction(tx: Transaction): Promise<void> {
-  await appendRows("Transacciones", "Q", [transactionToRow(tx)]);
+  await appendRows("Transacciones", "R", [transactionToRow(tx)]);
 }
 
 export async function addTransactionsBulk(txs: Transaction[]): Promise<number> {
-  await appendRows("Transacciones", "Q", txs.map(transactionToRow));
+  await appendRows("Transacciones", "R", txs.map(transactionToRow));
   return txs.length;
 }
 
 /** false si el id no existe. */
 export async function updateTransaction(tx: Transaction): Promise<boolean> {
-  return updateRowById("Transacciones", "Q", tx.id, transactionToRow(tx));
+  return updateRowById("Transacciones", "R", tx.id, transactionToRow(tx));
 }
 
 /** Actualiza varios movimientos en una sola escritura. Devuelve los ids que no existían. */
 export async function updateTransactionsBulk(txs: Transaction[]): Promise<string[]> {
-  return updateRowsByIds("Transacciones", "Q", txs.map((t) => ({ id: t.id, row: transactionToRow(t) })));
+  return updateRowsByIds("Transacciones", "R", txs.map((t) => ({ id: t.id, row: transactionToRow(t) })));
+}
+
+/** Borra varios movimientos (ej. las cuotas de un grupo). Devuelve cuántos borró. */
+export async function deleteTransactionsBulk(ids: string[]): Promise<number> {
+  return deleteRowsByIds("Transacciones", ids);
 }
 
 /** false si el id no existe. */
@@ -581,11 +613,21 @@ export async function deleteTransaction(id: string): Promise<boolean> {
 }
 
 export async function listSueldos(): Promise<Sueldo[]> {
-  return (await readRows("Sueldos", "A2:M")).map(rowToSueldo);
+  return (await readRows("Sueldos", "A2:N")).map(rowToSueldo);
 }
 
 export async function addSueldo(s: Sueldo): Promise<void> {
-  await appendRows("Sueldos", "M", [sueldoToRow(s)]);
+  await appendRows("Sueldos", "N", [sueldoToRow(s)]);
+}
+
+/** false si el id no existe. */
+export async function updateSueldo(s: Sueldo): Promise<boolean> {
+  return updateRowById("Sueldos", "N", s.id, sueldoToRow(s));
+}
+
+/** false si el id no existe. */
+export async function deleteSueldo(id: string): Promise<boolean> {
+  return deleteRowById("Sueldos", id);
 }
 
 // ─── Operaciones de dólar ────────────────────────────────────────────────────

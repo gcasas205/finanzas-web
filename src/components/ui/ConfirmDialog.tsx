@@ -10,6 +10,8 @@ interface ConfirmOptions {
   /** Qué se va a hacer y sobre qué registro, en una línea. */
   description: ReactNode;
   confirmLabel?: string;
+  /** Casilla opcional (ej. "Eliminar también las cuotas siguientes"); su valor vuelve en `confirmar`. */
+  opcion?: { label: string; marcada?: boolean };
 }
 
 /**
@@ -24,21 +26,26 @@ export function useConfirm() {
   const [open, setOpen] = useState(false);
   // Se conservan las opciones mientras corre la animación de salida.
   const [opts, setOpts] = useState<ConfirmOptions | null>(null);
-  const resolveRef = useRef<((ok: boolean) => void) | null>(null);
+  const resolveRef = useRef<((r: { ok: boolean; opcion: boolean }) => void) | null>(null);
+  const [marcada, setMarcada] = useState(false);
 
-  const confirm = useCallback((o: ConfirmOptions) => {
+  /** Como `confirm`, pero devuelve también si la casilla opcional quedó marcada. */
+  const confirmar = useCallback((o: ConfirmOptions) => {
     setOpts(o);
+    setMarcada(Boolean(o.opcion?.marcada));
     setOpen(true);
-    return new Promise<boolean>((resolve) => {
+    return new Promise<{ ok: boolean; opcion: boolean }>((resolve) => {
       resolveRef.current = resolve;
     });
   }, []);
 
+  const confirm = useCallback(async (o: ConfirmOptions) => (await confirmar(o)).ok, [confirmar]);
+
   const close = useCallback((ok: boolean) => {
-    resolveRef.current?.(ok);
+    resolveRef.current?.({ ok, opcion: marcada });
     resolveRef.current = null;
     setOpen(false);
-  }, []);
+  }, [marcada]);
 
   const dialog = (
     <Dialog open={open} onClose={() => close(false)} title={opts?.title ?? ""} size="sm">
@@ -48,6 +55,17 @@ export function useConfirm() {
         </span>
         <p className="text-sm leading-relaxed text-ink-200">{opts?.description}</p>
       </div>
+      {opts?.opcion && (
+        <label className="mt-4 flex min-h-11 items-center gap-3 text-sm text-ink-100 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={marcada}
+            onChange={(e) => setMarcada(e.target.checked)}
+            className="w-4 h-4 accent-paper"
+          />
+          {opts.opcion.label}
+        </label>
+      )}
       <DialogActions>
         <Button variant="fantasma" onClick={() => close(false)}>
           Cancelar
@@ -59,5 +77,5 @@ export function useConfirm() {
     </Dialog>
   );
 
-  return { confirm, dialog };
+  return { confirm, confirmar, dialog };
 }

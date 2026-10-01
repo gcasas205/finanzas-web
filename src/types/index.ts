@@ -26,6 +26,8 @@ export interface Transaction {
   /** Solo para ingresos en USD: montos exactos a mediano/largo tras el piso (lo no asignado va a mediano). */
   asigMediano?: number;
   asigLargo?: number;
+  /** Compra en cuotas: id compartido por todas las cuotas generadas juntas */
+  grupoCuotas?: string;
 }
 
 export interface Sueldo {
@@ -44,6 +46,8 @@ export interface Sueldo {
   otrosDescuentos: number;
   fechaPago: string;
   createdAt: string;
+  /** Movimiento de ingreso vinculado en Transacciones (si lo hay) */
+  txId?: string;
 }
 
 export type DolarOperacionTipo = "compra" | "venta";

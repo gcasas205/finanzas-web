@@ -11,9 +11,9 @@ import {
   PieChart, Pie,
 } from "recharts";
 import { Zap } from "lucide-react";
-import type { Transaction, AppConfig } from "@/types";
+import type { Transaction, AppConfig, Sueldo } from "@/types";
 import { formatPesos, formatPesosCompact, formatMes, formatFecha, fechaToMes, uniqueMonths } from "@/lib/utils";
-import { request, errorMessage } from "@/lib/api";
+import { request, errorMessage, sueldosApi } from "@/lib/api";
 import { factoresPesosDeHoy, type InflacionMes } from "@/lib/inflacion";
 import { detectarSuscripciones, detectarHormiga, type GastoRecurrente } from "@/lib/habitos";
 import { Segmented } from "@/components/ui/Segmented";
@@ -28,7 +28,8 @@ interface Props { config: AppConfig; }
 
 export default function Analytics({ config }: Props) {
   const { transactions, dolarOps, isLoading: loading, error, refresh } = useTransactions();
-  const [tab, setTab] = useState<"tendencias" | "categorias" | "comparativa" | "habitos" | "mercadopago">("tendencias");
+  const [tab, setTab] = useState<"tendencias" | "categorias" | "comparativa" | "habitos" | "sueldo" | "mercadopago">("tendencias");
+  const sueldos = useSWR(tab === "sueldo" ? "/api/sueldos" : null, () => sueldosApi.list(), { revalidateOnFocus: false });
   // Nominal o ajustado por inflación ("pesos de hoy")
   const [escala, setEscala] = useState<"nominal" | "real">("nominal");
   const inflacion = useSWR<{ serie: InflacionMes[] }>(
@@ -97,6 +98,7 @@ export default function Analytics({ config }: Props) {
     { id: "categorias", label: "Categorías" },
     { id: "comparativa", label: "Comparativa" },
     { id: "habitos", label: "Hábitos" },
+    { id: "sueldo", label: "Sueldo" },
     { id: "mercadopago", label: "Mercado Pago" },
   ] as const;
 
@@ -190,6 +192,11 @@ export default function Analytics({ config }: Props) {
       {tab === "categorias" && <CategoriasTab key={selectedMonth} transactions={txsAnalisis} selectedMonth={selectedMonth} />}
       {tab === "comparativa" && <ComparativaTab transactions={txsAnalisis} selectedMonth={selectedMonth} />}
       {tab === "habitos" && <HabitosTab transactions={txsAnalisis} selectedMonth={selectedMonth} />}
+      {tab === "sueldo" && (
+        sueldos.error ? <Empty message={errorMessage(sueldos.error, "No pudimos traer tus sueldos")} />
+          : !sueldos.data ? <LogoLoader className="min-h-[30vh]" />
+          : <SueldoTab sueldos={sueldos.data.sueldos} factor={real && serie ? factoresPesosDeHoy(serie) : null} />
+      )}
       {tab === "mercadopago" && <MercadoPagoTab acumulado={capitalPesos} tna={config.mpTna} />}
     </div>
   );
@@ -633,6 +640,77 @@ function ListaHabitos({ eyebrow, titulo, explicacion, total, items, vacio }: {
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+// ── Sueldo ───────────────────────────────────────────────────────────────────
+
+function SueldoTab({ sueldos, factor }: { sueldos: Sueldo[]; factor: ((mes: string) => number) | null }) {
+  // Un punto por mes de cobro (si hay dos recibos el mismo mes, se suman)
+  const datos = useMemo(() => {
+    const map = new Map<string, { bruto: number; neto: number; descuentos: number }>();
+    for (const s of sueldos) {
+      const mes = s.periodoPago || fechaToMes(s.fechaPago);
+      if (!mes) continue;
+      const f = factor ? factor(mes) : 1;
+      const cur = map.get(mes) ?? { bruto: 0, neto: 0, descuentos: 0 };
+      cur.bruto += s.bruto * f;
+      cur.neto += s.neto * f;
+      cur.descuentos += (s.jubilacion + s.obraSocial + s.ley19032 + s.otrosDescuentos) * f;
+      map.set(mes, cur);
+    }
+    return Array.from(map.entries())
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([mes, v]) => ({ mes, label: formatMes(mes, true), ...v }));
+  }, [sueldos, factor]);
+
+  if (!datos.length) {
+    return <Empty message="Todavía no hay sueldos. Importá un recibo o cargá un ingreso en Ingresos → Sueldo." />;
+  }
+  const ultimo = datos[datos.length - 1];
+  const haceUnAnio = datos.find(d => d.mes === mesMas(ultimo.mes, -12));
+  const variacion = haceUnAnio && haceUnAnio.neto > 0 ? (ultimo.neto / haceUnAnio.neto - 1) * 100 : null;
+  const hayBruto = datos.some(d => d.bruto > 0);
+
+  return (
+    <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 lg:gap-6 [&>*]:min-w-0">
+      <div className="lg:col-span-4 surface p-4 sm:p-8">
+        <div className="eyebrow mb-1">{formatMes(ultimo.mes)}</div>
+        <h3 className="display text-2xl text-paper mb-4">Último neto</h3>
+        <div className="display text-4xl text-moss-light tabular">{formatPesos(ultimo.neto)}</div>
+        {ultimo.bruto > 0 && (
+          <div className="text-xs text-ink-300 mt-2 tabular">
+            Bruto {formatPesos(ultimo.bruto)} · descuentos {formatPesos(ultimo.descuentos)}
+          </div>
+        )}
+        {variacion !== null && (
+          <div className={`mt-6 text-sm tabular ${variacion >= 0 ? "text-moss-light" : "text-terra-light"}`}>
+            {variacion >= 0 ? "+" : ""}{variacion.toFixed(1)}% <span className="text-ink-300">vs. hace un año{factor ? " (real)" : ""}</span>
+          </div>
+        )}
+        {!factor && (
+          <p className="text-xs text-ink-400 mt-4 leading-relaxed">
+            Elegí &quot;Pesos de hoy&quot; para ver si tu sueldo le ganó a la inflación.
+          </p>
+        )}
+      </div>
+      <div className="lg:col-span-8 surface p-4 sm:p-8">
+        <div className="eyebrow mb-1">Evolución</div>
+        <h3 className="display text-2xl text-paper mb-6">Neto{hayBruto ? " y bruto" : ""} por mes de cobro</h3>
+        <ResponsiveContainer width="100%" height={280}>
+          <LineChart data={datos.slice(-24)}>
+            <CartesianGrid stroke={PALETTE.grilla} strokeDasharray="2 4" vertical={false} />
+            <XAxis dataKey="label" stroke={PALETTE.eje} fontSize={13} tickLine={false} axisLine={false} />
+            <YAxis stroke={PALETTE.eje} fontSize={13} tickLine={false} axisLine={false} tickFormatter={v => formatPesosCompact(v)} />
+            <Tooltip content={<ChartTooltip />} />
+            <Line type="monotone" dataKey="neto" name="Neto" stroke={PALETTE.positivo} strokeWidth={2} dot={{ r: 3, fill: PALETTE.positivo }} />
+            {hayBruto && (
+              <Line type="monotone" dataKey="bruto" name="Bruto" stroke={PALETTE.serieSecundaria} strokeWidth={2} dot={{ r: 3, fill: PALETTE.serieSecundaria }} />
+            )}
+          </LineChart>
+        </ResponsiveContainer>
+      </div>
     </div>
   );
 }
