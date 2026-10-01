@@ -150,33 +150,70 @@ export default function Transactions({ config }: Props) {
   return (
     <div className="p-4 sm:p-6 lg:p-10 max-w-[1400px]">
       {error && <StaleDataBanner message={error} onRetry={refresh} />}
-      <header className="mb-8 sm:mb-10 flex flex-wrap items-end justify-between gap-4">
+      <header className="mb-6">
         <div>
           <div className="eyebrow mb-2">Movimientos</div>
           <h1 className="display text-3xl sm:text-5xl text-paper">
             Cada <em className="italic">peso</em>
           </h1>
         </div>
-        <div className="flex items-center gap-2">
-          <Button variant="secundario" onClick={exportCsv} disabled={filtered.length === 0} aria-label="Exportar a CSV lo filtrado">
+      </header>
+
+      {/* Barra: filtros rápidos (tipo y moneda) a la izquierda, acciones a la derecha */}
+      <div className="mb-6 sm:mb-8 flex flex-col-reverse sm:flex-row sm:flex-wrap sm:items-center gap-x-3 xl:gap-x-4 gap-y-3">
+        <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-center gap-x-2 xl:gap-x-3 gap-y-3" role="group" aria-label="Filtros rápidos">
+          <div className="flex flex-col sm:flex-row sm:items-center gap-1.5 sm:gap-3">
+            <span className="eyebrow sm:hidden" aria-hidden="true">Tipo</span>
+            <Segmented
+              label="Filtrar por tipo"
+              size="sm"
+              className="w-full sm:w-auto"
+              value={filterType}
+              onChange={setFilterType}
+              options={[
+                { value: "todos", label: "Todos" },
+                { value: "ingreso", label: "Ingresos" },
+                { value: "egreso", label: "Gastos" },
+              ]}
+            />
+          </div>
+          <div className="flex flex-col sm:flex-row sm:items-center gap-1.5 sm:gap-3">
+            <span className="eyebrow sm:hidden" aria-hidden="true">Moneda</span>
+            <Segmented
+              label="Filtrar por moneda"
+              size="sm"
+              className="w-full sm:w-auto"
+              value={filterMoneda}
+              onChange={setFilterMoneda}
+              options={[
+                { value: "todas", label: "Todas" },
+                { value: "ARS", label: "ARS" },
+                { value: "USD", label: "USD" },
+              ]}
+            />
+          </div>
+        </div>
+        <div className="flex items-center gap-2 sm:ml-auto">
+          <Button variant="secundario" onClick={exportCsv} disabled={filtered.length === 0} aria-label="Exportar a CSV lo filtrado" title="Exportar a CSV" className="px-3.5 xl:px-5">
             <Download className="w-4 h-4" aria-hidden="true" />
-            <span className="hidden sm:inline">CSV</span>
+            <span className="hidden xl:inline">CSV</span>
           </Button>
-          <Button variant="secundario" onClick={() => (selecting ? stopSelecting() : setSelecting(true))} aria-pressed={selecting}>
+          <Button variant="secundario" onClick={() => (selecting ? stopSelecting() : setSelecting(true))} aria-pressed={selecting}
+            title={selecting ? "Terminar selección" : "Seleccionar varios"} className="px-3.5 xl:px-5">
             <ListChecks className="w-4 h-4" aria-hidden="true" />
-            <span className="hidden sm:inline">{selecting ? "Listo" : "Seleccionar"}</span>
-            <span className="sr-only sm:hidden">{selecting ? "Terminar selección" : "Seleccionar varios"}</span>
+            <span className="hidden xl:inline">{selecting ? "Listo" : "Seleccionar"}</span>
+            <span className="sr-only xl:hidden">{selecting ? "Terminar selección" : "Seleccionar varios"}</span>
           </Button>
-          <Button onClick={openNew}>
+          <Button onClick={openNew} className="px-4 xl:px-5">
             <Plus className="w-4 h-4" aria-hidden="true" />
             Nuevo
           </Button>
         </div>
-      </header>
+      </div>
 
       <RecurrentesPendientes onCargados={refresh} />
 
-      {/* Filtros: búsqueda arriba, desplegables en grilla y segmentados abajo */}
+      {/* Filtros: búsqueda arriba y desplegables en grilla (tipo y moneda van en la barra de arriba) */}
       <div className="surface mb-4 sm:mb-6" role="search" aria-label="Filtrar movimientos">
         <div className="flex items-center gap-3 px-4 sm:px-5 hairline-b">
           <Search className="w-4 h-4 text-ink-300 shrink-0" aria-hidden="true" />
@@ -199,7 +236,7 @@ export default function Transactions({ config }: Props) {
           )}
         </div>
 
-        <div className="p-3 sm:p-5 space-y-3 sm:space-y-4">
+        <div className="p-3 sm:p-5">
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <select
               value={filterMonth}
@@ -234,38 +271,6 @@ export default function Transactions({ config }: Props) {
             </select>
           </div>
 
-          <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-center gap-x-6 gap-y-3">
-            <div className="flex flex-col sm:flex-row sm:items-center gap-1.5 sm:gap-3">
-              <span className="eyebrow" aria-hidden="true">Tipo</span>
-              <Segmented
-                label="Filtrar por tipo"
-                size="sm"
-                className="w-full sm:w-auto"
-                value={filterType}
-                onChange={setFilterType}
-                options={[
-                  { value: "todos", label: "Todos" },
-                  { value: "ingreso", label: "Ingresos" },
-                  { value: "egreso", label: "Gastos" },
-                ]}
-              />
-            </div>
-            <div className="flex flex-col sm:flex-row sm:items-center gap-1.5 sm:gap-3">
-              <span className="eyebrow" aria-hidden="true">Moneda</span>
-              <Segmented
-                label="Filtrar por moneda"
-                size="sm"
-                className="w-full sm:w-auto"
-                value={filterMoneda}
-                onChange={setFilterMoneda}
-                options={[
-                  { value: "todas", label: "Todas" },
-                  { value: "ARS", label: "ARS" },
-                  { value: "USD", label: "USD" },
-                ]}
-              />
-            </div>
-          </div>
         </div>
       </div>
 
@@ -306,8 +311,8 @@ export default function Transactions({ config }: Props) {
       {/* Table */}
       <div className="surface overflow-hidden">
         <div className="overflow-x-auto">
-        {/* Desktop Table */}
-        <table className="hidden md:table w-full">
+        {/* Tabla desde xl: por debajo no entran sus 7 columnas (Acciones quedaba escondida) */}
+        <table className="hidden xl:table w-full">
           <caption className="sr-only">Movimientos</caption>
           <thead>
             <tr className="hairline-b">
@@ -402,8 +407,8 @@ export default function Transactions({ config }: Props) {
           </tbody>
         </table>
 
-        {/* Mobile Cards */}
-        <div className="md:hidden flex flex-col divide-y divide-ink-600/60">
+        {/* Tarjetas: celular, tablet y laptops chicas */}
+        <div className="xl:hidden flex flex-col divide-y divide-ink-600/60">
           {filtered.length === 0 ? (
             <ListEmpty hasFilters={hasFilters} onClear={clearFilters} onNew={openNew} />
           ) : visibleRows.map((tx) => (

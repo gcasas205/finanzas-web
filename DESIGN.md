@@ -110,8 +110,19 @@ Reglas con nombre, para citar en un review:
   y roja (`negativo`) al pasarse, siempre con el texto "gastado / tope" y "te pasaste $X" al lado.
 - **Colores de categoría:** sólo los de `CATEGORIA_COLORES` (las categorías por defecto); se eligen con muestras
   redondas (`role="radio"`, área táctil de 44px, la elegida con anillo `paper`), nunca con un desplegable ni un hex libre.
-- **Barra de filtros:** búsqueda a todo el ancho arriba (con "Limpiar filtros" a la derecha), desplegables en una
-  grilla de 3 columnas (1 en celular) y los segmentados abajo con su rótulo. Nada de mezclarlos en una sola fila.
+- **Barra de acciones (Movimientos):** debajo del título, en una sola fila: segmentados de filtro rápido (Tipo,
+  Moneda) a la izquierda y acciones (CSV, Seleccionar, Nuevo) a la derecha. Debajo de `xl` las acciones secundarias
+  son sólo ícono (con `aria-label` y `title`) y los segmentados no llevan rótulo visible; en celular van apilados,
+  con las acciones arriba y cada segmentado a todo el ancho con su rótulo.
+- **Barra de filtros:** búsqueda a todo el ancho arriba (con "Limpiar filtros" a la derecha) y desplegables en una
+  grilla de 3 columnas (1 en celular).
+- **Período de un gráfico:** `RangoMeses` (12m · 6m · 3m) en la esquina superior derecha del gráfico, discreto
+  (texto mono chico, lo elegido en la voz de selección). Cada gráfico tiene el suyo; por defecto 12 meses. Con 6 o
+  menos meses se ven todas las etiquetas del eje; con más, se saltean sin pisarse. Barras con ancho máximo.
+- **Series en el tiempo:** terminan en el mes actual (las cuotas por pagar no son historia) y rellenan con 0 los
+  meses sin movimientos. Los acumulados se calculan sobre toda la historia, no desde el inicio de la ventana.
+- **Tablas anchas:** la de Movimientos se muestra desde `xl`; por debajo, tarjetas. Una tabla nunca puede esconder
+  su columna de acciones detrás de un scroll horizontal.
 - **Editores de listas** (categorías, sobres): una fila por ítem separada por hairline; el nombre manda y los
   rótulos se repiten lo mínimo. Los ítems fijos muestran una etiqueta "Fija" en lugar de la papelera.
 - **Un primario por vista:** en Ajustes el primario es "Guardar ajustes"; las secciones extra (plan de ahorro,

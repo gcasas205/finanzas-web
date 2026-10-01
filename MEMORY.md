@@ -6,7 +6,7 @@ Memoria del proyecto entre sesiones. Máximo ~50 líneas: resumí o borrá lo qu
 - Los 33 hallazgos de `docs/auditoria-skills.md` (backend, frontend y diseño) están implementados y mergeados en `main`.
 - Últimos cambios: barras móviles sólidas para iOS y vuelta del verde/rojo en montos y confirmaciones.
 - Ingresos USD de Movimientos permiten repartir mediano/largo (columnas P y Q de `Transacciones`), igual que la compra de USD. Filas viejas sin reparto: el excedente va a mediano, como antes.
-- `typecheck` y `lint` limpios, y 86 tests de Vitest en verde (cálculos, validaciones, seguridad).
+- `typecheck` y `lint` limpios, y 89 tests de Vitest en verde (cálculos, validaciones, seguridad).
 - CI en GitHub Actions: `CI Back` (typecheck + Vitest) y `CI Front` (typecheck + lint + build), cada uno se saltea si el PR no toca sus archivos. Pensado para proteger `main` (Vercel despliega producción desde ahí).
 - ESLint configurado con `next/core-web-vitals` en `.eslintrc.js` (sin hallazgos al activarlo).
 
@@ -37,6 +37,7 @@ Memoria del proyecto entre sesiones. Máximo ~50 líneas: resumí o borrá lo qu
 - Categorías en la pestaña `Categorias` (cliente: `useCategorias()`, no la constante `CATEGORIES`, que es sólo el valor por defecto). Reglas aprendidas en `Reglas`; gastos fijos en `Recurrentes`.
 
 ## Aprendizajes y errores a evitar
+- Con cuotas futuras hay movimientos con `fechaPago` en meses que no pasaron: toda serie "de evolución" debe cortar en el mes actual (`lib/series.ts`).
 - Responsive: verificar con capturas reales (Playwright) a 320/360/390/768/1024/1280 y medir `scrollWidth - innerWidth`. Culpables típicos: leyendas de gráficos sin `flex-wrap`, segmentados anchos, rótulos `whitespace-nowrap` largos.
 - Los `route.ts` de Next sólo pueden exportar handlers y config (`dynamic`): otra constante exportada rompe el build.
 - `new Date("AAAA-MM-DD")` es UTC: para comparar días usar textos `AAAA-MM-DD` con `hoyLocal()`/`sumarDias()`.

@@ -97,9 +97,11 @@ export default function Dashboard({ config }: Props) {
   // Evolución últimos 6 meses (en pesos, basado en fechaPago)
   const evolution = useMemo(() => {
     const map = new Map<string, { ingresos: number; egresos: number }>();
+    const actual = hoyLocal().slice(0, 7);
     for (const t of transactions) {
       if (t.moneda === "USD") continue;
       const mes = fechaToMes(t.fechaPago);
+      if (mes > actual) continue; // cuotas y resúmenes por pagar no son "evolución"
       const cur = map.get(mes) ?? { ingresos: 0, egresos: 0 };
       if (t.tipo === "ingreso") cur.ingresos += t.monto;
       else cur.egresos += t.monto;
