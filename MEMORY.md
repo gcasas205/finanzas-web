@@ -1,0 +1,32 @@
+# MEMORY.md — Finanzas
+Memoria del proyecto entre sesiones. Máximo ~50 líneas: resumí o borrá lo que ya no aporte.
+
+## Estado actual (v6.0 · septiembre 2026)
+- En producción en Vercel. Secciones: Resumen, Movimientos, Dólares, Ahorro, Análisis, Importar y Ajustes.
+- Los 33 hallazgos de `docs/auditoria-skills.md` (backend, frontend y diseño) están implementados y mergeados en `main`.
+- Últimos cambios: barras móviles sólidas para iOS y vuelta del verde/rojo en montos y confirmaciones.
+- `typecheck` limpio y 35 tests de Vitest en verde (cálculos, validaciones, seguridad).
+
+## Decisiones (y por qué)
+- Google Sheets como base de datos: es uso personal, gratis y editable a mano.
+- Los ajustes (nombre, TNA de Mercado Pago, días de tarjeta) viven sólo en la hoja `Config`: Vercel resetea el filesystem y las env vars equivalentes se ignoran a propósito.
+- `ALLOWED_EMAILS` es obligatoria y se rechequea en cada request: sacar un email corta el acceso al instante.
+- Caché en memoria por instancia (3 min datos, 2 min config): alcanza para un solo usuario. No se migró a `revalidateTag`.
+- Montos como float redondeados con `roundMoney`, no como enteros en centavos.
+- Montos en verde (entra) y rojo (sale), siempre con signo o flecha. Se probó en neutro y se revirtió a pedido.
+- No se migra el stack (Next 14 / React 18 / Tailwind 3) aunque las skills apunten a versiones nuevas.
+
+## Aprendizajes y errores a evitar
+- `outline-none` de Tailwind pisaba el anillo de foco: usar `.form-input` y `:focus-visible`.
+- `toISOString()` corre el día a la noche en Argentina: usar `hoyLocal()`.
+- Tragarse errores de Sheets mostraba "sin movimientos" y encima lo cacheaba.
+- Regresión de v3.3: una página de `(app)` devolvía `null` en vez de su vista. Revisarlas al tocar el routing.
+
+## Pendientes / a revisar
+- `npm run lint` no tiene ESLint configurado.
+- Ingresos en USD cargados desde Movimientos: `buildTransaction` acepta `asigMediano`/`asigLargo`, pero la hoja `Transacciones` no tiene esas columnas y el formulario no las envía. En la práctica, el excedente tras el piso siempre va a mediano, aunque el README sugiere que se puede elegir. Confirmar si es intencional.
+- `tsconfig.tsbuildinfo` está commiteado (es un artefacto de build).
+- `.gitignore` ignora `*.json` salvo `package.json` y `tsconfig.json`. Ojo al agregar JSON nuevos al repo.
+
+## Próximos pasos
+- (vacío por ahora)
