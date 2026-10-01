@@ -8,6 +8,7 @@ App de finanzas personales (ARS/USD) para uso propio: movimientos, importación 
 
 ## Comandos
 - `npm run dev` · `npm test` · `npm run typecheck` · `npm run lint` · `npm run build`
+- CI (GitHub Actions, en cada PR y push a `main`): `ci-back.yml` (typecheck + tests) y `ci-front.yml` (typecheck + lint + build). `main` sólo recibe merges con ambos en verde; si cambiás qué corre, actualizá los dos archivos.
 - ESLint usa `next/core-web-vitals` y se configura en `.eslintrc.js` (no en `.json`, ver Límites).
 
 ## Convenciones
