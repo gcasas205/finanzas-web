@@ -3,6 +3,10 @@ node_modules
 .env.local
 .env
 credentials.json
+# Se ignoran todos los .json para no subir credenciales por error.
+# Antes de sumar uno necesario, preguntá y agregalo acá como excepción (!archivo.json).
 *.json
 !package.json
 !tsconfig.json
+# Artefacto de build de TypeScript (incremental)
+*.tsbuildinfo

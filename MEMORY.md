@@ -5,7 +5,8 @@ Memoria del proyecto entre sesiones. Máximo ~50 líneas: resumí o borrá lo qu
 - En producción en Vercel. Secciones: Resumen, Movimientos, Dólares, Ahorro, Análisis, Importar y Ajustes.
 - Los 33 hallazgos de `docs/auditoria-skills.md` (backend, frontend y diseño) están implementados y mergeados en `main`.
 - Últimos cambios: barras móviles sólidas para iOS y vuelta del verde/rojo en montos y confirmaciones.
-- `typecheck` limpio y 35 tests de Vitest en verde (cálculos, validaciones, seguridad).
+- `typecheck` y `lint` limpios, y 35 tests de Vitest en verde (cálculos, validaciones, seguridad).
+- ESLint configurado con `next/core-web-vitals` en `.eslintrc.js` (sin hallazgos al activarlo).
 
 ## Decisiones (y por qué)
 - Google Sheets como base de datos: es uso personal, gratis y editable a mano.
@@ -16,6 +17,9 @@ Memoria del proyecto entre sesiones. Máximo ~50 líneas: resumí o borrá lo qu
 - Montos en verde (entra) y rojo (sale), siempre con signo o flecha. Se probó en neutro y se revirtió a pedido.
 - No se migra el stack (Next 14 / React 18 / Tailwind 3) aunque las skills apunten a versiones nuevas.
 
+- `.gitignore` ignora todo `*.json` salvo excepciones explícitas, para no subir credenciales. Sumar un JSON necesario se pregunta antes (regla en `AGENTS.md`). Por eso ESLint va en `.eslintrc.js`.
+- `*.tsbuildinfo` fuera del repo: es caché de compilación.
+
 ## Aprendizajes y errores a evitar
 - `outline-none` de Tailwind pisaba el anillo de foco: usar `.form-input` y `:focus-visible`.
 - `toISOString()` corre el día a la noche en Argentina: usar `hoyLocal()`.
@@ -23,10 +27,7 @@ Memoria del proyecto entre sesiones. Máximo ~50 líneas: resumí o borrá lo qu
 - Regresión de v3.3: una página de `(app)` devolvía `null` en vez de su vista. Revisarlas al tocar el routing.
 
 ## Pendientes / a revisar
-- `npm run lint` no tiene ESLint configurado.
 - Ingresos en USD cargados desde Movimientos: `buildTransaction` acepta `asigMediano`/`asigLargo`, pero la hoja `Transacciones` no tiene esas columnas y el formulario no las envía. En la práctica, el excedente tras el piso siempre va a mediano, aunque el README sugiere que se puede elegir. Confirmar si es intencional.
-- `tsconfig.tsbuildinfo` está commiteado (es un artefacto de build).
-- `.gitignore` ignora `*.json` salvo `package.json` y `tsconfig.json`. Ojo al agregar JSON nuevos al repo.
 
 ## Próximos pasos
 - (vacío por ahora)
