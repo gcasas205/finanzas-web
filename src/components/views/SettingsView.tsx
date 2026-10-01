@@ -1,12 +1,18 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { Check, ExternalLink, AlertCircle } from "lucide-react";
+import { Check, ExternalLink, AlertCircle, Download } from "lucide-react";
 import { toast } from "sonner";
 import type { AppConfig } from "@/types";
 import { useRouter } from "next/navigation";
 import { useRefreshConfig } from "@/components/ConfigProvider";
-import { configApi, ApiError, errorMessage } from "@/lib/api";
+import { configApi, ApiError, errorMessage, request } from "@/lib/api";
+import { descargarArchivo } from "@/lib/csv";
+import { hoyLocal } from "@/lib/utils";
+import { PlanAhorroSection } from "@/components/views/ajustes/PlanAhorroSection";
+import { PresupuestoSection } from "@/components/views/ajustes/PresupuestoSection";
+import { CategoriasSection } from "@/components/views/ajustes/CategoriasSection";
+import { GastosFijosSection } from "@/components/views/ajustes/GastosFijosSection";
 import { Field, focusFirstInvalid } from "@/components/ui/Field";
 import { Button } from "@/components/ui/Button";
 
@@ -70,6 +76,20 @@ export default function SettingsView({ config }: Props) {
     toast.success("Ajustes guardados");
     refreshConfig(); // la hoja Config ya persistió; refrescamos la config en vivo
     router.refresh();
+  };
+
+  const [bajando, setBajando] = useState(false);
+  const descargarBackup = async () => {
+    setBajando(true);
+    try {
+      const data = await request<unknown>("/api/backup");
+      descargarArchivo(`finanzas-backup-${hoyLocal()}.json`, JSON.stringify(data, null, 2), "application/json");
+      toast.success("Backup descargado");
+    } catch (e) {
+      toast.error(errorMessage(e, "No se pudo armar el backup"), { duration: 7000 });
+    } finally {
+      setBajando(false);
+    }
   };
 
   const handleTest = async () => {
@@ -188,6 +208,24 @@ export default function SettingsView({ config }: Props) {
           </Button>
         </div>
       </form>
+
+      <PlanAhorroSection />
+      <PresupuestoSection />
+      <GastosFijosSection />
+      <CategoriasSection />
+
+      <section className="surface p-5 sm:p-8 mt-8">
+        <div className="eyebrow mb-1">Tus datos</div>
+        <h2 className="display text-2xl text-paper mb-2">Copia de seguridad</h2>
+        <p className="text-xs text-ink-300 leading-relaxed mb-5 max-w-xl">
+          Descargá todo lo que está en la planilla (movimientos, sueldos, dólares y ajustes) en un archivo.
+          No incluye los datos de conexión. Guardalo en un lugar seguro: tiene tu información financiera.
+        </p>
+        <Button variant="secundario" onClick={descargarBackup} isLoading={bajando}>
+          {!bajando && <Download className="w-4 h-4" aria-hidden="true" />}
+          Descargar backup
+        </Button>
+      </section>
     </div>
   );
 }

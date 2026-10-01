@@ -1,8 +1,9 @@
 "use client";
 
-import { createContext, useContext, useCallback } from "react";
+import { createContext, useContext, useCallback, useMemo } from "react";
 import useSWR from "swr";
-import type { Transaction, DolarOperacion, Cotizacion, AhorroConfig } from "@/types";
+import type { Transaction, DolarOperacion, Cotizacion, AhorroConfig, MovAhorro, CategoryConfig, ReglaCategoria } from "@/types";
+import { CATEGORIES, getCategoryColor } from "@/lib/categories";
 import { request, dolarApi, errorMessage } from "@/lib/api";
 
 // El fetcher tira ApiError si la respuesta no es ok: un 500/503 nunca se toma
@@ -14,6 +15,12 @@ interface DataContextType {
   dolarOps: DolarOperacion[];
   cotizacion: Cotizacion | null;
   ahorroConfig: AhorroConfig | null;
+  /** Pases entre destinos del ahorro */
+  movAhorro: MovAhorro[];
+  /** Categorías de la planilla (mientras cargan, las de por defecto) */
+  categorias: CategoryConfig[];
+  /** Reglas aprendidas para sugerir categoría */
+  reglas: ReglaCategoria[];
   isLoading: boolean;
   /** Mensaje del error de carga de movimientos u operaciones, o null. */
   error: string | null;
@@ -30,6 +37,9 @@ const DataContext = createContext<DataContextType>({
   dolarOps: [],
   cotizacion: null,
   ahorroConfig: null,
+  movAhorro: [],
+  categorias: CATEGORIES,
+  reglas: [],
   isLoading: true,
   error: null,
   ahorroError: null,
@@ -54,12 +64,16 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     refreshInterval: 15 * 60 * 1000,
   });
   const ahorro = useSWR<{ config: AhorroConfig }>("/api/ahorro/config", fetcher, SWR_OPTS);
+  const mov = useSWR<{ movimientos: MovAhorro[] }>("/api/ahorro/movimientos", fetcher, SWR_OPTS);
+  const cats = useSWR<{ categorias: CategoryConfig[]; reglas: ReglaCategoria[] }>("/api/categorias", fetcher, SWR_OPTS);
 
   const refresh = useCallback(() => {
     tx.mutate();
     dolar.mutate();
     ahorro.mutate();
-  }, [tx, dolar, ahorro]);
+    mov.mutate();
+    cats.mutate(); // al guardar se pueden haber aprendido reglas
+  }, [tx, dolar, ahorro, mov, cats]);
 
   const refreshCotizacion = useCallback((force = false) => {
     if (force) {
@@ -80,9 +94,12 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         dolarOps: dolar.data?.operaciones ?? [],
         cotizacion: cot.data ?? null,
         ahorroConfig: ahorro.data?.config ?? null,
+        movAhorro: mov.data?.movimientos ?? [],
+        categorias: cats.data?.categorias ?? CATEGORIES,
+        reglas: cats.data?.reglas ?? [],
         isLoading: tx.isLoading || dolar.isLoading,
         error: tx.error || dolar.error ? errorMessage(tx.error || dolar.error) : null,
-        ahorroError: ahorro.error ? errorMessage(ahorro.error) : null,
+        ahorroError: ahorro.error || mov.error ? errorMessage(ahorro.error || mov.error) : null,
         refresh,
         refreshCotizacion,
       }}
@@ -105,6 +122,18 @@ export function useDolar() {
 
 /** Datos necesarios para la vista de Ahorro */
 export function useAhorro() {
-  const { dolarOps, transactions, ahorroConfig, isLoading, error, ahorroError, refresh } = useContext(DataContext);
-  return { dolarOps, transactions, ahorroConfig, isLoading, error: error ?? ahorroError, refresh };
+  const { dolarOps, transactions, ahorroConfig, movAhorro, isLoading, error, ahorroError, refresh } = useContext(DataContext);
+  return { dolarOps, transactions, ahorroConfig, movAhorro, isLoading, error: error ?? ahorroError, refresh };
+}
+
+/** Categorías vigentes con sus ayudas: color y subcategorías por nombre. */
+export function useCategorias() {
+  const { categorias, reglas, refresh } = useContext(DataContext);
+  return useMemo(() => ({
+    categorias,
+    reglas,
+    refresh,
+    colorDe: (nombre: string) => getCategoryColor(nombre, categorias),
+    subcategoriasDe: (nombre: string) => categorias.find((c) => c.name === nombre)?.subcategories ?? ["Sin categoría"],
+  }), [categorias, reglas, refresh]);
 }

@@ -13,10 +13,15 @@ import {
 } from "recharts";
 import type { Transaction, AppConfig } from "@/types";
 import {
-  formatPesos, formatPesosCompact, formatMes, formatFecha, fechaToMes, uniqueMonths,
+  formatPesos, formatPesosCompact, formatMes, formatFecha, fechaToMes, uniqueMonths, hoyLocal, sumarDias,
 } from "@/lib/utils";
-import { getCategoryColor } from "@/lib/categories";
-import { useTransactions } from "@/components/DataProvider";
+import { UsdAmount } from "@/components/UsdAmount";
+import { proximoResumen } from "@/lib/tarjeta";
+import useSWR from "swr";
+import Link from "next/link";
+import { presupuestosApi } from "@/lib/api";
+import { CreditCard } from "lucide-react";
+import { useTransactions, useCategorias } from "@/components/DataProvider";
 import { resumenDolar, impactoPesosDolar } from "@/lib/dolar-calc";
 import LogoLoader from "@/components/LogoLoader";
 import { ErrorState, StaleDataBanner } from "@/components/ui/States";
@@ -29,17 +34,26 @@ interface Props { config: AppConfig; }
 
 export default function Dashboard({ config }: Props) {
   const { transactions, dolarOps, cotizacion, isLoading: loading, error, refresh } = useTransactions();
+  const { colorDe } = useCategorias();
   const [selectedMonth, setSelectedMonth] = useState(() => {
     const d = new Date();
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
   });
 
   // ── Cálculos ──────────────────────────────────────────────────
+  // Meses con datos (incluye futuros: tarjeta y cuotas por pagar), el elegido y el próximo
   const months = useMemo(() => {
-    const m = uniqueMonths(transactions);
-    if (!m.includes(selectedMonth)) m.unshift(selectedMonth);
-    return m.slice(0, 12);
+    const hoy = hoyLocal();
+    const proximo = sumarDias(`${hoy.slice(0, 7)}-01`, 32).slice(0, 7);
+    const set = new Set([...uniqueMonths(transactions), selectedMonth, proximo]);
+    const actual = hoy.slice(0, 7);
+    const todos = Array.from(set).sort().reverse();
+    // Todos los futuros + los 12 más recientes hasta hoy
+    return [...todos.filter(m => m > actual), ...todos.filter(m => m <= actual).slice(0, 12)];
   }, [transactions, selectedMonth]);
+
+  const resumenTarjeta = useMemo(() => proximoResumen(transactions, hoyLocal()), [transactions]);
+  const presupuestos = useSWR("/api/presupuestos", () => presupuestosApi.list(), { revalidateOnFocus: false }).data?.presupuestos;
 
   const monthTransactions = useMemo(
     () => transactions.filter(t => fechaToMes(t.fechaPago) === selectedMonth),
@@ -116,22 +130,18 @@ export default function Dashboard({ config }: Props) {
         name: cat,
         value: val,
         pct: total > 0 ? (val / total) * 100 : 0,
-        color: getCategoryColor(cat),
+        color: colorDe(cat),
       }))
       .sort((a, b) => b.value - a.value);
-  }, [monthTransactionsARS]);
+  }, [monthTransactionsARS, colorDe]);
 
-  // Próximos pagos (de tarjeta, en los próximos 30 días desde hoy)
+  // Próximos pagos: egresos con fecha de pago entre hoy y los próximos 45 días.
+  // Se comparan textos AAAA-MM-DD en hora local (new Date("AAAA-MM-DD") es UTC y corre el día).
   const upcomingPayments = useMemo(() => {
-    const today = new Date();
-    const in30 = new Date();
-    in30.setDate(today.getDate() + 45);
+    const hoy = hoyLocal();
+    const hasta = sumarDias(hoy, 45);
     return transactions
-      .filter(t => {
-        if (t.tipo !== "egreso") return false;
-        const fp = new Date(t.fechaPago);
-        return fp >= today && fp <= in30;
-      })
+      .filter(t => t.tipo === "egreso" && t.fechaPago >= hoy && t.fechaPago <= hasta)
       .sort((a, b) => a.fechaPago.localeCompare(b.fechaPago))
       .slice(0, 6);
   }, [transactions]);
@@ -353,8 +363,38 @@ export default function Dashboard({ config }: Props) {
         </div>
       </div>
 
+      {/* Presupuesto del mes */}
+      {presupuestos && Object.keys(presupuestos).length > 0 && (
+        <PresupuestoCard presupuestos={presupuestos} gastos={categories} mes={selectedMonth} />
+      )}
+
       {/* Upcoming payments */}
       <div className="surface p-4 sm:p-8">
+        {resumenTarjeta && (
+          <div className="mb-6 pb-6 hairline-b flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
+            <div className="flex items-start gap-3">
+              <CreditCard className="w-5 h-5 text-ink-300 mt-1 shrink-0" strokeWidth={1.5} aria-hidden="true" />
+              <div>
+                <div className="eyebrow mb-1">Próximo resumen de tarjeta</div>
+                <div className="text-sm text-ink-200">
+                  Vence el <span className="text-paper">{formatFecha(resumenTarjeta.vence)}</span> ·{" "}
+                  {resumenTarjeta.items} movimiento{resumenTarjeta.items === 1 ? "" : "s"}
+                  {resumenTarjeta.cuotas > 0 && ` (${resumenTarjeta.cuotas} en cuotas)`}
+                </div>
+              </div>
+            </div>
+            <div className="sm:text-right">
+              <div className="display text-3xl tabular text-terra-light">
+                <span aria-hidden="true">−</span>{formatPesos(resumenTarjeta.pesos)}
+              </div>
+              {Math.abs(resumenTarjeta.dolares) >= 0.005 && (
+                <div className="text-sm font-mono tabular text-terra-light">
+                  <span aria-hidden="true">−</span><UsdAmount value={resumenTarjeta.dolares} />
+                </div>
+              )}
+            </div>
+          </div>
+        )}
         <div className="flex items-end justify-between mb-6">
           <div>
             <div className="eyebrow mb-1">Próximos vencimientos</div>
@@ -383,7 +423,8 @@ export default function Dashboard({ config }: Props) {
                   </div>
                 </div>
                 <div className="text-sm font-mono tabular text-terra-light ml-4 whitespace-nowrap">
-                  <span aria-hidden="true">−</span>{formatPesos(tx.monto)}
+                  <span aria-hidden="true">−</span>
+                  {tx.moneda === "USD" ? <UsdAmount value={tx.monto} /> : formatPesos(tx.monto)}
                 </div>
               </motion.div>
             ))}
@@ -479,4 +520,63 @@ function EditorialTooltip({ active, payload, label }: ChartTooltipProps) {
   );
 }
 
+/** Avance del gasto del mes contra el presupuesto de cada categoría. */
+function PresupuestoCard({ presupuestos, gastos, mes }: {
+  presupuestos: Record<string, number>;
+  gastos: Array<{ name: string; value: number; color: string }>;
+  mes: string;
+}) {
+  const filas = Object.entries(presupuestos)
+    .map(([cat, tope]) => {
+      const gastado = gastos.find((g) => g.name === cat)?.value ?? 0;
+      return { cat, tope, gastado, pct: tope > 0 ? gastado / tope : 0 };
+    })
+    .sort((a, b) => b.pct - a.pct);
+  const totalTope = filas.reduce((a, f) => a + f.tope, 0);
+  const totalGastado = filas.reduce((a, f) => a + f.gastado, 0);
 
+  return (
+    <div className="surface p-4 sm:p-8 mb-8 lg:mb-12">
+      <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-2 mb-6">
+        <div>
+          <div className="eyebrow mb-1">Presupuesto · {formatMes(mes)}</div>
+          <h2 className="display text-2xl text-paper">Cómo venís</h2>
+        </div>
+        <div className="text-xs text-ink-300 tabular">
+          {formatPesos(totalGastado)} de {formatPesos(totalTope)} ·{" "}
+          <Link href="/settings#presupuesto" className="underline underline-offset-2 hover:text-paper">editar</Link>
+        </div>
+      </div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-12 gap-y-4">
+        {filas.map((f) => {
+          const pasado = f.gastado > f.tope;
+          return (
+            <div key={f.cat}>
+              <div className="flex items-baseline justify-between gap-3 text-xs mb-1.5">
+                <span className="text-paper">{f.cat}</span>
+                <span className={`tabular ${pasado ? "text-terra-light" : "text-ink-200"}`}>
+                  {formatPesosCompact(f.gastado)} / {formatPesosCompact(f.tope)}
+                  {pasado && <> · <span>te pasaste {formatPesosCompact(f.gastado - f.tope)}</span></>}
+                </span>
+              </div>
+              <div
+                className="relative h-2 w-full overflow-hidden rounded-sm border border-ink-600"
+                style={{ background: PALETTE.pista }}
+                role="meter"
+                aria-label={`${f.cat}: ${Math.round(f.pct * 100)}% del presupuesto`}
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-valuenow={Math.min(100, Math.round(f.pct * 100))}
+              >
+                <div
+                  className="absolute inset-y-0 left-0 transition-all duration-500"
+                  style={{ width: `${Math.min(1, f.pct) * 100}%`, background: pasado ? PALETTE.negativo : f.pct >= 0.85 ? PALETTE.serie : PALETTE.positivo }}
+                />
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}

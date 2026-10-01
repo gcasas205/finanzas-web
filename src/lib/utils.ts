@@ -149,6 +149,13 @@ export function hoyLocal(): string {
   return `${y}-${m}-${day}`;
 }
 
+/** Suma días a una fecha `AAAA-MM-DD` en hora local (sin pasar por UTC). */
+export function sumarDias(iso: string, dias: number): string {
+  const [y, m, d] = iso.split("-").map(Number);
+  const f = new Date(y, m - 1, d + dias);
+  return `${f.getFullYear()}-${String(f.getMonth() + 1).padStart(2, "0")}-${String(f.getDate()).padStart(2, "0")}`;
+}
+
 export function uniqueMonths(transactions: { fechaPago: string }[]): string[] {
   const set = new Set(transactions.map(t => t.fechaPago.slice(0, 7)));
   return Array.from(set).sort().reverse();

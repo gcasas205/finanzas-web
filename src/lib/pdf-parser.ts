@@ -1,4 +1,4 @@
-import type { Transaction, Sueldo } from "@/types";
+import type { Transaction, Sueldo, ReglaCategoria } from "@/types";
 import { autoCategorizar } from "./categories";
 import { calcularFechaPagoTarjeta, calcularFechaPagoSueldo, generateId } from "./utils";
 
@@ -78,8 +78,20 @@ export interface VisaParsedResult {
   transactions: Transaction[];
 }
 
-export async function parseVisaPDF(buffer: Buffer, cardCutoff = 23, cardDue = 5): Promise<VisaParsedResult> {
-  const text = await parsePdfBuffer(buffer);
+export async function parseVisaPDF(
+  buffer: Buffer, cardCutoff = 23, cardDue = 5, reglas: ReglaCategoria[] = [],
+): Promise<VisaParsedResult> {
+  return parseVisaText(await parsePdfBuffer(buffer), cardCutoff, cardDue, reglas);
+}
+
+/** Impuestos, percepciones y comisiones del resumen: se importan como Finanzas. */
+const IMPUESTO_RE = /\b(DB\.?\s?IVA|IVA\s?RG|DB\.RG|IIBB|PERCEP|IMP\.|IMPUESTO|RG\s?\d{4})/i;
+const COMISION_RE = /\bCOMISION/i;
+
+/** Parser del texto extraído del resumen (separado del PDF para poder testearlo). */
+export function parseVisaText(
+  text: string, cardCutoff = 23, cardDue = 5, reglas: ReglaCategoria[] = [],
+): VisaParsedResult {
   const lines = text.split("\n").map(l => l.trim()).filter(Boolean);
 
   let titular = "";
@@ -166,11 +178,11 @@ export async function parseVisaPDF(buffer: Buffer, cardCutoff = 23, cardDue = 5)
   // pdf-parse output: fecha pegada al comprobante sin espacio
   // "09.05.25477614*MERPAGO*ELECTRONICAFLA      C.12/12         24.999,91"
   // Some lines duplicated: "...3.844,24 24.10.25001586*MEGATONE...3.844,24"
-  const txRegex = /^(\d{2}\.\d{2}\.\d{2})\s*(.+?)\s+([\d.,]+)\s*$/;
+  // Un "-" al final del monto es un crédito (devolución, reintegro).
+  const txRegex = /^(\d{2}\.\d{2}\.\d{2})\s*(.+?)\s+([\d.,]+)(-?)\s*$/;
   const skipKeywords = [
     "SALDO ANTERIOR", "SU PAGO", "TARJETA", "TOTAL CONSUMOS",
-    "DB IVA", "COMISION", "IIBB", "IVA RG", "DB.RG", "PAGO MINIMO", "SALDO ACTUAL",
-    "DEBITAREMOS", "PLAN V"
+    "PAGO MINIMO", "SALDO ACTUAL", "DEBITAREMOS", "PLAN V"
   ];
 
   const transactions: Transaction[] = [];
@@ -184,8 +196,16 @@ export async function parseVisaPDF(buffer: Buffer, cardCutoff = 23, cardDue = 5)
     const m = line.match(txRegex);
     if (!m) continue;
 
-    const [, fechaRaw, descRaw, montoRaw] = m;
+    const [, fechaRaw, descRaw, montoRaw, signo] = m;
     let descripcion = descRaw.trim();
+    const credito = signo === "-";
+
+    // Consumo en dólares: la descripción termina en "USD" (pegado al código del
+    // comercio) y el importe va en la columna de dólares, ej.
+    // "412602 APPLE.COM/BILL MV8MTS29JUSD 2,99 2,99" o "... MV8MTS29JUSD 2,99".
+    const usdMatch = descripcion.match(/USD(?:\s+[\d.,]+)?$/i);
+    const moneda: Transaction["moneda"] = usdMatch ? "USD" : "ARS";
+    if (usdMatch) descripcion = descripcion.slice(0, usdMatch.index).trim();
 
     // Detectar cuotas: C.03/12 o c.03/12
     let cuotaTotal = 1, cuotaNumero = 1;
@@ -213,7 +233,13 @@ export async function parseVisaPDF(buffer: Buffer, cardCutoff = 23, cardDue = 5)
     descripcion = descripcion.replace(/\s+SE\d+[-\d]+\s*$/, "").trim();
     if (!descripcion) descripcion = descRaw;
 
-    const { categoria, subcategoria } = autoCategorizar(descripcion);
+    const { categoria, subcategoria } = credito
+      ? { categoria: "Ingresos", subcategoria: "Reintegro" }
+      : COMISION_RE.test(descripcion)
+        ? { categoria: "Finanzas", subcategoria: "Comisión" }
+        : IMPUESTO_RE.test(descripcion)
+          ? { categoria: "Finanzas", subcategoria: "Impuesto" }
+          : autoCategorizar(descripcion, reglas);
 
     // Fecha de pago: TODAS las transacciones del resumen se pagan en VENCIMIENTO ACTUAL
     const fechaPago = fechaPagoResumen
@@ -223,10 +249,10 @@ export async function parseVisaPDF(buffer: Buffer, cardCutoff = 23, cardDue = 5)
       id: generateId(),
       fechaConsumo,
       fechaPago,
-      tipo: "egreso",
+      tipo: credito ? "ingreso" : "egreso",
       descripcion: descripcion.slice(0, 80),
       monto,
-      moneda: "ARS",
+      moneda,
       categoria,
       subcategoria,
       fuente: "tarjeta",
@@ -234,6 +260,7 @@ export async function parseVisaPDF(buffer: Buffer, cardCutoff = 23, cardDue = 5)
       cuotaNumero,
       notas: cuotaTotal > 1 ? `Cuota ${cuotaNumero}/${cuotaTotal}` : "",
       createdAt: new Date().toISOString(),
+      ...(moneda === "USD" && !credito ? { origen: "regla" as const } : {}),
     });
   }
 

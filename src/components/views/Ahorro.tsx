@@ -1,32 +1,51 @@
 "use client";
 
-import { useMemo } from "react";
-import { PiggyBank, ShieldCheck, TrendingUp, AlertTriangle } from "lucide-react";
+import { useMemo, useRef, useState } from "react";
+import { PiggyBank, ShieldCheck, TrendingUp, AlertTriangle, ArrowLeftRight, Trash2, Settings } from "lucide-react";
+import Link from "next/link";
+import { toast } from "sonner";
 import { useAhorro } from "@/components/DataProvider";
 import { UsdAmount } from "@/components/UsdAmount";
-import { computeAhorro, type SobreResultado } from "@/lib/ahorro-calc";
-import type { SobreKey } from "@/types";
+import { computeAhorro, destinosAhorro, type SobreResultado, type BucketKey, type MovimientoAhorro } from "@/lib/ahorro-calc";
+import { aporteMensualNecesario } from "@/lib/ahorro-config";
+import { formatFecha, formatMes, hoyLocal } from "@/lib/utils";
+import { ahorroApi, ApiError, errorMessage } from "@/lib/api";
+import { Dialog, DialogActions } from "@/components/ui/Dialog";
+import { Field, focusFirstInvalid } from "@/components/ui/Field";
+import { Button, buttonClasses } from "@/components/ui/Button";
+import { useConfirm } from "@/components/ui/ConfirmDialog";
 import LogoLoader from "@/components/LogoLoader";
 import { ErrorState, StaleDataBanner } from "@/components/ui/States";
 import { AnimatedUsdAmount } from "@/components/AnimatedNumber";
 import { PALETTE } from "@/lib/palette";
 
-const SOBRE_COLOR: Record<SobreKey, string> = {
-  auto: "var(--color-sobre-auto)",
-  mud: "var(--color-sobre-mud)",
-  vac: "var(--color-sobre-vac)",
-  tec: "var(--color-sobre-tec)",
-};
+// Los sobres toman los 4 colores de sobre en orden (se repiten si hay más)
+const SOBRE_COLORES = ["var(--color-sobre-auto)", "var(--color-sobre-mud)", "var(--color-sobre-vac)", "var(--color-sobre-tec)"];
 const EMERG_COLOR = "var(--color-piso)";
 const LARGO_COLOR = "var(--color-largo)";
 
 export default function Ahorro() {
-  const { dolarOps, transactions, ahorroConfig, isLoading, error, refresh } = useAhorro();
+  const { dolarOps, transactions, ahorroConfig, movAhorro, isLoading, error, refresh } = useAhorro();
+  const [moviendo, setMoviendo] = useState(false);
+  const { confirm, dialog: confirmDialog } = useConfirm();
 
   const r = useMemo(
-    () => (ahorroConfig ? computeAhorro(dolarOps, transactions, ahorroConfig) : null),
-    [dolarOps, transactions, ahorroConfig],
+    () => (ahorroConfig ? computeAhorro(dolarOps, transactions, ahorroConfig, movAhorro) : null),
+    [dolarOps, transactions, ahorroConfig, movAhorro],
   );
+
+  const borrarPase = async (m: MovimientoAhorro) => {
+    if (!m.paseId) return;
+    const ok = await confirm({ title: "Eliminar pase", description: <>Vas a eliminar el pase &quot;{m.concepto}&quot; del {formatFecha(m.fecha)}.</> });
+    if (!ok) return;
+    try {
+      await ahorroApi.borrarPase(m.paseId);
+      toast.success("Pase eliminado");
+      refresh();
+    } catch (e) {
+      toast.error(errorMessage(e, "No se pudo eliminar el pase"), { duration: 7000 });
+    }
+  };
 
   if (error && (!ahorroConfig || (dolarOps.length === 0 && transactions.length === 0))) {
     return <ErrorState message={error} onRetry={refresh} className="min-h-[60vh]" />;
@@ -52,9 +71,16 @@ export default function Ahorro() {
         </h1>
         <p className="mt-3 text-xs text-ink-300 leading-relaxed max-w-2xl">
           Todo sale de tu tenencia de dólares. El piso de emergencia se llena primero; recién ahí
-          crecen el mediano y el largo plazo. El reparto y los objetivos se editan en la hoja
-          <span className="text-ink-100"> Config</span> del Sheets.
+          crecen el mediano y el largo plazo. Los sobres, el reparto y los objetivos se editan en Ajustes.
         </p>
+        <div className="mt-4 flex flex-wrap gap-2">
+          <Button variant="secundario" onClick={() => setMoviendo(true)}>
+            <ArrowLeftRight className="w-4 h-4" aria-hidden="true" /> Mover entre destinos
+          </Button>
+          <Link href="/settings#plan-ahorro" className={buttonClasses("fantasma")}>
+            <Settings className="w-4 h-4" aria-hidden="true" /> Editar plan
+          </Link>
+        </div>
       </header>
 
       {/* Reconciliación */}
@@ -118,8 +144,13 @@ export default function Ahorro() {
         locked={!emergencia.completo && mediano.balance <= 0}
       />
       <div className={`grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 mb-2 transition-opacity ${!emergencia.completo && mediano.balance <= 0 ? "opacity-40" : ""}`}>
-        {mediano.sobres.map((s) => (
-          <SobreCard key={s.key} sobre={s} color={SOBRE_COLOR[s.key]} />
+        {mediano.sobres.map((s, i) => (
+          <SobreCard
+            key={s.key}
+            sobre={s}
+            color={SOBRE_COLORES[i % SOBRE_COLORES.length]}
+            fechaObjetivo={ahorroConfig.sobres.find((c) => c.key === s.key)?.fechaObjetivo}
+          />
         ))}
       </div>
       {mediano.libre > 0.5 && (
@@ -145,8 +176,8 @@ export default function Ahorro() {
             <AnimatedUsdAmount value={largo.balance} />
           </div>
           <div className="text-xs text-ink-300 mt-2">
-            promedio actual ~<UsdAmount value={largo.aporteMensualProm} />/mes en {largo.mesesConAporte}{" "}
-            {largo.mesesConAporte === 1 ? "mes" : "meses"}
+            promedio ~<UsdAmount value={largo.aporteMensualProm} />/mes en los últimos {largo.mesesConAporte}{" "}
+            {largo.mesesConAporte === 1 ? "mes" : "meses"} (desde el primer aporte)
           </div>
         </div>
         <div className="lg:border-l lg:border-ink-600/60 lg:pl-10">
@@ -163,11 +194,29 @@ export default function Ahorro() {
         </div>
       </div>
 
+      <Historial
+        onBorrarPase={borrarPase}
+        movimientos={r.historial}
+        nombres={{
+          emergencia: "Piso",
+          largo: "Largo plazo",
+          ...Object.fromEntries(mediano.sobres.map((s) => [s.key, s.nombre])),
+        } as Record<BucketKey, string>}
+      />
+
       <p className="mt-8 text-xs text-ink-400 leading-relaxed max-w-2xl">
         Los aportes se cargan al comprar dólares (pestaña Dólares) o al recibir USD (Movimientos). Los gastos y
-        ventas descuentan de un sobre —por la regla automática o el que elijas—. Los objetivos y % viven en la
-        hoja Config del Google Sheets.
+        ventas descuentan de un sobre —por la regla automática o el que elijas—. Los objetivos y % se editan
+        en Ajustes y se guardan en la hoja Config del Google Sheets.
       </p>
+      <PaseDialog
+        open={moviendo}
+        onClose={() => setMoviendo(false)}
+        opciones={destinosAhorro(ahorroConfig)}
+        saldos={{ emergencia: emergencia.balance, largo: largo.balance, ...Object.fromEntries(mediano.sobres.map((s) => [s.key, s.balance])) }}
+        onSaved={() => { setMoviendo(false); refresh(); }}
+      />
+      {confirmDialog}
     </div>
   );
 }
@@ -213,7 +262,9 @@ function StageHeader({ n, titulo, sub, rate, locked }: {
   );
 }
 
-function SobreCard({ sobre, color }: { sobre: SobreResultado; color: string }) {
+function SobreCard({ sobre, color, fechaObjetivo }: { sobre: SobreResultado; color: string; fechaObjetivo?: string }) {
+  const falta = Math.max(0, sobre.objetivo - sobre.balance);
+  const plan = fechaObjetivo && !sobre.completo ? aporteMensualNecesario(falta, fechaObjetivo, hoyLocal().slice(0, 7)) : null;
   return (
     <div className={`surface p-5 relative overflow-hidden ${sobre.completo ? "border-moss/40" : ""}`}>
       <div className="flex items-baseline justify-between gap-2 mb-3">
@@ -231,6 +282,12 @@ function SobreCard({ sobre, color }: { sobre: SobreResultado; color: string }) {
           {Math.round(sobre.progreso * 100)}%
         </span>
       </div>
+      {plan && fechaObjetivo && (
+        <div className="mt-2 text-xs text-ink-200">
+          Para {formatMes(fechaObjetivo)}: ~<UsdAmount value={plan.porMes} />/mes
+          <span className="text-ink-300"> ({plan.meses} {plan.meses === 1 ? "mes" : "meses"})</span>
+        </div>
+      )}
     </div>
   );
 }
@@ -256,5 +313,163 @@ function ProjRow({ label, value }: { label: string; value: number }) {
       <span className="text-xs text-ink-200">{label}</span>
       <span className="display text-xl text-paper tabular"><UsdAmount value={value} /></span>
     </div>
+  );
+}
+
+/** Qué entró y salió de cada bucket, filtrable por bucket. */
+function Historial({ movimientos, nombres, onBorrarPase }: {
+  movimientos: MovimientoAhorro[]; nombres: Record<BucketKey, string>; onBorrarPase: (m: MovimientoAhorro) => void;
+}) {
+  const [bucket, setBucket] = useState<BucketKey | "">("");
+  const [visibles, setVisibles] = useState(15);
+  const filas = bucket ? movimientos.filter((m) => m.cambios[bucket] !== undefined) : movimientos;
+  if (!movimientos.length) return null;
+
+  return (
+    <section className="mt-10" aria-labelledby="historial-titulo">
+      <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3 mb-4">
+        <div>
+          <div className="eyebrow mb-1">Historial</div>
+          <h2 id="historial-titulo" className="display text-2xl sm:text-3xl text-paper">Qué entró y qué salió</h2>
+        </div>
+        <select
+          value={bucket}
+          onChange={(e) => { setBucket(e.target.value as BucketKey | ""); setVisibles(15); }}
+          aria-label="Filtrar el historial por destino"
+          className="select-native min-h-11 bg-ink-800 border border-control text-paper pl-3 pr-9 py-2 text-sm focus:border-amber cursor-pointer"
+        >
+          <option value="">Todos los destinos</option>
+          {(Object.keys(nombres) as BucketKey[]).map((k) => <option key={k} value={k}>{nombres[k]}</option>)}
+        </select>
+      </div>
+      <div className="surface divide-y divide-ink-600/60">
+        {filas.length === 0 ? (
+          <p className="p-6 text-sm text-ink-300 italic">Sin movimientos para este destino.</p>
+        ) : filas.slice(0, visibles).map((m, i) => (
+          <div key={`${m.fecha}-${i}`} className="p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+            <div className="min-w-0 flex items-start gap-2">
+              <div className="min-w-0">
+                <div className="text-sm text-paper truncate">{m.concepto}</div>
+                <div className="text-xs text-ink-300 tabular font-mono">{formatFecha(m.fecha)}</div>
+              </div>
+              {m.paseId && (
+                <button type="button" onClick={() => onBorrarPase(m)}
+                  className="p-2.5 -my-1.5 text-ink-300 hover:text-terra-light shrink-0" aria-label={`Eliminar ${m.concepto}`}>
+                  <Trash2 className="w-4 h-4" aria-hidden="true" />
+                </button>
+              )}
+            </div>
+            <div className="flex flex-wrap gap-x-4 gap-y-1 sm:justify-end">
+              {(Object.entries(m.cambios) as Array<[BucketKey, number]>)
+                .filter(([k]) => !bucket || k === bucket)
+                .map(([k, v]) => (
+                  <span key={k} className={`text-xs tabular font-mono whitespace-nowrap ${v >= 0 ? "text-moss-light" : "text-terra-light"}`}>
+                    <span className="text-ink-300 font-sans">{nombres[k] ?? k} </span>
+                    {v >= 0 ? "+" : "−"}<UsdAmount value={Math.abs(v)} />
+                  </span>
+                ))}
+            </div>
+          </div>
+        ))}
+      </div>
+      {filas.length > visibles && (
+        <div className="mt-3 text-center">
+          <button type="button" onClick={() => setVisibles((v) => v + 15)}
+            className="min-h-11 px-4 text-sm text-ink-200 hover:text-paper">
+            Mostrar más ({filas.length - visibles} restantes)
+          </button>
+        </div>
+      )}
+    </section>
+  );
+}
+
+/** Pase de plata entre destinos del ahorro (no cambia la tenencia). */
+function PaseDialog({ open, onClose, opciones, saldos, onSaved }: {
+  open: boolean;
+  onClose: () => void;
+  opciones: Array<{ value: BucketKey; label: string }>;
+  saldos: Record<string, number>;
+  onSaved: () => void;
+}) {
+  return (
+    <Dialog open={open} onClose={onClose} eyebrow="Ahorro" title="Mover entre destinos" size="sm">
+      {open && <PaseForm opciones={opciones} saldos={saldos} onClose={onClose} onSaved={onSaved} />}
+    </Dialog>
+  );
+}
+
+function PaseForm({ opciones, saldos, onClose, onSaved }: {
+  opciones: Array<{ value: BucketKey; label: string }>;
+  saldos: Record<string, number>;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const formRef = useRef<HTMLFormElement>(null);
+  const [desde, setDesde] = useState<string>(opciones.find((o) => (saldos[o.value] ?? 0) > 0)?.value ?? opciones[0]?.value ?? "");
+  const [hacia, setHacia] = useState<string>(opciones.find((o) => o.value !== desde)?.value ?? "");
+  const [monto, setMonto] = useState("");
+  const [fecha, setFecha] = useState(hoyLocal());
+  const [notas, setNotas] = useState("");
+  const [errors, setErrors] = useState<Partial<Record<string, string>>>({});
+  const [saving, setSaving] = useState(false);
+  const disponible = saldos[desde] ?? 0;
+
+  const submit = async (ev: React.FormEvent) => {
+    ev.preventDefault();
+    const n = parseFloat(monto);
+    const e: Partial<Record<string, string>> = {};
+    if (!(n > 0)) e.monto = "Poné un monto mayor a 0";
+    else if (n > disponible + 0.005) e.monto = "No hay tanto en ese destino";
+    if (desde === hacia) e.hacia = "Elegí un destino distinto del origen";
+    if (!fecha) e.fecha = "Indicá la fecha";
+    if (Object.keys(e).length) { setErrors(e); focusFirstInvalid(formRef.current); return; }
+    setSaving(true);
+    try {
+      await ahorroApi.crearPase({ fecha, desde, hacia, montoUSD: n, notas });
+      toast.success("Pase registrado");
+      onSaved();
+    } catch (err) {
+      if (err instanceof ApiError && err.field) { setErrors({ [err.field]: err.message }); focusFirstInvalid(formRef.current); }
+      else toast.error(errorMessage(err, "No se pudo registrar el pase"), { duration: 7000 });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <form ref={formRef} onSubmit={submit} noValidate className="space-y-4">
+      <Field label="Desde" hint={<>Disponible: <UsdAmount value={disponible} /></>}>
+        {(c) => (
+          <select {...c} value={desde} onChange={(e) => { setDesde(e.target.value); setErrors({}); }} className="form-input">
+            {opciones.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+          </select>
+        )}
+      </Field>
+      <Field label="Hacia" error={errors.hacia}>
+        {(c) => (
+          <select {...c} value={hacia} onChange={(e) => { setHacia(e.target.value); setErrors({}); }} className="form-input">
+            {opciones.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+          </select>
+        )}
+      </Field>
+      <Field label="Monto (USD)" required error={errors.monto}>
+        {(c) => (
+          <input {...c} type="number" step="0.01" min="0" inputMode="decimal" value={monto} data-autofocus
+            onChange={(e) => { setMonto(e.target.value); setErrors({}); }} placeholder="0,00" className="form-input tabular font-mono" />
+        )}
+      </Field>
+      <Field label="Fecha" required error={errors.fecha}>
+        {(c) => <input {...c} type="date" value={fecha} max={hoyLocal()} onChange={(e) => setFecha(e.target.value)} className="form-input tabular" />}
+      </Field>
+      <Field label="Notas (opcional)">
+        {(c) => <input {...c} type="text" maxLength={200} value={notas} onChange={(e) => setNotas(e.target.value)} className="form-input" />}
+      </Field>
+      <p className="text-xs text-ink-300">Mover plata entre destinos no cambia tu tenencia de dólares.</p>
+      <DialogActions>
+        <Button variant="fantasma" onClick={onClose}>Cancelar</Button>
+        <Button type="submit" isLoading={saving}>Mover</Button>
+      </DialogActions>
+    </form>
   );
 }

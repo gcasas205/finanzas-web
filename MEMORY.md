@@ -6,7 +6,7 @@ Memoria del proyecto entre sesiones. Máximo ~50 líneas: resumí o borrá lo qu
 - Los 33 hallazgos de `docs/auditoria-skills.md` (backend, frontend y diseño) están implementados y mergeados en `main`.
 - Últimos cambios: barras móviles sólidas para iOS y vuelta del verde/rojo en montos y confirmaciones.
 - Ingresos USD de Movimientos permiten repartir mediano/largo (columnas P y Q de `Transacciones`), igual que la compra de USD. Filas viejas sin reparto: el excedente va a mediano, como antes.
-- `typecheck` y `lint` limpios, y 40 tests de Vitest en verde (cálculos, validaciones, seguridad).
+- `typecheck` y `lint` limpios, y 86 tests de Vitest en verde (cálculos, validaciones, seguridad).
 - CI en GitHub Actions: `CI Back` (typecheck + Vitest) y `CI Front` (typecheck + lint + build), cada uno se saltea si el PR no toca sus archivos. Pensado para proteger `main` (Vercel despliega producción desde ahí).
 - ESLint configurado con `next/core-web-vitals` en `.eslintrc.js` (sin hallazgos al activarlo).
 
@@ -22,7 +22,23 @@ Memoria del proyecto entre sesiones. Máximo ~50 líneas: resumí o borrá lo qu
 - `.gitignore` ignora todo `*.json` salvo excepciones explícitas, para no subir credenciales. Sumar un JSON necesario se pregunta antes (regla en `AGENTS.md`). Por eso ESLint va en `.eslintrc.js`.
 - `*.tsbuildinfo` fuera del repo: es caché de compilación.
 
+- Reparto del ahorro: montos exactos a mediano/largo, lo no asignado va a mediano; si el piso se lleva parte, se achica en proporción (decidido por el usuario, oct 2026).
+- Duplicados al importar: se detectan en el cliente por fecha de consumo + monto + cuota + descripción normalizada (`lib/duplicados.ts`).
+
+- Servicios externos: cotización en dolarapi.com (respaldo dolarhoy) e inflación en api.argentinadatos.com (aprobado por el usuario). Ambos con caché en memoria y respaldo.
+- Usuario usa dólar oficial y no quiere cuentas separadas ni "dónde están los dólares".
+
+- Cuotas: el monto cargado es el de CADA cuota; las futuras se generan con `grupoCuotas` (col R). Las cuotas se reconocen como duplicadas por fecha de compra + monto + n/total aunque cambie la descripción.
+- Sueldos: hoja `Sueldos` vinculada al movimiento por `txId` (col N) y sincronizada en alta/edición/borrado/recategorización (`lib/sueldos-sync.ts`).
+
+- Sobres dinámicos: `SobreKey` es string; la lista vive en Config `sobres_lista` (sin ella, los 4 originales). `lib/ahorro-config.ts` parsea/serializa. Pases entre destinos en la pestaña `MovAhorro`.
+- Presupuestos en Config como `presupuesto:<Categoría>` (0 = sin presupuesto).
+
+- Categorías en la pestaña `Categorias` (cliente: `useCategorias()`, no la constante `CATEGORIES`, que es sólo el valor por defecto). Reglas aprendidas en `Reglas`; gastos fijos en `Recurrentes`.
+
 ## Aprendizajes y errores a evitar
+- Los `route.ts` de Next sólo pueden exportar handlers y config (`dynamic`): otra constante exportada rompe el build.
+- `new Date("AAAA-MM-DD")` es UTC: para comparar días usar textos `AAAA-MM-DD` con `hoyLocal()`/`sumarDias()`.
 - `outline-none` de Tailwind pisaba el anillo de foco: usar `.form-input` y `:focus-visible`.
 - `toISOString()` corre el día a la noche en Argentina: usar `hoyLocal()`.
 - Tragarse errores de Sheets mostraba "sin movimientos" y encima lo cacheaba.

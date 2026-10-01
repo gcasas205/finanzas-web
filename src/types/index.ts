@@ -23,9 +23,11 @@ export interface Transaction {
    * bucket de ahorro se descuenta: "regla" (automático) o un sobre puntual.
    */
   origen?: BucketOrigen;
-  /** Solo para ingresos en USD: reparto opcional del excedente tras el piso. */
+  /** Solo para ingresos en USD: montos exactos a mediano/largo tras el piso (lo no asignado va a mediano). */
   asigMediano?: number;
   asigLargo?: number;
+  /** Compra en cuotas: id compartido por todas las cuotas generadas juntas */
+  grupoCuotas?: string;
 }
 
 export interface Sueldo {
@@ -44,6 +46,8 @@ export interface Sueldo {
   otrosDescuentos: number;
   fechaPago: string;
   createdAt: string;
+  /** Movimiento de ingreso vinculado en Transacciones (si lo hay) */
+  txId?: string;
 }
 
 export type DolarOperacionTipo = "compra" | "venta";
@@ -64,22 +68,24 @@ export interface DolarOperacion {
   createdAt: string;
   /** Compra: cuántos de los USD comprados van a mediano plazo (el piso se llena primero). */
   asigMediano?: number;
-  /** Compra: cuántos van a largo plazo (S&P). El resto lo absorbe el piso. */
+  /** Compra: cuántos van a largo plazo (S&P). Lo no asignado va a mediano. */
   asigLargo?: number;
   /** Venta: de qué bucket sale ("regla" = automático, o un sobre puntual). */
   origen?: BucketOrigen;
 }
 
-/** Cotización oficial scrapeada de dolarhoy.com */
+/** Cotización oficial (dolarapi.com, con dolarhoy.com de respaldo) */
 export interface Cotizacion {
   compra: number;
   venta: number;
-  /** Texto "dd/mm/aa hh:mm AM" que informa dolarhoy */
+  /** Momento que informa la fuente (ISO en dolarapi), si lo da */
   actualizado: string | null;
   /** ISO en que la app trajo el dato */
   fetchedAt: string;
   /** true si es un valor de respaldo porque falló el scraping */
   fallback?: boolean;
+  /** De dónde salió el dato */
+  fuente?: "dolarapi" | "dolarhoy";
 }
 
 export interface AppConfig {
@@ -96,6 +102,32 @@ export interface CategoryConfig {
   name: string;
   subcategories: string[];
   color: string;
+}
+
+/** Regla aprendida: si la descripción contiene `palabra`, sugerir esa categoría. */
+export interface ReglaCategoria {
+  /** Palabras normalizadas (minúsculas, sin acentos ni signos), ej. "coto palermo" */
+  palabra: string;
+  categoria: string;
+  subcategoria: string;
+}
+
+/** Gasto (o ingreso) fijo mensual que se carga con un toque. */
+export interface Recurrente {
+  id: string;
+  descripcion: string;
+  monto: number;
+  moneda: "ARS" | "USD";
+  tipo: "ingreso" | "egreso";
+  categoria: string;
+  subcategoria: string;
+  fuente: "manual" | "tarjeta" | "recibo";
+  /** Día del mes en que se carga (1–31; si el mes es más corto, el último día) */
+  dia: number;
+  activo: boolean;
+  /** Último mes "AAAA-MM" en que se cargó */
+  ultimoMes: string;
+  createdAt: string;
 }
 
 export interface MonthlySummary {
@@ -115,18 +147,14 @@ export interface CategoryTotal {
 
 // ─── Ahorro ───────────────────────────────────────────────────────────────
 
-/** Sobres del mediano plazo */
-export type SobreKey = "auto" | "mud" | "vac" | "tec";
+/** Sobre del mediano plazo: clave estable (ej. "auto", o una generada al crearlo) */
+export type SobreKey = string;
 
-/** De dónde sale una salida de USD */
-export type BucketOrigen =
-  | "regla"        // automático (mediano proporcional → largo → piso)
-  | "emergencia"
-  | "auto"
-  | "mud"
-  | "vac"
-  | "tec"
-  | "largo";
+/**
+ * De dónde sale una salida de USD: "regla" (automático: mediano proporcional →
+ * largo → piso), "emergencia", "largo" o la clave de un sobre.
+ */
+export type BucketOrigen = "regla" | "emergencia" | "largo" | SobreKey;
 
 export interface AhorroSobreConfig {
   key: SobreKey;
@@ -135,6 +163,20 @@ export interface AhorroSobreConfig {
   pct: number;
   /** objetivo en USD */
   objetivo: number;
+  /** Mes objetivo "AAAA-MM" (opcional): para calcular cuánto ahorrar por mes */
+  fechaObjetivo?: string;
+}
+
+/** Pase de plata entre destinos del ahorro (no cambia la tenencia de USD). */
+export interface MovAhorro {
+  id: string;
+  fecha: string;
+  /** "emergencia", "largo" o la clave de un sobre */
+  desde: string;
+  hacia: string;
+  montoUSD: number;
+  notas: string;
+  createdAt: string;
 }
 
 /**

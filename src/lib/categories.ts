@@ -1,5 +1,9 @@
-import type { CategoryConfig } from "@/types";
+import type { CategoryConfig, ReglaCategoria } from "@/types";
 
+/**
+ * Categorías por defecto. Las reales viven en la pestaña "Categorias" de la
+ * planilla (se siembra con estas); el cliente las lee con `useCategorias()`.
+ */
 export const CATEGORIES: CategoryConfig[] = [
   {
     name: "Ingresos",
@@ -112,7 +116,40 @@ const AUTO_RULES: Array<[string, string, string]> = [
   ["haberes", "Ingresos", "Sueldo"],
 ];
 
-export function autoCategorizar(descripcion: string): { categoria: string; subcategoria: string } {
+/**
+ * Descripción normalizada para comparar comercios: minúsculas, sin acentos, sin
+ * números ni signos (los códigos de comprobante cambian) y sin letras sueltas.
+ */
+export function normalizarDescripcion(descripcion: string): string {
+  return descripcion
+    .toLowerCase()
+    .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z ]+/g, " ")
+    .split(/\s+/)
+    .filter((w) => w.length > 1)
+    .join(" ");
+}
+
+/** Clave de un comercio: sus primeras 3 palabras normalizadas (ej. "coto palermo"). */
+export function claveComercio(descripcion: string): string {
+  return normalizarDescripcion(descripcion).split(" ").slice(0, 3).join(" ");
+}
+
+/**
+ * Sugiere categoría para una descripción. Primero las reglas aprendidas (la más
+ * específica gana), después las incorporadas.
+ */
+export function autoCategorizar(
+  descripcion: string,
+  reglas: ReglaCategoria[] = [],
+): { categoria: string; subcategoria: string } {
+  if (reglas.length) {
+    const norm = ` ${normalizarDescripcion(descripcion)} `;
+    const match = reglas
+      .filter((r) => r.palabra && norm.includes(` ${r.palabra} `))
+      .sort((a, b) => b.palabra.length - a.palabra.length)[0];
+    if (match) return { categoria: match.categoria, subcategoria: match.subcategoria };
+  }
   const desc = descripcion.toLowerCase();
   for (const [kw, cat, subcat] of AUTO_RULES) {
     if (desc.includes(kw)) {
@@ -122,6 +159,9 @@ export function autoCategorizar(descripcion: string): { categoria: string; subca
   return { categoria: "Otros", subcategoria: "Sin categoría" };
 }
 
-export function getCategoryColor(name: string): string {
-  return CATEGORIES.find(c => c.name === name)?.color ?? "#5A574E";
+export function getCategoryColor(name: string, categorias: CategoryConfig[] = CATEGORIES): string {
+  return categorias.find(c => c.name === name)?.color ?? CATEGORIA_COLORES[CATEGORIA_COLORES.length - 1];
 }
+
+/** Colores elegibles para una categoría (los de las categorías por defecto). */
+export const CATEGORIA_COLORES: string[] = Array.from(new Set(CATEGORIES.map((c) => c.color)));

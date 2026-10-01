@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useMemo } from "react";
+import useSWR from "swr";
 import { motion } from "framer-motion";
 import LogoLoader from "@/components/LogoLoader";
 import { ErrorState, StaleDataBanner } from "@/components/ui/States";
@@ -10,10 +11,13 @@ import {
   PieChart, Pie,
 } from "recharts";
 import { Zap } from "lucide-react";
-import type { Transaction, AppConfig } from "@/types";
-import { formatPesos, formatPesosCompact, formatMes, fechaToMes, uniqueMonths } from "@/lib/utils";
-import { getCategoryColor, CATEGORIES } from "@/lib/categories";
-import { useTransactions } from "@/components/DataProvider";
+import type { Transaction, AppConfig, Sueldo } from "@/types";
+import { formatPesos, formatPesosCompact, formatMes, formatFecha, fechaToMes, uniqueMonths } from "@/lib/utils";
+import { request, errorMessage, sueldosApi } from "@/lib/api";
+import { factoresPesosDeHoy, type InflacionMes } from "@/lib/inflacion";
+import { detectarSuscripciones, detectarHormiga, type GastoRecurrente } from "@/lib/habitos";
+import { Segmented } from "@/components/ui/Segmented";
+import { useTransactions, useCategorias } from "@/components/DataProvider";
 import { impactoPesosDolar } from "@/lib/dolar-calc";
 import { PALETTE } from "@/lib/palette";
 import { EmptyState } from "@/components/ui/States";
@@ -23,7 +27,15 @@ interface Props { config: AppConfig; }
 
 export default function Analytics({ config }: Props) {
   const { transactions, dolarOps, isLoading: loading, error, refresh } = useTransactions();
-  const [tab, setTab] = useState<"tendencias" | "categorias" | "mercadopago" | "comparativa">("tendencias");
+  const [tab, setTab] = useState<"tendencias" | "categorias" | "comparativa" | "habitos" | "sueldo" | "mercadopago">("tendencias");
+  const sueldos = useSWR(tab === "sueldo" ? "/api/sueldos" : null, () => sueldosApi.list(), { revalidateOnFocus: false });
+  // Nominal o ajustado por inflación ("pesos de hoy")
+  const [escala, setEscala] = useState<"nominal" | "real">("nominal");
+  const inflacion = useSWR<{ serie: InflacionMes[] }>(
+    escala === "real" ? "/api/inflacion" : null,
+    (url: string) => request<{ serie: InflacionMes[] }>(url),
+    { revalidateOnFocus: false, dedupingInterval: 60 * 60 * 1000 },
+  );
   const [selectedMonth, setSelectedMonth] = useState(() => {
     const d = new Date();
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
@@ -37,6 +49,16 @@ export default function Analytics({ config }: Props) {
 
   // Todos los gráficos de esta vista son en pesos: se excluyen los movimientos en USD
   const txsARS = useMemo(() => transactions.filter(t => t.moneda !== "USD"), [transactions]);
+
+  // En "pesos de hoy" cada monto se lleva al último mes con IPC publicado
+  const serie = inflacion.data?.serie;
+  const real = escala === "real" && Boolean(serie);
+  const txsAnalisis = useMemo(() => {
+    if (escala !== "real" || !serie) return txsARS;
+    const factor = factoresPesosDeHoy(serie);
+    return txsARS.map(t => ({ ...t, monto: t.monto * factor(fechaToMes(t.fechaPago)) }));
+  }, [txsARS, escala, serie]);
+  const ultimoIpc = serie?.[serie.length - 1]?.mes;
 
   const acumulado = useMemo(() =>
     txsARS.reduce((s, t) => s + (t.tipo === "ingreso" ? t.monto : -t.monto), 0),
@@ -53,7 +75,7 @@ export default function Analytics({ config }: Props) {
 
   const evolution = useMemo(() => {
     const map = new Map<string, { ingresos: number; egresos: number }>();
-    for (const t of txsARS) {
+    for (const t of txsAnalisis) {
       const mes = fechaToMes(t.fechaPago);
       const cur = map.get(mes) ?? { ingresos: 0, egresos: 0 };
       if (t.tipo === "ingreso") cur.ingresos += t.monto; else cur.egresos += t.monto;
@@ -68,13 +90,15 @@ export default function Analytics({ config }: Props) {
         acum += ahorro;
         return { mes, label: formatMes(mes, true), ...v, ahorro, acumulado: acum };
       });
-  }, [txsARS]);
+  }, [txsAnalisis]);
 
   const TABS = [
     { id: "tendencias", label: "Tendencias" },
     { id: "categorias", label: "Categorías" },
-    { id: "mercadopago", label: "Mercado Pago" },
     { id: "comparativa", label: "Comparativa" },
+    { id: "habitos", label: "Hábitos" },
+    { id: "sueldo", label: "Sueldo" },
+    { id: "mercadopago", label: "Mercado Pago" },
   ] as const;
 
   if (loading) return <LogoLoader className="min-h-[60vh]" />;
@@ -92,12 +116,37 @@ export default function Analytics({ config }: Props) {
             Mirá los <em className="italic">patrones</em>
           </h1>
           <p className="text-xs text-ink-300 mt-2">
-            Valores en pesos · tus dólares se analizan en la pestaña Dólares
+            {real
+              ? `Valores en pesos de ${formatMes(ultimoIpc ?? "")} (ajustados por inflación, IPC INDEC)`
+              : "Valores en pesos nominales"} · tus dólares se analizan en la pestaña Dólares
           </p>
+          {escala === "real" && inflacion.isLoading && (
+            <p className="text-xs text-ink-300 mt-1" role="status">Trayendo la inflación…</p>
+          )}
+          {escala === "real" && inflacion.error && (
+            <p className="text-xs text-terra-light mt-1" role="alert">
+              {errorMessage(inflacion.error, "No pudimos traer la inflación")}. Mostramos valores nominales.
+            </p>
+          )}
         </div>
 
+        <div className="flex flex-wrap items-center gap-3">
+        {tab !== "mercadopago" && (
+          <Segmented
+            label="Escala de los montos"
+            size="sm"
+            className="w-auto"
+            value={escala}
+            onChange={setEscala}
+            options={[
+              { value: "nominal", label: "Nominal" },
+              { value: "real", label: "Pesos de hoy" },
+            ]}
+          />
+        )}
+
         {/* Month selector - visible for tabs that use it */}
-        {(tab === "categorias" || tab === "comparativa") && (
+        {(tab === "categorias" || tab === "comparativa" || tab === "habitos") && (
           <div className="flex items-center gap-3">
             <label htmlFor="analytics-mes" className="eyebrow">Mes</label>
             <select
@@ -112,6 +161,7 @@ export default function Analytics({ config }: Props) {
             </select>
           </div>
         )}
+        </div>
       </header>
 
       {/* Tabs */}
@@ -138,9 +188,15 @@ export default function Analytics({ config }: Props) {
       </div>
 
       {tab === "tendencias" && <TendenciasTab evolution={evolution} />}
-      {tab === "categorias" && <CategoriasTab transactions={txsARS} selectedMonth={selectedMonth} />}
+      {tab === "categorias" && <CategoriasTab key={selectedMonth} transactions={txsAnalisis} selectedMonth={selectedMonth} />}
+      {tab === "comparativa" && <ComparativaTab transactions={txsAnalisis} selectedMonth={selectedMonth} />}
+      {tab === "habitos" && <HabitosTab transactions={txsAnalisis} selectedMonth={selectedMonth} />}
+      {tab === "sueldo" && (
+        sueldos.error ? <Empty message={errorMessage(sueldos.error, "No pudimos traer tus sueldos")} />
+          : !sueldos.data ? <LogoLoader className="min-h-[30vh]" />
+          : <SueldoTab sueldos={sueldos.data.sueldos} factor={real && serie ? factoresPesosDeHoy(serie) : null} />
+      )}
       {tab === "mercadopago" && <MercadoPagoTab acumulado={capitalPesos} tna={config.mpTna} />}
-      {tab === "comparativa" && <ComparativaTab transactions={txsARS} selectedMonth={selectedMonth} />}
     </div>
   );
 }
@@ -224,12 +280,14 @@ function TendenciasTab({ evolution }: { evolution: EvolucionMes[] }) {
 // ── Categorías ───────────────────────────────────────────────────────────────
 
 function CategoriasTab({ transactions, selectedMonth }: { transactions: Transaction[]; selectedMonth: string }) {
+  const { colorDe } = useCategorias();
+  const [abierta, setAbierta] = useState<string | null>(null);
   const monthTxs = transactions.filter(t => t.tipo === "egreso" && fechaToMes(t.fechaPago) === selectedMonth);
   const catMap = new Map<string, number>();
   for (const t of monthTxs) catMap.set(t.categoria, (catMap.get(t.categoria) ?? 0) + t.monto);
   const total = Array.from(catMap.values()).reduce((a, b) => a + b, 0);
   const cats = Array.from(catMap.entries())
-    .map(([name, value]) => ({ name, value, pct: total > 0 ? value / total * 100 : 0, color: getCategoryColor(name) }))
+    .map(([name, value]) => ({ name, value, pct: total > 0 ? value / total * 100 : 0, color: colorDe(name) }))
     .sort((a, b) => b.value - a.value);
 
   if (!cats.length) return <Empty />;
@@ -267,18 +325,52 @@ function CategoriasTab({ transactions, selectedMonth }: { transactions: Transact
         </ResponsiveContainer>
 
         <div className="mt-6 space-y-3">
-          {cats.slice(0, 8).map(c => (
-            <div key={c.name} className="flex items-center gap-3 text-xs">
+          {cats.map(c => (
+            <button
+              key={c.name}
+              type="button"
+              onClick={() => setAbierta(abierta === c.name ? null : c.name)}
+              aria-expanded={abierta === c.name}
+              aria-controls="detalle-categoria"
+              className={`w-full flex items-center gap-3 text-xs text-left min-h-11 px-2 -mx-2 transition-colors ${abierta === c.name ? "bg-ink-700/50" : "hover:bg-ink-700/30"}`}
+            >
               <div className="w-2 h-8 shrink-0" style={{ background: c.color }} />
               <div className="flex-1">
                 <div className="text-paper">{c.name}</div>
                 <div className="text-ink-300 tabular">{formatPesos(c.value)}</div>
               </div>
               <div className="text-ink-200 tabular">{c.pct.toFixed(1)}%</div>
-            </div>
+            </button>
           ))}
+          <p className="text-xs text-ink-400">Tocá una categoría para ver sus movimientos.</p>
         </div>
       </div>
+
+      {abierta && (
+        <div id="detalle-categoria" className="col-span-1 lg:col-span-12 surface p-4 sm:p-8">
+          <div className="eyebrow mb-1">{formatMes(selectedMonth)}</div>
+          <h3 className="display text-2xl text-paper mb-4">{abierta}</h3>
+          <div className="divide-y divide-ink-600/60">
+            {monthTxs
+              .filter(t => t.categoria === abierta)
+              .sort((a, b) => b.monto - a.monto)
+              .map(t => (
+                <div key={t.id} className="py-3 flex items-center justify-between gap-4">
+                  <div className="min-w-0">
+                    <div className="text-sm text-paper truncate">{t.descripcion}</div>
+                    <div className="text-xs text-ink-300 tabular font-mono">
+                      {formatFecha(t.fechaPago)} · {t.subcategoria}
+                      {t.cuotaTotal > 1 ? ` · cuota ${t.cuotaNumero}/${t.cuotaTotal}` : ""}
+                    </div>
+                  </div>
+                  <div className="text-sm font-mono tabular text-terra-light whitespace-nowrap">
+                    <span aria-hidden="true">−</span>{formatPesos(t.monto)}
+                  </div>
+                </div>
+              ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -368,11 +460,24 @@ function MercadoPagoTab({ acumulado, tna }: { acumulado: number; tna: number }) 
 
 // ── Comparativa ──────────────────────────────────────────────────────────────
 
+/** "AAAA-MM" desplazado n meses (negativo = hacia atrás). */
+function mesMas(mes: string, n: number): string {
+  const [y, m] = mes.split("-").map(Number);
+  const d = new Date(y, m - 1 + n, 1);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+}
+
+type BaseComparacion = "anterior" | "anio" | "promedio3";
+
 function ComparativaTab({ transactions, selectedMonth }: { transactions: Transaction[]; selectedMonth: string }) {
-  const [yyyy, mm] = selectedMonth.split("-").map(Number);
-  let pm = mm - 1, py = yyyy;
-  if (pm < 1) { pm = 12; py--; }
-  const prevMonth = `${py}-${String(pm).padStart(2, "0")}`;
+  const { colorDe } = useCategorias();
+  const [base, setBase] = useState<BaseComparacion>("anterior");
+  const baseMeses = base === "anterior" ? [mesMas(selectedMonth, -1)]
+    : base === "anio" ? [mesMas(selectedMonth, -12)]
+    : [mesMas(selectedMonth, -1), mesMas(selectedMonth, -2), mesMas(selectedMonth, -3)];
+  const baseLabel = base === "anterior" ? formatMes(baseMeses[0], true)
+    : base === "anio" ? formatMes(baseMeses[0], true)
+    : "Prom. 3 meses";
 
   const getMap = (month: string) => {
     const map = new Map<string, number>();
@@ -384,23 +489,44 @@ function ComparativaTab({ transactions, selectedMonth }: { transactions: Transac
   };
 
   const currMap = getMap(selectedMonth);
-  const prevMap = getMap(prevMonth);
+  // La base es el promedio de sus meses (un solo mes salvo "promedio 3 meses")
+  const prevMap = new Map<string, number>();
+  for (const m of baseMeses) {
+    for (const [cat, v] of getMap(m)) prevMap.set(cat, (prevMap.get(cat) ?? 0) + v / baseMeses.length);
+  }
   const allCats = new Set([...currMap.keys(), ...prevMap.keys()]);
   const data = Array.from(allCats)
     .map(cat => {
       const prev = prevMap.get(cat) ?? 0;
       const curr = currMap.get(cat) ?? 0;
       const variation = prev > 0 ? ((curr - prev) / prev) * 100 : (curr > 0 ? 100 : 0);
-      return { name: cat, prev, curr, variation, color: getCategoryColor(cat) };
+      return { name: cat, prev, curr, variation, color: colorDe(cat) };
     })
     .sort((a, b) => b.curr - a.curr);
 
-  if (!data.length) return <Empty message="Se necesitan al menos 2 meses de datos" />;
+  const selector = (
+    <Segmented
+      label="Comparar contra"
+      size="sm"
+      className="w-auto mb-6"
+      value={base}
+      onChange={setBase}
+      options={[
+        { value: "anterior", label: "Mes anterior" },
+        { value: "anio", label: "Hace un año" },
+        { value: "promedio3", label: "Prom. 3 meses" },
+      ]}
+    />
+  );
+
+  if (!data.length) return <>{selector}<Empty message="Se necesitan al menos 2 meses de datos" /></>;
 
   return (
+    <>
+    {selector}
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 lg:gap-6 [&>*]:min-w-0">
       <div className="surface p-4 sm:p-8">
-        <div className="eyebrow mb-1">{formatMes(prevMonth, true)} vs {formatMes(selectedMonth, true)}</div>
+        <div className="eyebrow mb-1">{baseLabel} vs {formatMes(selectedMonth, true)}</div>
         <h3 className="display text-2xl text-paper mb-6">Comparativa mensual</h3>
         <ResponsiveContainer width="100%" height={data.length * 52 + 20}>
           <BarChart data={data} layout="vertical" margin={{ left: 100 }}>
@@ -409,7 +535,7 @@ function ComparativaTab({ transactions, selectedMonth }: { transactions: Transac
             <YAxis type="category" dataKey="name" stroke={PALETTE.eje} fontSize={13}
               tickLine={false} axisLine={false} width={95} />
             <Tooltip content={<ChartTooltip />} cursor={{ fill: PALETTE.cursor }} />
-            <Bar dataKey="prev" fill={PALETTE.serieSecundaria} name={formatMes(prevMonth, true)} radius={[0,2,2,0]} barSize={14} />
+            <Bar dataKey="prev" fill={PALETTE.serieSecundaria} name={baseLabel} radius={[0,2,2,0]} barSize={14} />
             <Bar dataKey="curr" name={formatMes(selectedMonth, true)} radius={[0,2,2,0]} barSize={14}>
               {data.map((d, i) => <Cell key={i} fill={d.color} />)}
             </Bar>
@@ -443,6 +569,148 @@ function ComparativaTab({ transactions, selectedMonth }: { transactions: Transac
             </motion.div>
           ))}
         </div>
+      </div>
+    </div>
+    </>
+  );
+}
+
+// ── Hábitos ──────────────────────────────────────────────────────────────────
+
+function HabitosTab({ transactions, selectedMonth }: { transactions: Transaction[]; selectedMonth: string }) {
+  const suscripciones = useMemo(() => detectarSuscripciones(transactions, selectedMonth), [transactions, selectedMonth]);
+  const hormiga = useMemo(() => detectarHormiga(transactions, selectedMonth), [transactions, selectedMonth]);
+  const totalSus = suscripciones.reduce((s, g) => s + g.porAnio, 0);
+  const totalHor = hormiga.reduce((s, g) => s + g.porAnio, 0);
+
+  return (
+    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 lg:gap-6 [&>*]:min-w-0">
+      <ListaHabitos
+        eyebrow="Últimos 6 meses"
+        titulo="Suscripciones"
+        explicacion="El mismo comercio, una vez por mes, en al menos 3 de los últimos 6 meses."
+        total={totalSus}
+        items={suscripciones}
+        vacio="No encontramos cargos que se repitan todos los meses."
+      />
+      <ListaHabitos
+        eyebrow="Últimos 3 meses"
+        titulo="Gastos hormiga"
+        explicacion="Consumos chicos y frecuentes: 6 o más en 3 meses, entre los más baratos del período."
+        total={totalHor}
+        items={hormiga}
+        vacio="No hay gastos chicos que se repitan seguido."
+      />
+    </div>
+  );
+}
+
+function ListaHabitos({ eyebrow, titulo, explicacion, total, items, vacio }: {
+  eyebrow: string; titulo: string; explicacion: string; total: number; items: GastoRecurrente[]; vacio: string;
+}) {
+  return (
+    <div className="surface p-4 sm:p-8">
+      <div className="eyebrow mb-1">{eyebrow}</div>
+      <div className="flex items-baseline justify-between gap-4 mb-2">
+        <h3 className="display text-2xl text-paper">{titulo}</h3>
+        {items.length > 0 && (
+          <div className="text-right">
+            <div className="display text-xl text-terra-light tabular">{formatPesosCompact(total)}</div>
+            <div className="text-xs text-ink-300">por año</div>
+          </div>
+        )}
+      </div>
+      <p className="text-xs text-ink-300 mb-4 leading-relaxed">{explicacion}</p>
+      {items.length === 0 ? (
+        <p className="text-sm text-ink-300 italic py-6">{vacio}</p>
+      ) : (
+        <div className="divide-y divide-ink-600/60">
+          {items.map(g => (
+            <div key={g.nombre} className="py-3 flex items-center justify-between gap-4">
+              <div className="min-w-0">
+                <div className="text-sm text-paper truncate">{g.nombre}</div>
+                <div className="text-xs text-ink-300">
+                  {g.categoria} · {g.veces} {g.veces === 1 ? "vez" : "veces"} · ~{formatPesosCompact(g.promedio)} c/u
+                </div>
+              </div>
+              <div className="text-right whitespace-nowrap">
+                <div className="text-sm font-mono tabular text-paper">{formatPesosCompact(g.porMes)}/mes</div>
+                <div className="text-xs text-ink-300 tabular">{formatPesosCompact(g.porAnio)}/año</div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Sueldo ───────────────────────────────────────────────────────────────────
+
+function SueldoTab({ sueldos, factor }: { sueldos: Sueldo[]; factor: ((mes: string) => number) | null }) {
+  // Un punto por mes de cobro (si hay dos recibos el mismo mes, se suman)
+  const datos = useMemo(() => {
+    const map = new Map<string, { bruto: number; neto: number; descuentos: number }>();
+    for (const s of sueldos) {
+      const mes = s.periodoPago || fechaToMes(s.fechaPago);
+      if (!mes) continue;
+      const f = factor ? factor(mes) : 1;
+      const cur = map.get(mes) ?? { bruto: 0, neto: 0, descuentos: 0 };
+      cur.bruto += s.bruto * f;
+      cur.neto += s.neto * f;
+      cur.descuentos += (s.jubilacion + s.obraSocial + s.ley19032 + s.otrosDescuentos) * f;
+      map.set(mes, cur);
+    }
+    return Array.from(map.entries())
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([mes, v]) => ({ mes, label: formatMes(mes, true), ...v }));
+  }, [sueldos, factor]);
+
+  if (!datos.length) {
+    return <Empty message="Todavía no hay sueldos. Importá un recibo o cargá un ingreso en Ingresos → Sueldo." />;
+  }
+  const ultimo = datos[datos.length - 1];
+  const haceUnAnio = datos.find(d => d.mes === mesMas(ultimo.mes, -12));
+  const variacion = haceUnAnio && haceUnAnio.neto > 0 ? (ultimo.neto / haceUnAnio.neto - 1) * 100 : null;
+  const hayBruto = datos.some(d => d.bruto > 0);
+
+  return (
+    <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 lg:gap-6 [&>*]:min-w-0">
+      <div className="lg:col-span-4 surface p-4 sm:p-8">
+        <div className="eyebrow mb-1">{formatMes(ultimo.mes)}</div>
+        <h3 className="display text-2xl text-paper mb-4">Último neto</h3>
+        <div className="display text-4xl text-moss-light tabular">{formatPesos(ultimo.neto)}</div>
+        {ultimo.bruto > 0 && (
+          <div className="text-xs text-ink-300 mt-2 tabular">
+            Bruto {formatPesos(ultimo.bruto)} · descuentos {formatPesos(ultimo.descuentos)}
+          </div>
+        )}
+        {variacion !== null && (
+          <div className={`mt-6 text-sm tabular ${variacion >= 0 ? "text-moss-light" : "text-terra-light"}`}>
+            {variacion >= 0 ? "+" : ""}{variacion.toFixed(1)}% <span className="text-ink-300">vs. hace un año{factor ? " (real)" : ""}</span>
+          </div>
+        )}
+        {!factor && (
+          <p className="text-xs text-ink-400 mt-4 leading-relaxed">
+            Elegí &quot;Pesos de hoy&quot; para ver si tu sueldo le ganó a la inflación.
+          </p>
+        )}
+      </div>
+      <div className="lg:col-span-8 surface p-4 sm:p-8">
+        <div className="eyebrow mb-1">Evolución</div>
+        <h3 className="display text-2xl text-paper mb-6">Neto{hayBruto ? " y bruto" : ""} por mes de cobro</h3>
+        <ResponsiveContainer width="100%" height={280}>
+          <LineChart data={datos.slice(-24)}>
+            <CartesianGrid stroke={PALETTE.grilla} strokeDasharray="2 4" vertical={false} />
+            <XAxis dataKey="label" stroke={PALETTE.eje} fontSize={13} tickLine={false} axisLine={false} />
+            <YAxis stroke={PALETTE.eje} fontSize={13} tickLine={false} axisLine={false} tickFormatter={v => formatPesosCompact(v)} />
+            <Tooltip content={<ChartTooltip />} />
+            <Line type="monotone" dataKey="neto" name="Neto" stroke={PALETTE.positivo} strokeWidth={2} dot={{ r: 3, fill: PALETTE.positivo }} />
+            {hayBruto && (
+              <Line type="monotone" dataKey="bruto" name="Bruto" stroke={PALETTE.serieSecundaria} strokeWidth={2} dot={{ r: 3, fill: PALETTE.serieSecundaria }} />
+            )}
+          </LineChart>
+        </ResponsiveContainer>
       </div>
     </div>
   );

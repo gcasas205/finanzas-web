@@ -1,7 +1,10 @@
 import type { Cotizacion } from "@/types";
 
 /**
- * Scraper de la cotización del dólar oficial desde dolarhoy.com.
+ * Cotización del dólar oficial. Fuente principal: la API JSON de dolarapi.com
+ * (estable, no depende del HTML de un sitio). Respaldo: scraping de dolarhoy.com.
+ *
+ * Respaldo — scraper de la cotización del dólar oficial desde dolarhoy.com.
  *
  * Fuente principal: la HOME (https://dolarhoy.com/), que se actualiza a diario.
  * La página dedicada /cotizaciondolaroficial a veces queda congelada en
@@ -15,6 +18,7 @@ import type { Cotizacion } from "@/types";
  */
 
 const HOME_URL = "https://dolarhoy.com/";
+const API_URL = "https://dolarapi.com/v1/dolares/oficial";
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutos
 
 let cache: { data: Cotizacion; at: number } | null = null;
@@ -51,6 +55,24 @@ async function fetchHtml(url: string): Promise<string> {
   return res.text();
 }
 
+/** Valida la respuesta de dolarapi: { compra, venta, fechaActualizacion }. */
+export function parseDolarApi(json: unknown): { compra: number; venta: number; actualizado: string | null } {
+  const o = (json ?? {}) as Record<string, unknown>;
+  const compra = Number(o.compra);
+  const venta = Number(o.venta);
+  if (!(compra >= 100) || !(venta >= compra)) {
+    throw new Error(`Valores inválidos de dolarapi: compra=${o.compra} venta=${o.venta}`);
+  }
+  const actualizado = typeof o.fechaActualizacion === "string" ? o.fechaActualizacion : null;
+  return { compra, venta, actualizado };
+}
+
+async function fetchDolarApi(): Promise<{ compra: number; venta: number; actualizado: string | null }> {
+  const res = await fetch(API_URL, { cache: "no-store", signal: AbortSignal.timeout(5000) });
+  if (!res.ok) throw new Error(`dolarapi respondió ${res.status}`);
+  return parseDolarApi(await res.json());
+}
+
 /**
  * Devuelve la cotización oficial. Usa caché de 5 minutos.
  * Si el scraping falla y hay caché (aunque vencida), la devuelve.
@@ -62,6 +84,15 @@ export async function getCotizacionOficial(force = false): Promise<Cotizacion> {
   }
 
   try {
+    const { compra, venta, actualizado } = await fetchDolarApi();
+    const data: Cotizacion = { compra, venta, actualizado, fetchedAt: new Date().toISOString(), fuente: "dolarapi" };
+    cache = { data, at: now };
+    return data;
+  } catch (e) {
+    console.error("Error obteniendo cotización de dolarapi, pruebo dolarhoy:", e);
+  }
+
+  try {
     const html = await fetchHtml(HOME_URL);
     const { compra, venta } = parseHome(html);
     const data: Cotizacion = {
@@ -69,6 +100,7 @@ export async function getCotizacionOficial(force = false): Promise<Cotizacion> {
       venta,
       actualizado: null, // la home no expone un timestamp por recuadro; usamos fetchedAt
       fetchedAt: new Date().toISOString(),
+      fuente: "dolarhoy",
     };
     cache = { data, at: now };
     return data;

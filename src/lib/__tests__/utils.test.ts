@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { calcularFechaPagoTarjeta, calcularFechaPagoSueldo, roundMoney, formatPesos, formatMes } from "@/lib/utils";
+import { calcularFechaPagoTarjeta, calcularFechaPagoSueldo, roundMoney, formatPesos, formatMes, sumarDias } from "@/lib/utils";
 
 describe("calcularFechaPagoTarjeta", () => {
   it("consumo antes del cierre se paga el mes siguiente", () => {
@@ -37,5 +37,12 @@ describe("formateadores", () => {
   it("formatMes largo y corto", () => {
     expect(formatMes("2026-09")).toBe("Septiembre 2026");
     expect(formatMes("2026-09", true)).toBe("Sep '26");
+  });
+});
+
+describe("sumarDias", () => {
+  it("suma días cruzando fin de mes y de año, sin correr el día por UTC", () => {
+    expect(sumarDias("2026-01-31", 1)).toBe("2026-02-01");
+    expect(sumarDias("2026-12-20", 45)).toBe("2027-02-03");
   });
 });

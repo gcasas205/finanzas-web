@@ -1,13 +1,13 @@
 "use client";
 
 import { useState, useMemo, useEffect, useRef } from "react";
-import { Plus, Search, Edit2, Trash2, X } from "lucide-react";
+import { Plus, Search, Edit2, Trash2, X, Copy, Download, ListChecks } from "lucide-react";
 import { toast } from "sonner";
 import type { Transaction, AppConfig, BucketOrigen, TransactionSource } from "@/types";
 import { formatPesos, formatFecha, fechaToMes, formatMes, uniqueMonths, calcularFechaPagoTarjeta, hoyLocal } from "@/lib/utils";
-import { ORIGEN_LABEL } from "@/lib/ahorro-calc";
-import { CATEGORIES, autoCategorizar, getCategoryColor } from "@/lib/categories";
-import { useTransactions } from "@/components/DataProvider";
+import { origenesDisponibles } from "@/lib/ahorro-calc";
+import { autoCategorizar } from "@/lib/categories";
+import { useTransactions, useCategorias } from "@/components/DataProvider";
 import { UsdAmount } from "@/components/UsdAmount";
 import LogoLoader from "@/components/LogoLoader";
 import { ErrorState, StaleDataBanner } from "@/components/ui/States";
@@ -20,19 +20,32 @@ import { Button, buttonClasses } from "@/components/ui/Button";
 import { Segmented } from "@/components/ui/Segmented";
 import { EmptyState } from "@/components/ui/States";
 import { useSearchParams, useRouter } from "next/navigation";
+import { transactionsToCsv, descargarArchivo } from "@/lib/csv";
+import { RecurrentesPendientes } from "@/components/views/RecurrentesPendientes";
+import { esSueldo, type DatosRecibo } from "@/lib/sueldos";
+import { sueldosApi } from "@/lib/api";
+import useSWR from "swr";
 
 interface Props { config: AppConfig; }
 
 export default function Transactions({ config }: Props) {
   const { transactions, isLoading: loading, error, refresh } = useTransactions();
+  const { categorias, colorDe } = useCategorias();
   const [filterMonth, setFilterMonth] = useState("");
   const [filterType, setFilterType] = useState<"todos" | "ingreso" | "egreso">("todos");
+  const [filterCategoria, setFilterCategoria] = useState("");
+  const [filterFuente, setFilterFuente] = useState<"" | TransactionSource>("");
+  const [filterMoneda, setFilterMoneda] = useState<"todas" | "ARS" | "USD">("todas");
   const [search, setSearch] = useState("");
   const [editing, setEditing] = useState<Transaction | null>(null);
+  const [prefill, setPrefill] = useState<Transaction | null>(null);
+  // Selección múltiple para recategorizar en lote
+  const [selecting, setSelecting] = useState(false);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
   const [showForm, setShowForm] = useState(false);
 
   const [visibleCount, setVisibleCount] = useState(50);
-  const { confirm, dialog: confirmDialog } = useConfirm();
+  const { confirmar, dialog: confirmDialog } = useConfirm();
 
   // `/transactions?nuevo=1` abre el alta directo (lo usan los estados vacíos de otras vistas).
   const searchParams = useSearchParams();
@@ -45,23 +58,44 @@ export default function Transactions({ config }: Props) {
     }
   }, [searchParams, router]);
 
-  const openNew = () => { setEditing(null); setShowForm(true); };
-  const hasFilters = Boolean(search || filterMonth || filterType !== "todos");
-  const clearFilters = () => { setSearch(""); setFilterMonth(""); setFilterType("todos"); };
+  const openNew = () => { setEditing(null); setPrefill(null); setShowForm(true); };
+  const openEdit = (tx: Transaction) => { setEditing(tx); setPrefill(null); setShowForm(true); };
+  const openDuplicate = (tx: Transaction) => { setEditing(null); setPrefill(tx); setShowForm(true); };
+  const hasFilters = Boolean(search || filterMonth || filterType !== "todos" || filterCategoria || filterFuente || filterMoneda !== "todas");
+  const clearFilters = () => {
+    setSearch(""); setFilterMonth(""); setFilterType("todos");
+    setFilterCategoria(""); setFilterFuente(""); setFilterMoneda("todas");
+  };
   const months = useMemo(() => uniqueMonths(transactions), [transactions]);
 
   const filtered = useMemo(() => {
     return transactions.filter(t => {
       if (filterMonth && fechaToMes(t.fechaPago) !== filterMonth) return false;
       if (filterType !== "todos" && t.tipo !== filterType) return false;
+      if (filterCategoria && t.categoria !== filterCategoria) return false;
+      if (filterFuente && t.fuente !== filterFuente) return false;
+      if (filterMoneda !== "todas" && (t.moneda || "ARS") !== filterMoneda) return false;
       if (search) {
         const s = search.toLowerCase();
-        if (!t.descripcion.toLowerCase().includes(s) &&
-            !t.categoria.toLowerCase().includes(s)) return false;
+        const campos = [t.descripcion, t.categoria, t.subcategoria, t.notas];
+        if (!campos.some(c => c?.toLowerCase().includes(s))) return false;
       }
       return true;
     }).sort((a, b) => b.fechaPago.localeCompare(a.fechaPago));
-  }, [transactions, filterMonth, filterType, search]);
+  }, [transactions, filterMonth, filterType, filterCategoria, filterFuente, filterMoneda, search]);
+
+  const toggleSelected = (id: string) => setSelected(prev => {
+    const next = new Set(prev);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    return next;
+  });
+  const stopSelecting = () => { setSelecting(false); setSelected(new Set()); };
+
+  const exportCsv = () => {
+    const sufijo = filterMonth || hoyLocal();
+    descargarArchivo(`movimientos-${sufijo}.csv`, transactionsToCsv(filtered));
+    toast.success(`${filtered.length} movimiento${filtered.length === 1 ? "" : "s"} exportado${filtered.length === 1 ? "" : "s"}`);
+  };
 
   const visibleRows = filtered.slice(0, visibleCount);
   const hasMore = filtered.length > visibleCount;
@@ -81,19 +115,27 @@ export default function Transactions({ config }: Props) {
   }, [filtered]);
 
   const handleDelete = async (tx: Transaction) => {
-    const ok = await confirm({
+    // Cuotas siguientes de la misma compra (generadas juntas)
+    const siguientes = tx.grupoCuotas
+      ? transactions.filter(t => t.grupoCuotas === tx.grupoCuotas && t.cuotaNumero > tx.cuotaNumero).length
+      : 0;
+    const { ok, opcion } = await confirmar({
       title: "Eliminar movimiento",
       description: (
         <>
           Vas a eliminar <strong className="text-paper">{tx.descripcion}</strong> (
-          {tx.moneda === "USD" ? <UsdAmount value={tx.monto} /> : formatPesos(tx.monto)}). No se puede deshacer.
+          {tx.moneda === "USD" ? <UsdAmount value={tx.monto} /> : formatPesos(tx.monto)}
+          {tx.cuotaTotal > 1 ? `, cuota ${tx.cuotaNumero}/${tx.cuotaTotal}` : ""}). No se puede deshacer.
         </>
       ),
+      ...(siguientes > 0
+        ? { opcion: { label: `Eliminar también las ${siguientes} cuota${siguientes === 1 ? "" : "s"} siguiente${siguientes === 1 ? "" : "s"}`, marcada: true } }
+        : {}),
     });
     if (!ok) return;
     try {
-      await transactionsApi.remove(tx.id);
-      toast.success(`"${tx.descripcion}" eliminado`);
+      const r = await transactionsApi.remove(tx.id, siguientes > 0 && opcion);
+      toast.success(r.borrados > 1 ? `"${tx.descripcion}" eliminado (${r.borrados} cuotas)` : `"${tx.descripcion}" eliminado`);
       refresh();
     } catch (e) {
       toast.error(errorMessage(e, "No se pudo eliminar el movimiento"), { duration: 7000 });
@@ -115,11 +157,24 @@ export default function Transactions({ config }: Props) {
             Cada <em className="italic">peso</em>
           </h1>
         </div>
-        <Button onClick={openNew}>
-          <Plus className="w-4 h-4" aria-hidden="true" />
-          Nuevo
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="secundario" onClick={exportCsv} disabled={filtered.length === 0} aria-label="Exportar a CSV lo filtrado">
+            <Download className="w-4 h-4" aria-hidden="true" />
+            <span className="hidden sm:inline">CSV</span>
+          </Button>
+          <Button variant="secundario" onClick={() => (selecting ? stopSelecting() : setSelecting(true))} aria-pressed={selecting}>
+            <ListChecks className="w-4 h-4" aria-hidden="true" />
+            <span className="hidden sm:inline">{selecting ? "Listo" : "Seleccionar"}</span>
+            <span className="sr-only sm:hidden">{selecting ? "Terminar selección" : "Seleccionar varios"}</span>
+          </Button>
+          <Button onClick={openNew}>
+            <Plus className="w-4 h-4" aria-hidden="true" />
+            Nuevo
+          </Button>
+        </div>
       </header>
+
+      <RecurrentesPendientes onCargados={refresh} />
 
       {/* Filters */}
       <div className="surface p-3 sm:p-5 mb-4 sm:mb-6 flex flex-wrap gap-3 sm:gap-4 items-center">
@@ -155,6 +210,41 @@ export default function Transactions({ config }: Props) {
             { value: "todos", label: "Todos" },
             { value: "ingreso", label: "Ingresos" },
             { value: "egreso", label: "Gastos" },
+          ]}
+        />
+
+        <select
+          value={filterCategoria}
+          onChange={(e) => setFilterCategoria(e.target.value)}
+          aria-label="Filtrar por categoría"
+          className="select-native min-h-11 bg-ink-900/60 border border-control text-paper pl-3 pr-9 py-2 text-sm focus:border-amber cursor-pointer"
+        >
+          <option value="">Todas las categorías</option>
+          {categorias.map(c => <option key={c.name} value={c.name}>{c.name}</option>)}
+        </select>
+
+        <select
+          value={filterFuente}
+          onChange={(e) => setFilterFuente(e.target.value as "" | TransactionSource)}
+          aria-label="Filtrar por fuente"
+          className="select-native min-h-11 bg-ink-900/60 border border-control text-paper pl-3 pr-9 py-2 text-sm focus:border-amber cursor-pointer"
+        >
+          <option value="">Todas las fuentes</option>
+          <option value="manual">Manual / Efectivo</option>
+          <option value="tarjeta">Tarjeta</option>
+          <option value="recibo">Recibo de sueldo</option>
+        </select>
+
+        <Segmented
+          label="Filtrar por moneda"
+          size="sm"
+          className="w-auto"
+          value={filterMoneda}
+          onChange={setFilterMoneda}
+          options={[
+            { value: "todas", label: "Todas" },
+            { value: "ARS", label: "ARS" },
+            { value: "USD", label: "USD" },
           ]}
         />
 
@@ -196,6 +286,13 @@ export default function Transactions({ config }: Props) {
         </div>
       </div>
 
+      {selecting && (
+        <RecategorizarBar
+          ids={Array.from(selected)}
+          onDone={() => { stopSelecting(); refresh(); }}
+        />
+      )}
+
       {/* Table */}
       <div className="surface overflow-hidden">
         <div className="overflow-x-auto">
@@ -204,18 +301,29 @@ export default function Transactions({ config }: Props) {
           <caption className="sr-only">Movimientos</caption>
           <thead>
             <tr className="hairline-b">
+              {selecting && (
+                <th scope="col" className="pl-6 py-4 w-10">
+                  <input
+                    type="checkbox"
+                    aria-label="Seleccionar todos los filtrados"
+                    checked={filtered.length > 0 && filtered.every(t => selected.has(t.id))}
+                    onChange={(e) => setSelected(e.target.checked ? new Set(filtered.map(t => t.id)) : new Set())}
+                    className="w-4 h-4 accent-paper"
+                  />
+                </th>
+              )}
               <th scope="col" className="eyebrow text-left px-6 py-4">Pago</th>
               <th scope="col" className="eyebrow text-left px-2 py-4">Consumo</th>
               <th scope="col" className="eyebrow text-left px-2 py-4">Descripción</th>
               <th scope="col" className="eyebrow text-left px-2 py-4">Categoría</th>
               <th scope="col" className="eyebrow text-right px-2 py-4">Monto</th>
               <th scope="col" className="eyebrow text-center px-2 py-4">Cuota</th>
-              <th scope="col" className="eyebrow text-right px-6 py-4 w-24">Acciones</th>
+              <th scope="col" className="eyebrow text-right px-6 py-4 w-32">Acciones</th>
             </tr>
           </thead>
           <tbody>
             {filtered.length === 0 ? (
-              <tr><td colSpan={7}>
+              <tr><td colSpan={selecting ? 8 : 7}>
                 <ListEmpty hasFilters={hasFilters} onClear={clearFilters} onNew={openNew} />
               </td></tr>
             ) : visibleRows.map((tx) => (
@@ -223,6 +331,17 @@ export default function Transactions({ config }: Props) {
                 key={tx.id}
                 className="hairline-b last:border-0 hover:bg-ink-700/20 transition-colors group"
               >
+                {selecting && (
+                  <td className="pl-6 py-4">
+                    <input
+                      type="checkbox"
+                      aria-label={`Seleccionar ${tx.descripcion}`}
+                      checked={selected.has(tx.id)}
+                      onChange={() => toggleSelected(tx.id)}
+                      className="w-4 h-4 accent-paper"
+                    />
+                  </td>
+                )}
                 <td className="px-6 py-4 text-sm text-paper tabular font-mono">{formatFecha(tx.fechaPago)}</td>
                 <td className="px-2 py-4 text-xs text-ink-300 tabular font-mono">
                   {tx.fechaConsumo !== tx.fechaPago ? formatFecha(tx.fechaConsumo) : "—"}
@@ -233,7 +352,7 @@ export default function Transactions({ config }: Props) {
                 </td>
                 <td className="px-2 py-4">
                   <div className="inline-flex items-center gap-2">
-                    <div className="w-1.5 h-1.5 rounded-full" style={{ background: getCategoryColor(tx.categoria) }} />
+                    <div className="w-1.5 h-1.5 rounded-full" style={{ background: colorDe(tx.categoria) }} />
                     <span className="text-xs text-ink-200">{tx.categoria}</span>
                   </div>
                 </td>
@@ -246,7 +365,14 @@ export default function Transactions({ config }: Props) {
                 <td className="px-6 py-4 text-right">
                   <div className="inline-flex gap-1 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity">
                     <button
-                      onClick={() => { setEditing(tx); setShowForm(true); }}
+                      onClick={() => openDuplicate(tx)}
+                      className="p-2.5 text-ink-300 hover:text-paper transition-colors"
+                      aria-label={`Duplicar ${tx.descripcion}`}
+                    >
+                      <Copy className="w-4 h-4" />
+                    </button>
+                    <button
+                      onClick={() => openEdit(tx)}
                       className="p-2.5 text-ink-300 hover:text-paper transition-colors"
                       aria-label={`Editar ${tx.descripcion}`}
                     >
@@ -272,8 +398,17 @@ export default function Transactions({ config }: Props) {
             <ListEmpty hasFilters={hasFilters} onClear={clearFilters} onNew={openNew} />
           ) : visibleRows.map((tx) => (
             <div key={tx.id} className="p-4 flex flex-col gap-3">
-              <div className="flex justify-between items-start">
-                <div>
+              <div className="flex justify-between items-start gap-3">
+                {selecting && (
+                  <input
+                    type="checkbox"
+                    aria-label={`Seleccionar ${tx.descripcion}`}
+                    checked={selected.has(tx.id)}
+                    onChange={() => toggleSelected(tx.id)}
+                    className="w-5 h-5 mt-0.5 shrink-0 accent-paper"
+                  />
+                )}
+                <div className="flex-1 min-w-0">
                   <div className="text-sm text-paper font-medium mb-1">{tx.descripcion}</div>
                   <div className="text-xs text-ink-300 tabular font-mono">Pago: {formatFecha(tx.fechaPago)}</div>
                 </div>
@@ -288,12 +423,19 @@ export default function Transactions({ config }: Props) {
               </div>
               <div className="flex items-center justify-between">
                 <div className="inline-flex items-center gap-1.5">
-                  <div className="w-2 h-2 rounded-full" style={{ background: getCategoryColor(tx.categoria) }} />
+                  <div className="w-2 h-2 rounded-full" style={{ background: colorDe(tx.categoria) }} />
                   <span className="text-xs text-ink-300">{tx.categoria}</span>
                 </div>
                 <div className="flex gap-2 -mr-3.5">
                   <button
-                    onClick={() => { setEditing(tx); setShowForm(true); }}
+                    onClick={() => openDuplicate(tx)}
+                    className="text-ink-300 hover:text-paper p-3.5"
+                    aria-label={`Duplicar ${tx.descripcion}`}
+                  >
+                    <Copy className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={() => openEdit(tx)}
                     className="text-ink-300 hover:text-paper p-3.5"
                     aria-label={`Editar ${tx.descripcion}`}
                   >
@@ -332,6 +474,7 @@ export default function Transactions({ config }: Props) {
       <TransactionForm
         open={showForm}
         editing={editing}
+        prefill={prefill}
         config={config}
         onClose={() => setShowForm(false)}
         onSaved={() => { setShowForm(false); refresh(); }}
@@ -342,6 +485,58 @@ export default function Transactions({ config }: Props) {
 }
 
 // ── Piezas de la lista ───────────────────────────────────────────────────────
+
+/** Barra de selección múltiple: cambia la categoría de todos los elegidos. */
+function RecategorizarBar({ ids, onDone }: { ids: string[]; onDone: () => void }) {
+  const { categorias, subcategoriasDe } = useCategorias();
+  const [categoria, setCategoria] = useState(categorias[0]?.name ?? "Otros");
+  const subs = subcategoriasDe(categoria);
+  const [subcategoria, setSubcategoria] = useState(subs[0]);
+  const [saving, setSaving] = useState(false);
+
+  const aplicar = async () => {
+    setSaving(true);
+    try {
+      const r = await transactionsApi.recategorize(ids, categoria, subcategoria);
+      toast.success(`${r.updated} movimiento${r.updated === 1 ? "" : "s"} pasado${r.updated === 1 ? "" : "s"} a ${categoria}`);
+      onDone();
+    } catch (e) {
+      toast.error(errorMessage(e, "No se pudo cambiar la categoría"), { duration: 7000 });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="surface p-3 sm:p-4 mb-4 flex flex-wrap items-center gap-3" role="region" aria-label="Acciones sobre la selección">
+      <span className="text-sm text-paper tabular" aria-live="polite">
+        {ids.length} seleccionado{ids.length === 1 ? "" : "s"}
+      </span>
+      <select
+        value={categoria}
+        onChange={(e) => {
+          setCategoria(e.target.value);
+          setSubcategoria(subcategoriasDe(e.target.value)[0]);
+        }}
+        aria-label="Nueva categoría"
+        className="select-native min-h-11 bg-ink-900/60 border border-control text-paper pl-3 pr-9 py-2 text-sm focus:border-amber cursor-pointer"
+      >
+        {categorias.map(c => <option key={c.name} value={c.name}>{c.name}</option>)}
+      </select>
+      <select
+        value={subcategoria}
+        onChange={(e) => setSubcategoria(e.target.value)}
+        aria-label="Nueva subcategoría"
+        className="select-native min-h-11 bg-ink-900/60 border border-control text-paper pl-3 pr-9 py-2 text-sm focus:border-amber cursor-pointer"
+      >
+        {subs.map(sc => <option key={sc} value={sc}>{sc}</option>)}
+      </select>
+      <Button variant="secundario" onClick={aplicar} isLoading={saving} disabled={ids.length === 0}>
+        Cambiar categoría
+      </Button>
+    </div>
+  );
+}
 
 /** Monto con signo: verde si entra (ingreso), rojo si sale (gasto). */
 function Monto({ tx }: { tx: Transaction }) {
@@ -368,6 +563,8 @@ function ListEmpty({ hasFilters, onClear, onNew }: { hasFilters: boolean; onClea
 interface FormProps {
   open: boolean;
   editing: Transaction | null;
+  /** Al duplicar: datos para precargar un alta nueva (no se edita el original). */
+  prefill?: Transaction | null;
   config: AppConfig;
   onClose: () => void;
   onSaved: () => void;
@@ -375,9 +572,8 @@ interface FormProps {
 
 type Errors = Partial<Record<string, string>>;
 
-const ORIGENES: BucketOrigen[] = ["regla", "emergencia", "auto", "mud", "vac", "tec", "largo"];
 
-function TransactionForm({ open, editing, config, onClose, onSaved }: FormProps) {
+function TransactionForm({ open, editing, prefill, config, onClose, onSaved }: FormProps) {
   return (
     <Dialog
       open={open}
@@ -387,47 +583,81 @@ function TransactionForm({ open, editing, config, onClose, onSaved }: FormProps)
       size="lg"
     >
       {/* key: cada apertura arranca con el estado del registro elegido */}
-      <TransactionFormBody key={editing?.id ?? "nuevo"} editing={editing} config={config} onClose={onClose} onSaved={onSaved} />
+      <TransactionFormBody
+        key={editing?.id ?? (prefill ? `dup-${prefill.id}` : "nuevo")}
+        editing={editing} prefill={prefill} config={config} onClose={onClose} onSaved={onSaved}
+      />
     </Dialog>
   );
 }
 
-function TransactionFormBody({ editing, config, onClose, onSaved }: Omit<FormProps, "open">) {
+function TransactionFormBody({ editing, prefill, config, onClose, onSaved }: Omit<FormProps, "open">) {
+  const { ahorroConfig } = useTransactions();
+  const { categorias, reglas, subcategoriasDe } = useCategorias();
   const today = hoyLocal();
+  // Valores iniciales: el registro que se edita, o el que se duplica (con fecha de hoy)
+  const base = editing ?? (prefill ? { ...prefill, fechaConsumo: today, fechaPago: today } : null);
   const formRef = useRef<HTMLFormElement>(null);
 
-  const [tipo, setTipo] = useState<"ingreso" | "egreso">(editing?.tipo || "egreso");
-  const [fechaConsumo, setFechaConsumo] = useState(editing?.fechaConsumo || today);
-  const [fechaPago, setFechaPago] = useState(editing?.fechaPago || today);
+  const [tipo, setTipo] = useState<"ingreso" | "egreso">(base?.tipo || "egreso");
+  const [fechaConsumo, setFechaConsumo] = useState(base?.fechaConsumo || today);
+  const [fechaPago, setFechaPago] = useState(base?.fechaPago || today);
   const [fechaPagoAuto, setFechaPagoAuto] = useState(!editing);
-  const [descripcion, setDescripcion] = useState(editing?.descripcion || "");
-  const [monto, setMonto] = useState(editing?.monto?.toString() || "");
-  const [moneda, setMoneda] = useState<"ARS" | "USD">(editing?.moneda || "ARS");
-  const [categoria, setCategoria] = useState(editing?.categoria || "Otros");
-  const [subcategoria, setSubcategoria] = useState(editing?.subcategoria || "Sin categoría");
-  const [fuente, setFuente] = useState<TransactionSource>(editing?.fuente || "manual");
-  const [cuotaTotal, setCuotaTotal] = useState(editing?.cuotaTotal?.toString() || "1");
-  const [cuotaNumero, setCuotaNumero] = useState(editing?.cuotaNumero?.toString() || "1");
-  const [notas, setNotas] = useState(editing?.notas || "");
-  const [origen, setOrigen] = useState<BucketOrigen>(editing?.origen ?? "regla");
-  const [asigMediano, setAsigMediano] = useState(editing?.asigMediano ? String(editing.asigMediano) : "");
-  const [asigLargo, setAsigLargo] = useState(editing?.asigLargo ? String(editing.asigLargo) : "");
+  const [descripcion, setDescripcion] = useState(base?.descripcion || "");
+  const [monto, setMonto] = useState(base?.monto?.toString() || "");
+  const [moneda, setMoneda] = useState<"ARS" | "USD">(base?.moneda || "ARS");
+  const [categoria, setCategoria] = useState(base?.categoria || "Otros");
+  const [subcategoria, setSubcategoria] = useState(base?.subcategoria || "Sin categoría");
+  const [fuente, setFuente] = useState<TransactionSource>(base?.fuente || "manual");
+  const [cuotaTotal, setCuotaTotal] = useState(base?.cuotaTotal?.toString() || "1");
+  const [cuotaNumero, setCuotaNumero] = useState(base?.cuotaNumero?.toString() || "1");
+  const [notas, setNotas] = useState(base?.notas || "");
+  const [origen, setOrigen] = useState<BucketOrigen>(base?.origen ?? "regla");
+  const [asigMediano, setAsigMediano] = useState(base?.asigMediano ? String(base.asigMediano) : "");
+  const [asigLargo, setAsigLargo] = useState(base?.asigLargo ? String(base.asigLargo) : "");
+  // Cuotas: al dar de alta, crear las que faltan; al editar, aplicar a las siguientes
+  const [crearCuotas, setCrearCuotas] = useState(true);
+  const [aplicarAGrupo, setAplicarAGrupo] = useState(false);
+  // Sueldo: datos opcionales del recibo (van a la hoja Sueldos)
+  const [recibo, setRecibo] = useState<Record<keyof DatosRecibo, string>>({
+    empresa: "", cargo: "", periodoTrabajado: "", bruto: "", jubilacion: "", obraSocial: "", ley19032: "", otrosDescuentos: "",
+  });
+  const setReciboCampo = (k: keyof DatosRecibo, v: string) => setRecibo(prev => ({ ...prev, [k]: v }));
+  const esSueldoForm = esSueldo({ tipo, categoria, subcategoria, moneda });
+
+  // Al editar un sueldo, se traen los datos del recibo que ya estaban
+  const sueldos = useSWR(editing && esSueldo(editing) ? "/api/sueldos" : null, () => sueldosApi.list(), { revalidateOnFocus: false });
+  const reciboCargado = useRef(false);
+  useEffect(() => {
+    const previo = sueldos.data?.sueldos.find(sd => sd.txId === editing?.id);
+    if (!previo || reciboCargado.current) return;
+    reciboCargado.current = true;
+    const n = (v: number) => (v ? String(v) : "");
+    setRecibo({
+      empresa: previo.empresa, cargo: previo.cargo, periodoTrabajado: previo.periodoTrabajado,
+      bruto: n(previo.bruto), jubilacion: n(previo.jubilacion), obraSocial: n(previo.obraSocial),
+      ley19032: n(previo.ley19032), otrosDescuentos: n(previo.otrosDescuentos),
+    });
+  }, [sueldos.data, editing?.id]);
   const [saving, setSaving] = useState(false);
   const [errors, setErrors] = useState<Errors>({});
 
-  const subcategories = CATEGORIES.find(c => c.name === categoria)?.subcategories || ["Sin categoría"];
+  const subcategories = subcategoriasDe(categoria);
 
   /** Editar un campo limpia su error. */
   const clear = (field: string) => setErrors(prev => (prev[field] ? { ...prev, [field]: undefined } : prev));
 
   // Auto-categorize on description change (only for new)
   useEffect(() => {
-    if (!editing && descripcion.length > 3) {
-      const auto = autoCategorizar(descripcion);
+    // Al duplicar no se pisa la categoría elegida mientras no cambie la descripción
+    if (!editing && descripcion.length > 3 && descripcion !== prefill?.descripcion) {
+      const auto = autoCategorizar(descripcion, reglas);
       setCategoria(auto.categoria);
       setSubcategoria(auto.subcategoria);
     }
-  }, [descripcion, editing]);
+    // reglas fuera de las deps: no se re-sugiere al llegar reglas nuevas mientras escribís
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [descripcion, editing, prefill?.descripcion]);
 
   // Auto-calculate fechaPago when tarjeta + fechaConsumo
   useEffect(() => {
@@ -492,12 +722,23 @@ function TransactionFormBody({ editing, config, onClose, onSaved }: Omit<FormPro
       notas,
       origen,
       ...(esIngresoUSD ? { asigMediano: parseFloat(asigMediano) || 0, asigLargo: parseFloat(asigLargo) || 0 } : {}),
+      ...(editing?.grupoCuotas ? { grupoCuotas: editing.grupoCuotas, aplicarAGrupo } : {}),
+      ...(!editing && esTarjeta ? { crearCuotas } : {}),
+      ...(esSueldoForm ? { recibo: reciboPayload(recibo) } : {}),
     };
 
     try {
-      if (editing) await transactionsApi.update({ ...payload, id: editing.id });
-      else await transactionsApi.create(payload);
-      toast.success(editing ? `"${payload.descripcion}" actualizado` : `"${payload.descripcion}" guardado`);
+      if (editing) {
+        const r = await transactionsApi.update({ ...payload, id: editing.id });
+        toast.success(r.actualizados > 1
+          ? `"${payload.descripcion}" actualizado en ${r.actualizados} cuotas`
+          : `"${payload.descripcion}" actualizado`);
+      } else {
+        const r = await transactionsApi.create(payload);
+        toast.success(r.creados > 1
+          ? `"${payload.descripcion}" guardado con ${r.creados} cuotas`
+          : `"${payload.descripcion}" guardado`);
+      }
       onSaved();
     } catch (e) {
       // El error del servidor marca su campo; si no tiene campo, va al aviso.
@@ -592,7 +833,7 @@ function TransactionFormBody({ editing, config, onClose, onSaved }: Omit<FormPro
           >
             {(c) => (
               <select {...c} value={origen} onChange={(e) => setOrigen(e.target.value as BucketOrigen)} className="form-input">
-                {ORIGENES.map(o => <option key={o} value={o}>{ORIGEN_LABEL[o]}</option>)}
+                {origenesDisponibles(ahorroConfig).map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
               </select>
             )}
           </Field>
@@ -623,7 +864,7 @@ function TransactionFormBody({ editing, config, onClose, onSaved }: Omit<FormPro
             </div>
             {montoNum > 0 && sinAsignar > 0.005 && (
               <p className="text-xs text-ink-300">
-                Sin asignar: US$ {sinAsignar.toLocaleString("es-AR")}. Irá al piso si falta, o a mediano.
+                Sin asignar: US$ {sinAsignar.toLocaleString("es-AR")}, va a mediano.
               </p>
             )}
           </fieldset>
@@ -675,8 +916,12 @@ function TransactionFormBody({ editing, config, onClose, onSaved }: Omit<FormPro
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field label="Categoría" error={errors.categoria}>
             {(c) => (
-              <select {...c} value={categoria} onChange={(e) => { setCategoria(e.target.value); clear("categoria"); }} className="form-input">
-                {CATEGORIES.map(cat => <option key={cat.name} value={cat.name}>{cat.name}</option>)}
+              <select {...c} value={categoria} onChange={(e) => {
+                setCategoria(e.target.value);
+                setSubcategoria(subcategoriasDe(e.target.value)[0]);
+                clear("categoria");
+              }} className="form-input">
+                {categorias.map(cat => <option key={cat.name} value={cat.name}>{cat.name}</option>)}
               </select>
             )}
           </Field>
@@ -706,7 +951,77 @@ function TransactionFormBody({ editing, config, onClose, onSaved }: Omit<FormPro
                   className="form-input tabular font-mono" />
               )}
             </Field>
+            {(() => {
+              const tot = parseInt(cuotaTotal, 10), num = parseInt(cuotaNumero, 10);
+              if (!(tot > 1) || !(num >= 1) || num > tot) return null;
+              const faltan = tot - num;
+              return (
+                <div className="col-span-2 -mt-1 space-y-2">
+                  <p className="text-xs text-ink-300">
+                    El monto es el de <span className="text-ink-100">cada cuota</span>
+                    {montoNum > 0 && <> · total de la compra {formatPesos(montoNum * tot)}</>}.
+                  </p>
+                  {!editing && faltan > 0 && (
+                    <label className="flex min-h-11 items-center gap-3 text-sm text-ink-100 cursor-pointer">
+                      <input type="checkbox" checked={crearCuotas} onChange={(e) => setCrearCuotas(e.target.checked)}
+                        className="w-4 h-4 accent-paper" />
+                      Crear también las {faltan} cuota{faltan === 1 ? "" : "s"} que faltan, una por mes
+                    </label>
+                  )}
+                  {editing?.grupoCuotas && num < tot && (
+                    <label className="flex min-h-11 items-center gap-3 text-sm text-ink-100 cursor-pointer">
+                      <input type="checkbox" checked={aplicarAGrupo} onChange={(e) => setAplicarAGrupo(e.target.checked)}
+                        className="w-4 h-4 accent-paper" />
+                      Aplicar descripción, categoría y monto también a las cuotas siguientes
+                    </label>
+                  )}
+                </div>
+              );
+            })()}
           </div>
+        )}
+
+        {esSueldoForm && (
+          <fieldset className="surface p-4 space-y-3">
+            <legend className="eyebrow px-1">Datos del recibo (opcional)</legend>
+            <p className="text-xs text-ink-300 leading-relaxed">
+              Este ingreso también se guarda en la hoja Sueldos, como si importaras el recibo. El monto es el neto.
+            </p>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <Field label="Empresa">
+                {(c) => <input {...c} type="text" maxLength={80} value={recibo.empresa}
+                  onChange={(e) => setReciboCampo("empresa", e.target.value)} className="form-input" />}
+              </Field>
+              <Field label="Cargo">
+                {(c) => <input {...c} type="text" maxLength={80} value={recibo.cargo}
+                  onChange={(e) => setReciboCampo("cargo", e.target.value)} className="form-input" />}
+              </Field>
+              <Field label="Período trabajado" hint="Si lo dejás vacío, se toma el mes anterior al cobro (según Ajustes).">
+                {(c) => <input {...c} type="month" value={recibo.periodoTrabajado}
+                  onChange={(e) => setReciboCampo("periodoTrabajado", e.target.value)} className="form-input tabular" />}
+              </Field>
+              <Field label="Bruto">
+                {(c) => <input {...c} type="number" step="0.01" min="0" inputMode="decimal" value={recibo.bruto}
+                  onChange={(e) => setReciboCampo("bruto", e.target.value)} placeholder="0,00" className="form-input tabular font-mono" />}
+              </Field>
+              <Field label="Jubilación">
+                {(c) => <input {...c} type="number" step="0.01" min="0" inputMode="decimal" value={recibo.jubilacion}
+                  onChange={(e) => setReciboCampo("jubilacion", e.target.value)} placeholder="0,00" className="form-input tabular font-mono" />}
+              </Field>
+              <Field label="Obra social">
+                {(c) => <input {...c} type="number" step="0.01" min="0" inputMode="decimal" value={recibo.obraSocial}
+                  onChange={(e) => setReciboCampo("obraSocial", e.target.value)} placeholder="0,00" className="form-input tabular font-mono" />}
+              </Field>
+              <Field label="Ley 19032 (PAMI)">
+                {(c) => <input {...c} type="number" step="0.01" min="0" inputMode="decimal" value={recibo.ley19032}
+                  onChange={(e) => setReciboCampo("ley19032", e.target.value)} placeholder="0,00" className="form-input tabular font-mono" />}
+              </Field>
+              <Field label="Otros descuentos">
+                {(c) => <input {...c} type="number" step="0.01" min="0" inputMode="decimal" value={recibo.otrosDescuentos}
+                  onChange={(e) => setReciboCampo("otrosDescuentos", e.target.value)} placeholder="0,00" className="form-input tabular font-mono" />}
+              </Field>
+            </div>
+          </fieldset>
         )}
 
         <Field label="Notas (opcional)" error={errors.notas}>
@@ -725,4 +1040,15 @@ function TransactionFormBody({ editing, config, onClose, onSaved }: Omit<FormPro
       </DialogActions>
     </form>
   );
+}
+
+/** Campos del recibo del formulario → payload: los vacíos no se mandan (conservan lo guardado). */
+function reciboPayload(r: Record<keyof DatosRecibo, string>): DatosRecibo {
+  const num = (v: string) => (v.trim() === "" ? undefined : parseFloat(v) || 0);
+  const txt = (v: string) => (v.trim() === "" ? undefined : v.trim());
+  return {
+    empresa: txt(r.empresa), cargo: txt(r.cargo), periodoTrabajado: txt(r.periodoTrabajado),
+    bruto: num(r.bruto), jubilacion: num(r.jubilacion), obraSocial: num(r.obraSocial),
+    ley19032: num(r.ley19032), otrosDescuentos: num(r.otrosDescuentos),
+  };
 }

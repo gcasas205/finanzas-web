@@ -101,6 +101,17 @@ Reglas con nombre, para citar en un review:
 - **Confirmaciones destructivas:** `useConfirm()` con el nombre del registro, botón de peligro y "Cancelar"
   fantasma. Nada de `window.confirm`.
 - **Estados vacíos:** `EmptyState` con mensaje y, si aplica, la acción que lo resuelve.
+- **Selección múltiple:** botón "Seleccionar" (secundario, `aria-pressed`) que agrega casillas (`accent-paper`)
+  y una barra de acciones arriba de la lista con el conteo en vivo. "Listo" sale del modo y limpia la selección.
+- **Detalle desplegable:** una fila de lista que abre su detalle es un `button` con `aria-expanded`; lo abierto
+  se marca con fondo `ink-700/50` (voz de selección, nunca ámbar).
+- **Historiales:** lista con fecha en mono, cambios con signo y color de dirección, y "Mostrar más" de a 15.
+- **Presupuesto:** barra `role="meter"` sobre la pista; verde (`positivo`) hasta 85%, neutra (`serie`) de 85% a 100%
+  y roja (`negativo`) al pasarse, siempre con el texto "gastado / tope" y "te pasaste $X" al lado.
+- **Colores de categoría:** sólo los de `CATEGORIA_COLORES` (las categorías por defecto); al crear una se elige de
+  esa lista, nunca un hex libre.
+- **Un primario por vista:** en Ajustes el primario es "Guardar ajustes"; las secciones extra (plan de ahorro,
+  presupuesto, backup) guardan con botón secundario.
 
 ## 7. Componentes (`src/components/ui/`)
 

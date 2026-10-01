@@ -10,8 +10,13 @@ import type {
   AppConfig,
   Cotizacion,
   DolarOperacion,
+  CategoryConfig,
+  MovAhorro,
+  Recurrente,
+  Sueldo,
   Transaction,
 } from "@/types";
+import type { DatosRecibo } from "@/lib/sueldos";
 
 export class ApiError extends Error {
   constructor(
@@ -65,7 +70,7 @@ export async function request<T>(url: string, init?: RequestInit): Promise<T> {
   return (await r.json()) as T;
 }
 
-function sendJson<T>(url: string, method: "POST" | "PUT" | "DELETE", body: unknown): Promise<T> {
+function sendJson<T>(url: string, method: "POST" | "PUT" | "PATCH" | "DELETE", body: unknown): Promise<T> {
   return request<T>(url, {
     method,
     headers: { "Content-Type": "application/json" },
@@ -87,15 +92,62 @@ export type TransactionPayload = Omit<Transaction, "id" | "createdAt" | "fechaPa
   createdAt?: string;
   fechaPago?: string;
   notas?: string;
+  /** Alta en cuotas: crear también las que faltan */
+  crearCuotas?: boolean;
+  /** Edición: aplicar los cambios a las cuotas siguientes del grupo */
+  aplicarAGrupo?: boolean;
+  /** Sueldo cargado a mano: datos del recibo */
+  recibo?: DatosRecibo;
 };
 
 export const transactionsApi = {
   list: () => request<{ transactions: Transaction[] }>("/api/transactions"),
   create: (tx: TransactionPayload) =>
-    sendJson<{ ok: true; transaction: Transaction }>("/api/transactions", "POST", tx),
+    sendJson<{ ok: true; transaction: Transaction; creados: number }>("/api/transactions", "POST", tx),
   update: (tx: TransactionPayload & { id: string }) =>
-    sendJson<{ ok: true; transaction: Transaction }>("/api/transactions", "PUT", tx),
-  remove: (id: string) => sendJson<{ ok: true }>("/api/transactions", "DELETE", { id }),
+    sendJson<{ ok: true; transaction: Transaction; actualizados: number }>("/api/transactions", "PUT", tx),
+  remove: (id: string, grupo = false) =>
+    sendJson<{ ok: true; borrados: number }>("/api/transactions", "DELETE", { id, grupo }),
+  recategorize: (ids: string[], categoria: string, subcategoria: string) =>
+    sendJson<{ ok: true; updated: number }>("/api/transactions", "PATCH", { ids, categoria, subcategoria }),
+};
+
+export const ahorroApi = {
+  guardarConfig: (cfg: {
+    emergenciaObjetivo: number;
+    sp500RetornoPct: number;
+    sobres: Array<{ key?: string; nombre: string; pct: number; objetivo: number; fechaObjetivo?: string }>;
+  }) => sendJson<{ ok: true; config: AhorroConfig }>("/api/ahorro/config", "PUT", cfg),
+  crearPase: (m: Omit<MovAhorro, "id" | "createdAt">) =>
+    sendJson<{ ok: true; movimiento: MovAhorro }>("/api/ahorro/movimientos", "POST", m),
+  borrarPase: (id: string) => sendJson<{ ok: true }>("/api/ahorro/movimientos", "DELETE", { id }),
+};
+
+export const presupuestosApi = {
+  list: () => request<{ presupuestos: Record<string, number> }>("/api/presupuestos"),
+  guardar: (presupuestos: Record<string, number>) =>
+    sendJson<{ ok: true; presupuestos: Record<string, number> }>("/api/presupuestos", "PUT", { presupuestos }),
+};
+
+export const categoriasApi = {
+  guardar: (categorias: CategoryConfig[], renombres: Record<string, string>) =>
+    sendJson<{ ok: true; categorias: CategoryConfig[]; migrados: number }>("/api/categorias", "PUT", { categorias, renombres }),
+};
+
+export type RecurrentePayload = Omit<Recurrente, "id" | "ultimoMes" | "createdAt"> & { id?: string };
+
+export const recurrentesApi = {
+  list: () => request<{ recurrentes: Recurrente[] }>("/api/recurrentes"),
+  crear: (r: RecurrentePayload) => sendJson<{ ok: true; recurrente: Recurrente }>("/api/recurrentes", "POST", r),
+  actualizar: (r: RecurrentePayload & { id: string }) =>
+    sendJson<{ ok: true; recurrente: Recurrente }>("/api/recurrentes", "PUT", r),
+  borrar: (id: string) => sendJson<{ ok: true }>("/api/recurrentes", "DELETE", { id }),
+  cargar: (ids: string[], mes: string) =>
+    sendJson<{ ok: true; cargados: number }>("/api/recurrentes/cargar", "POST", { ids, mes }),
+};
+
+export const sueldosApi = {
+  list: () => request<{ sueldos: Sueldo[] }>("/api/sueldos"),
 };
 
 // ─── Dólares ────────────────────────────────────────────────────────────────

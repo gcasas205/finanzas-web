@@ -15,7 +15,7 @@ Web app de seguimiento financiero personal con importación automática de resú
 | **Dashboard** | KPIs en tiempo real: ingresos, gastos, ahorro, tasa de ahorro, acumulado histórico y proyección Mercado Pago |
 | **Movimientos** | Carga manual con auto-categorización inteligente. Filtros por mes, tipo y búsqueda libre. Gastos en USD con origen de ahorro e ingresos en USD con reparto entre mediano y largo plazo |
 | **Dólares** | Compra/venta de USD con costo promedio ponderado, cotización oficial en vivo (dolarhoy), tenencia y resultado por tipo de cambio. Reparto de ahorro al comprar y origen al vender |
-| **Ahorro** | Ahorro por objetivos sobre tu tenencia de USD: piso de emergencia (se llena primero), sobres de mediano plazo por % y objetivo, y largo plazo (S&P). Todo configurable desde el Sheets |
+| **Ahorro** | Ahorro por objetivos sobre tu tenencia de USD: piso de emergencia (se llena primero), sobres de mediano plazo por % y objetivo (editables desde Ajustes, con fecha objetivo), pases entre destinos y largo plazo (S&P) |
 | **Importar PDF** | Parsea automáticamente resúmenes VISA ICBC y recibos de sueldo (incluye PDFs con encoding PUA) |
 | **Análisis BI** | 4 tabs: Tendencias, Categorías (con filtro por mes), Proyección Mercado Pago, Comparativa mensual |
 | **Fechas duales** | Cada gasto tiene fecha de consumo + fecha de pago real. Sueldos se asignan al mes de cobro |
@@ -263,7 +263,7 @@ Registrás compras y ventas de USD con su precio. La app calcula tu tenencia con
 
 La solapa Ahorro es una **capa de asignación sobre tu tenencia de dólares** — no es plata aparte. Invariante: `piso + mediano + largo = tenencia neta de USD`.
 
-- **Entradas** (compra de USD, o ingreso en USD): el **piso de emergencia se llena primero** de forma automática; el excedente se reparte según la intención mediano/largo que cargás en ese movimiento (variable mes a mes, ideal para el aguinaldo). Sin intención, el excedente va a mediano.
+- **Entradas** (compra de USD, o ingreso en USD): el **piso de emergencia se llena primero** de forma automática; del excedente, los montos que asignás a mediano y largo en ese movimiento son exactos (variable mes a mes, ideal para el aguinaldo) y lo que no asignás va a mediano. Si el piso se lleva parte y lo asignado ya no entra, se achica en proporción.
 - **Mediano plazo**: un pozo que se reparte entre los sobres (auto, mudanza, vacaciones, tecnología) según los **% generales** de la hoja Config. Si un sobre llega a su objetivo, el excedente se redistribuye entre los que faltan.
 - **Salidas** (venta de USD, o gasto en USD): descuentan de un bucket por **origen** — "regla" automática (mediano proporcional → largo → piso) o un sobre puntual (ej. usar solo los de Tecnología).
 - **Largo plazo**: USD apartados para el S&P (no se valúa la posición acá); la proyección a 15/20 años es solo ilustrativa.
@@ -380,7 +380,27 @@ Algunos PDFs usan fuentes con encoding especial. La app soporta Unicode PUA pero
 
 - **Reparto del ahorro en ingresos USD**: al cargar un ingreso en dólares desde Movimientos elegís cuánto va a mediano y cuánto a largo, igual que al comprar USD. El piso se cubre primero; lo no asignado va a mediano.
 - Columnas nuevas al final de la hoja `Transacciones` (asigMediano, asigLargo); migración automática del encabezado al arrancar. Los ingresos USD anteriores quedan sin reparto y se comportan como antes.
-- ESLint configurado (`npm run lint`).
+- ESLint configurado (`npm run lint`) y CI de back y front en GitHub Actions.
+- **Fix — reparto del ahorro**: los montos asignados a mediano/largo ahora son exactos y lo no asignado va a mediano (antes se usaban como proporción y todo el excedente seguía esa proporción). Los saldos de los sobres pueden cambiar respecto de antes.
+- **Fix — "Lo que viene"**: los gastos en USD se muestran en dólares y los pagos del día ya no quedan afuera por la zona horaria.
+- **Importar sin duplicar**: al importar un resumen se omiten los movimientos que ya estaban cargados (con opción de incluirlos igual).
+- **Importar resumen VISA**: los consumos en USD entran en dólares (descuentan tu tenencia), impuestos y comisiones se importan en Finanzas y los créditos como reintegro. La vista previa separa totales por moneda y muestra el saldo del resumen.
+- **Dólares**: cotización oficial desde dolarapi.com (dolarhoy queda de respaldo), ganancia realizada en ventas y lista en el celular.
+- **Movimientos**: filtros por categoría, fuente y moneda; búsqueda en notas y subcategoría; duplicar; recategorizar varios a la vez; exportar a CSV.
+- **Ahorro**: historial de qué entró y salió de cada destino; el aporte promedio a largo plazo cuenta todos los meses.
+- **Análisis**: vista "pesos de hoy" ajustada por inflación (IPC INDEC vía argentinadatos.com), comparativa contra hace un año o el promedio de 3 meses, detalle por categoría y nueva pestaña Hábitos (suscripciones y gastos hormiga).
+- **Resumen**: próximo resumen de tarjeta a pagar y meses futuros en el selector.
+- **Ajustes**: copia de seguridad de toda la planilla en un archivo.
+- **Sueldo cargado a mano**: un ingreso en Ingresos → Sueldo se guarda también en la hoja `Sueldos` (como al importar el recibo), con datos opcionales del recibo (empresa, bruto, descuentos, período trabajado). Editarlo o borrarlo mantiene la hoja al día. Nueva pestaña **Sueldo** en Análisis con la evolución del neto y el bruto, también en pesos de hoy.
+- **Cuotas futuras**: al cargar una compra en cuotas con tarjeta (o importar un resumen) se crean también las cuotas que faltan, una por mes. Se pueden editar o borrar juntas.
+- Columnas nuevas al final: `Transacciones` R (`grupoCuotas`) y `Sueldos` N (`txId`, vincula el sueldo con su movimiento).
+- **Plan de ahorro desde Ajustes**: piso, rendimiento supuesto y sobres editables (crear, renombrar, quitar), cada uno con fecha objetivo opcional y cuánto juntar por mes para llegar. Se sigue guardando en la hoja `Config` (claves nuevas `sobres_lista`, `sobre_<clave>_nombre`, `sobre_<clave>_fecha`; las planillas viejas siguen funcionando).
+- **Mover entre destinos**: pases de plata entre piso, sobres y largo plazo sin tocar la tenencia (pestaña nueva `MovAhorro`).
+- **Presupuesto mensual por categoría**: se define en Ajustes (claves `presupuesto:<Categoría>` en `Config`) y el Resumen muestra cuánto llevás gastado de cada uno.
+- **Categorías editables** desde Ajustes (pestaña nueva `Categorias`, sembrada con las de siempre). Renombrar una actualiza movimientos, presupuesto y reglas.
+- **Autocategorización que aprende**: cuando corregís la categoría de un comercio (al cargar, editar, recategorizar o en la vista previa del resumen), se guarda una regla en la pestaña nueva `Reglas` y la próxima vez se sugiere sola.
+- **Gastos fijos**: alquiler, prepaga, suscripciones… se definen en Ajustes (pestaña nueva `Recurrentes`) y cada mes Movimientos avisa cuáles faltan y los carga con un toque.
+- El backup incluye también pases de ahorro, presupuestos, categorías, reglas y gastos fijos.
 
 ### v6.0
 

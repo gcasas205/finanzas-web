@@ -56,6 +56,20 @@ describe("resumenDolar", () => {
   });
 });
 
+describe("resultado realizado", () => {
+  it("vender por encima del costo promedio realiza ganancia", () => {
+    const r = resumenDolar([
+      op({ fecha: "2026-01-01", montoUSD: 100, precioARS: 1000, totalARS: 100000 }),
+      op({ fecha: "2026-02-01", montoUSD: 100, precioARS: 1200, totalARS: 120000 }),
+      op({ fecha: "2026-03-01", tipo: "venta", montoUSD: 50, precioARS: 1300, totalARS: 65000 }),
+    ]);
+    // costo promedio 1100 → 50 USD costaron 55.000 y se vendieron a 65.000
+    expect(r.resultadoRealizadoARS).toBeCloseTo(10000, 2);
+    expect(r.tenenciaUSD).toBe(150);
+    expect(r.precioPromedioCompra).toBeCloseTo(1100, 2);
+  });
+});
+
 describe("computeAhorro", () => {
   const cfg: AhorroConfig = {
     emergenciaObjetivo: 1000,
@@ -94,5 +108,68 @@ describe("computeAhorro", () => {
     expect(r.emergencia.balance).toBe(1000);
     expect(r.largo.balance).toBe(400);
     expect(r.mediano.balance).toBe(100);
+  });
+  it("los montos asignados son exactos y lo no asignado va a mediano", () => {
+    const r = computeAhorro(
+      [
+        op({ fecha: "2026-01-01", montoUSD: 1000 }),
+        op({ fecha: "2026-02-01", montoUSD: 1000, asigLargo: 100 }),
+      ],
+      [],
+      cfg,
+    );
+    expect(r.largo.balance).toBe(100);
+    expect(r.mediano.balance).toBe(900);
+  });
+  it("si el piso se lleva parte, lo asignado se achica en proporción", () => {
+    // piso vacío (1000): de 1200 quedan 200 para repartir; se pidió 300 mediano + 100 largo
+    const r = computeAhorro([op({ montoUSD: 1200, asigMediano: 300, asigLargo: 100 })], [], cfg);
+    expect(r.emergencia.balance).toBe(1000);
+    expect(r.largo.balance).toBe(50);
+    expect(r.mediano.balance).toBe(150);
+  });
+  it("el aporte promedio a largo cuenta todos los meses, no sólo los que hubo aporte", () => {
+    const r = computeAhorro(
+      [
+        op({ fecha: "2026-01-01", montoUSD: 1000 }),
+        op({ fecha: "2026-01-15", montoUSD: 400, asigLargo: 400 }),
+        op({ fecha: "2026-04-10", montoUSD: 100 }),
+      ],
+      [],
+      cfg,
+    );
+    expect(r.largo.mesesConAporte).toBe(4); // enero a abril
+    expect(r.largo.aporteMensualProm).toBe(100);
+  });
+  it("arma el historial por bucket, del más nuevo al más viejo", () => {
+    const r = computeAhorro(
+      [
+        op({ fecha: "2026-01-01", montoUSD: 1000 }),
+        op({ fecha: "2026-02-01", montoUSD: 300, asigLargo: 100 }),
+      ],
+      [usdTx({ fechaConsumo: "2026-03-01", fechaPago: "2026-03-01", tipo: "egreso", monto: 50, descripcion: "Libro", origen: "largo" })],
+      cfg,
+    );
+    expect(r.historial[0]).toEqual({ fecha: "2026-03-01", concepto: "Gasto: Libro", cambios: { largo: -50 } });
+    expect(r.historial[1].cambios.largo).toBe(100);
+    expect(r.historial[2].cambios.emergencia).toBe(1000);
+  });
+  it("los pases mueven plata entre destinos sin cambiar la tenencia", () => {
+    const r = computeAhorro(
+      [op({ fecha: "2026-01-01", montoUSD: 2000 })],
+      [],
+      cfg,
+      [{ id: "p1", fecha: "2026-02-01", desde: "auto", hacia: "largo", montoUSD: 200, notas: "", createdAt: "" }],
+    );
+    expect(r.largo.balance).toBe(200);
+    expect(r.mediano.sobres.find((x) => x.key === "auto")?.balance).toBe(300);
+    expect(r.tenenciaNeta).toBe(2000);
+    expect(Math.abs(r.descuadre)).toBeLessThan(0.01);
+    expect(r.historial[0]).toMatchObject({ paseId: "p1", cambios: { auto: -200, largo: 200 } });
+  });
+  it("funciona con sobres propios", () => {
+    const propio: AhorroConfig = { ...cfg, sobres: [{ key: "viaje_ab12", nombre: "Viaje", pct: 100, objetivo: 5000 }] };
+    const r = computeAhorro([op({ montoUSD: 1500 })], [], propio);
+    expect(r.mediano.sobres[0]).toMatchObject({ key: "viaje_ab12", balance: 500 });
   });
 });
