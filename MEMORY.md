@@ -6,7 +6,7 @@ Memoria del proyecto entre sesiones. Máximo ~50 líneas: resumí o borrá lo qu
 - Los 33 hallazgos de `docs/auditoria-skills.md` (backend, frontend y diseño) están implementados y mergeados en `main`.
 - Últimos cambios: barras móviles sólidas para iOS y vuelta del verde/rojo en montos y confirmaciones.
 - Ingresos USD de Movimientos permiten repartir mediano/largo (columnas P y Q de `Transacciones`), igual que la compra de USD. Filas viejas sin reparto: el excedente va a mediano, como antes.
-- `typecheck` y `lint` limpios, y 46 tests de Vitest en verde (cálculos, validaciones, seguridad).
+- `typecheck` y `lint` limpios, y 65 tests de Vitest en verde (cálculos, validaciones, seguridad).
 - CI en GitHub Actions: `CI Back` (typecheck + Vitest) y `CI Front` (typecheck + lint + build), cada uno se saltea si el PR no toca sus archivos. Pensado para proteger `main` (Vercel despliega producción desde ahí).
 - ESLint configurado con `next/core-web-vitals` en `.eslintrc.js` (sin hallazgos al activarlo).
 
@@ -24,6 +24,9 @@ Memoria del proyecto entre sesiones. Máximo ~50 líneas: resumí o borrá lo qu
 
 - Reparto del ahorro: montos exactos a mediano/largo, lo no asignado va a mediano; si el piso se lleva parte, se achica en proporción (decidido por el usuario, oct 2026).
 - Duplicados al importar: se detectan en el cliente por fecha de consumo + monto + cuota + descripción normalizada (`lib/duplicados.ts`).
+
+- Servicios externos: cotización en dolarapi.com (respaldo dolarhoy) e inflación en api.argentinadatos.com (aprobado por el usuario). Ambos con caché en memoria y respaldo.
+- Usuario usa dólar oficial y no quiere cuentas separadas ni "dónde están los dólares".
 
 ## Aprendizajes y errores a evitar
 - `new Date("AAAA-MM-DD")` es UTC: para comparar días usar textos `AAAA-MM-DD` con `hoyLocal()`/`sumarDias()`.

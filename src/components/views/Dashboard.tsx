@@ -16,6 +16,8 @@ import {
   formatPesos, formatPesosCompact, formatMes, formatFecha, fechaToMes, uniqueMonths, hoyLocal, sumarDias,
 } from "@/lib/utils";
 import { UsdAmount } from "@/components/UsdAmount";
+import { proximoResumen } from "@/lib/tarjeta";
+import { CreditCard } from "lucide-react";
 import { getCategoryColor } from "@/lib/categories";
 import { useTransactions } from "@/components/DataProvider";
 import { resumenDolar, impactoPesosDolar } from "@/lib/dolar-calc";
@@ -36,11 +38,18 @@ export default function Dashboard({ config }: Props) {
   });
 
   // ── Cálculos ──────────────────────────────────────────────────
+  // Meses con datos (incluye futuros: tarjeta y cuotas por pagar), el elegido y el próximo
   const months = useMemo(() => {
-    const m = uniqueMonths(transactions);
-    if (!m.includes(selectedMonth)) m.unshift(selectedMonth);
-    return m.slice(0, 12);
+    const hoy = hoyLocal();
+    const proximo = sumarDias(`${hoy.slice(0, 7)}-01`, 32).slice(0, 7);
+    const set = new Set([...uniqueMonths(transactions), selectedMonth, proximo]);
+    const actual = hoy.slice(0, 7);
+    const todos = Array.from(set).sort().reverse();
+    // Todos los futuros + los 12 más recientes hasta hoy
+    return [...todos.filter(m => m > actual), ...todos.filter(m => m <= actual).slice(0, 12)];
   }, [transactions, selectedMonth]);
+
+  const resumenTarjeta = useMemo(() => proximoResumen(transactions, hoyLocal()), [transactions]);
 
   const monthTransactions = useMemo(
     () => transactions.filter(t => fechaToMes(t.fechaPago) === selectedMonth),
@@ -352,6 +361,31 @@ export default function Dashboard({ config }: Props) {
 
       {/* Upcoming payments */}
       <div className="surface p-4 sm:p-8">
+        {resumenTarjeta && (
+          <div className="mb-6 pb-6 hairline-b flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
+            <div className="flex items-start gap-3">
+              <CreditCard className="w-5 h-5 text-ink-300 mt-1 shrink-0" strokeWidth={1.5} aria-hidden="true" />
+              <div>
+                <div className="eyebrow mb-1">Próximo resumen de tarjeta</div>
+                <div className="text-sm text-ink-200">
+                  Vence el <span className="text-paper">{formatFecha(resumenTarjeta.vence)}</span> ·{" "}
+                  {resumenTarjeta.items} movimiento{resumenTarjeta.items === 1 ? "" : "s"}
+                  {resumenTarjeta.cuotas > 0 && ` (${resumenTarjeta.cuotas} en cuotas)`}
+                </div>
+              </div>
+            </div>
+            <div className="sm:text-right">
+              <div className="display text-3xl tabular text-terra-light">
+                <span aria-hidden="true">−</span>{formatPesos(resumenTarjeta.pesos)}
+              </div>
+              {Math.abs(resumenTarjeta.dolares) >= 0.005 && (
+                <div className="text-sm font-mono tabular text-terra-light">
+                  <span aria-hidden="true">−</span><UsdAmount value={resumenTarjeta.dolares} />
+                </div>
+              )}
+            </div>
+          </div>
+        )}
         <div className="flex items-end justify-between mb-6">
           <div>
             <div className="eyebrow mb-1">Próximos vencimientos</div>

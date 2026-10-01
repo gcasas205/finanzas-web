@@ -384,6 +384,13 @@ Algunos PDFs usan fuentes con encoding especial. La app soporta Unicode PUA pero
 - **Fix — reparto del ahorro**: los montos asignados a mediano/largo ahora son exactos y lo no asignado va a mediano (antes se usaban como proporción y todo el excedente seguía esa proporción). Los saldos de los sobres pueden cambiar respecto de antes.
 - **Fix — "Lo que viene"**: los gastos en USD se muestran en dólares y los pagos del día ya no quedan afuera por la zona horaria.
 - **Importar sin duplicar**: al importar un resumen se omiten los movimientos que ya estaban cargados (con opción de incluirlos igual).
+- **Importar resumen VISA**: los consumos en USD entran en dólares (descuentan tu tenencia), impuestos y comisiones se importan en Finanzas y los créditos como reintegro. La vista previa separa totales por moneda y muestra el saldo del resumen.
+- **Dólares**: cotización oficial desde dolarapi.com (dolarhoy queda de respaldo), ganancia realizada en ventas y lista en el celular.
+- **Movimientos**: filtros por categoría, fuente y moneda; búsqueda en notas y subcategoría; duplicar; recategorizar varios a la vez; exportar a CSV.
+- **Ahorro**: historial de qué entró y salió de cada destino; el aporte promedio a largo plazo cuenta todos los meses.
+- **Análisis**: vista "pesos de hoy" ajustada por inflación (IPC INDEC vía argentinadatos.com), comparativa contra hace un año o el promedio de 3 meses, detalle por categoría y nueva pestaña Hábitos (suscripciones y gastos hormiga).
+- **Resumen**: próximo resumen de tarjeta a pagar y meses futuros en el selector.
+- **Ajustes**: copia de seguridad de toda la planilla en un archivo.
 
 ### v6.0
 

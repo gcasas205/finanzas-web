@@ -101,6 +101,11 @@ Reglas con nombre, para citar en un review:
 - **Confirmaciones destructivas:** `useConfirm()` con el nombre del registro, botón de peligro y "Cancelar"
   fantasma. Nada de `window.confirm`.
 - **Estados vacíos:** `EmptyState` con mensaje y, si aplica, la acción que lo resuelve.
+- **Selección múltiple:** botón "Seleccionar" (secundario, `aria-pressed`) que agrega casillas (`accent-paper`)
+  y una barra de acciones arriba de la lista con el conteo en vivo. "Listo" sale del modo y limpia la selección.
+- **Detalle desplegable:** una fila de lista que abre su detalle es un `button` con `aria-expanded`; lo abierto
+  se marca con fondo `ink-700/50` (voz de selección, nunca ámbar).
+- **Historiales:** lista con fecha en mono, cambios con signo y color de dirección, y "Mostrar más" de a 15.
 
 ## 7. Componentes (`src/components/ui/`)
 
