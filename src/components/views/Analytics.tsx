@@ -12,11 +12,13 @@ import {
 } from "recharts";
 import { Zap } from "lucide-react";
 import type { Transaction, AppConfig, Sueldo } from "@/types";
-import { formatPesos, formatPesosCompact, formatMes, formatFecha, fechaToMes, uniqueMonths } from "@/lib/utils";
+import { formatPesos, formatPesosCompact, formatMes, formatFecha, fechaToMes, uniqueMonths, hoyLocal } from "@/lib/utils";
 import { request, errorMessage, sueldosApi } from "@/lib/api";
 import { factoresPesosDeHoy, type InflacionMes } from "@/lib/inflacion";
 import { detectarSuscripciones, detectarHormiga, type GastoRecurrente } from "@/lib/habitos";
 import { Segmented } from "@/components/ui/Segmented";
+import { RangoMeses, type Rango } from "@/components/ui/RangoMeses";
+import { serieMensual, ultimosMeses } from "@/lib/series";
 import { useTransactions, useCategorias } from "@/components/DataProvider";
 import { impactoPesosDolar } from "@/lib/dolar-calc";
 import { PALETTE } from "@/lib/palette";
@@ -73,24 +75,12 @@ export default function Analytics({ config }: Props) {
     [acumulado, dolarOps]
   );
 
-  const evolution = useMemo(() => {
-    const map = new Map<string, { ingresos: number; egresos: number }>();
-    for (const t of txsAnalisis) {
-      const mes = fechaToMes(t.fechaPago);
-      const cur = map.get(mes) ?? { ingresos: 0, egresos: 0 };
-      if (t.tipo === "ingreso") cur.ingresos += t.monto; else cur.egresos += t.monto;
-      map.set(mes, cur);
-    }
-    let acum = 0;
-    return Array.from(map.entries())
-      .sort(([a], [b]) => a.localeCompare(b))
-      .slice(-12)
-      .map(([mes, v]) => {
-        const ahorro = v.ingresos - v.egresos;
-        acum += ahorro;
-        return { mes, label: formatMes(mes, true), ...v, ahorro, acumulado: acum };
-      });
-  }, [txsAnalisis]);
+  // Toda la historia hasta el mes actual (sin cuotas por pagar), sin huecos; cada
+  // gráfico elige después cuántos meses mostrar.
+  const evolution = useMemo(
+    () => serieMensual(txsAnalisis, hoyLocal().slice(0, 7)).map(m => ({ ...m, label: formatMes(m.mes, true) })),
+    [txsAnalisis],
+  );
 
   const TABS = [
     { id: "tendencias", label: "Tendencias" },
@@ -213,33 +203,39 @@ interface EvolucionMes {
 }
 
 function TendenciasTab({ evolution }: { evolution: EvolucionMes[] }) {
+  const [rFlujo, setRFlujo] = useState<Rango>(12);
+  const [rAcum, setRAcum] = useState<Rango>(12);
+  const [rAhorro, setRAhorro] = useState<Rango>(12);
   if (!evolution.length) return <Empty />;
+  const flujo = ultimosMeses(evolution, rFlujo);
+  const acum = ultimosMeses(evolution, rAcum);
+  const ahorro = ultimosMeses(evolution, rAhorro);
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 lg:gap-6 [&>*]:min-w-0">
       <div className="surface p-4 sm:p-8">
-        <div className="eyebrow mb-1">Flujo mensual</div>
-        <h3 className="display text-2xl text-paper mb-6">Ingresos vs Gastos</h3>
+        <ChartHeader eyebrow="Flujo mensual" titulo="Ingresos vs Gastos" rango={rFlujo} onRango={setRFlujo} />
         <ResponsiveContainer width="100%" height={300}>
-          <BarChart data={evolution}>
+          <BarChart data={flujo}>
             <CartesianGrid stroke={PALETTE.grilla} strokeDasharray="2 4" vertical={false} />
-            <XAxis dataKey="label" stroke={PALETTE.eje} fontSize={13} tickLine={false} axisLine={false} />
+            <XAxis dataKey="label" stroke={PALETTE.eje} fontSize={13} tickLine={false} axisLine={false}
+              {...ejeMeses(flujo.length)} />
             <YAxis stroke={PALETTE.eje} fontSize={13} tickLine={false} axisLine={false}
               tickFormatter={v => formatPesosCompact(v)} />
             <Tooltip content={<ChartTooltip />} cursor={{ fill: PALETTE.cursor }} />
-            <Bar dataKey="ingresos" fill={PALETTE.positivo} radius={[2,2,0,0]} name="Ingresos" />
-            <Bar dataKey="egresos" fill={PALETTE.negativo} radius={[2,2,0,0]} name="Gastos" />
+            <Bar dataKey="ingresos" fill={PALETTE.positivo} radius={[2,2,0,0]} name="Ingresos" maxBarSize={36} />
+            <Bar dataKey="egresos" fill={PALETTE.negativo} radius={[2,2,0,0]} name="Gastos" maxBarSize={36} />
           </BarChart>
         </ResponsiveContainer>
       </div>
 
       <div className="surface p-4 sm:p-8">
-        <div className="eyebrow mb-1">Acumulado</div>
-        <h3 className="display text-2xl text-paper mb-6">Ahorro acumulado</h3>
+        <ChartHeader eyebrow="Acumulado" titulo="Ahorro acumulado" rango={rAcum} onRango={setRAcum} />
         <ResponsiveContainer width="100%" height={300}>
-          <AreaChart data={evolution}>
+          <AreaChart data={acum}>
             <CartesianGrid stroke={PALETTE.grilla} strokeDasharray="2 4" vertical={false} />
-            <XAxis dataKey="label" stroke={PALETTE.eje} fontSize={13} tickLine={false} axisLine={false} />
+            <XAxis dataKey="label" stroke={PALETTE.eje} fontSize={13} tickLine={false} axisLine={false}
+              {...ejeMeses(acum.length)} />
             <YAxis stroke={PALETTE.eje} fontSize={13} tickLine={false} axisLine={false}
               tickFormatter={v => formatPesosCompact(v)} />
             <Tooltip content={<ChartTooltip />} cursor={false} />
@@ -256,17 +252,17 @@ function TendenciasTab({ evolution }: { evolution: EvolucionMes[] }) {
       </div>
 
       <div className="surface p-4 sm:p-8 col-span-1 lg:col-span-2">
-        <div className="eyebrow mb-1">Tendencia</div>
-        <h3 className="display text-2xl text-paper mb-6">Ahorro mensual</h3>
+        <ChartHeader eyebrow="Tendencia" titulo="Ahorro mensual" rango={rAhorro} onRango={setRAhorro} />
         <ResponsiveContainer width="100%" height={250}>
-          <BarChart data={evolution}>
+          <BarChart data={ahorro}>
             <CartesianGrid stroke={PALETTE.grilla} strokeDasharray="2 4" vertical={false} />
-            <XAxis dataKey="label" stroke={PALETTE.eje} fontSize={13} tickLine={false} axisLine={false} />
+            <XAxis dataKey="label" stroke={PALETTE.eje} fontSize={13} tickLine={false} axisLine={false}
+              {...ejeMeses(ahorro.length)} />
             <YAxis stroke={PALETTE.eje} fontSize={13} tickLine={false} axisLine={false}
               tickFormatter={v => formatPesosCompact(v)} />
             <Tooltip content={<ChartTooltip />} cursor={{ fill: PALETTE.cursor }} />
-            <Bar dataKey="ahorro" name="Ahorro" radius={[2,2,0,0]}>
-              {evolution.map((e, i) => (
+            <Bar dataKey="ahorro" name="Ahorro" radius={[2,2,0,0]} maxBarSize={56}>
+              {ahorro.map((e, i) => (
                 <Cell key={i} fill={e.ahorro >= 0 ? PALETTE.positivo : PALETTE.negativo} />
               ))}
             </Bar>
@@ -648,6 +644,7 @@ function ListaHabitos({ eyebrow, titulo, explicacion, total, items, vacio }: {
 // ── Sueldo ───────────────────────────────────────────────────────────────────
 
 function SueldoTab({ sueldos, factor }: { sueldos: Sueldo[]; factor: ((mes: string) => number) | null }) {
+  const [rango, setRango] = useState<Rango>(12);
   // Un punto por mes de cobro (si hay dos recibos el mismo mes, se suman)
   const datos = useMemo(() => {
     const map = new Map<string, { bruto: number; neto: number; descuentos: number }>();
@@ -673,6 +670,7 @@ function SueldoTab({ sueldos, factor }: { sueldos: Sueldo[]; factor: ((mes: stri
   const haceUnAnio = datos.find(d => d.mes === mesMas(ultimo.mes, -12));
   const variacion = haceUnAnio && haceUnAnio.neto > 0 ? (ultimo.neto / haceUnAnio.neto - 1) * 100 : null;
   const hayBruto = datos.some(d => d.bruto > 0);
+  const visibles = ultimosMeses(datos, rango);
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 lg:gap-6 [&>*]:min-w-0">
@@ -697,12 +695,12 @@ function SueldoTab({ sueldos, factor }: { sueldos: Sueldo[]; factor: ((mes: stri
         )}
       </div>
       <div className="lg:col-span-8 surface p-4 sm:p-8">
-        <div className="eyebrow mb-1">Evolución</div>
-        <h3 className="display text-2xl text-paper mb-6">Neto{hayBruto ? " y bruto" : ""} por mes de cobro</h3>
+        <ChartHeader eyebrow="Evolución" titulo={`Neto${hayBruto ? " y bruto" : ""} por mes de cobro`} rango={rango} onRango={setRango} />
         <ResponsiveContainer width="100%" height={280}>
-          <LineChart data={datos.slice(-24)}>
+          <LineChart data={visibles}>
             <CartesianGrid stroke={PALETTE.grilla} strokeDasharray="2 4" vertical={false} />
-            <XAxis dataKey="label" stroke={PALETTE.eje} fontSize={13} tickLine={false} axisLine={false} />
+            <XAxis dataKey="label" stroke={PALETTE.eje} fontSize={13} tickLine={false} axisLine={false}
+              {...ejeMeses(visibles.length)} />
             <YAxis stroke={PALETTE.eje} fontSize={13} tickLine={false} axisLine={false} tickFormatter={v => formatPesosCompact(v)} />
             <Tooltip content={<ChartTooltip />} />
             <Line type="monotone" dataKey="neto" name="Neto" stroke={PALETTE.positivo} strokeWidth={2} dot={{ r: 3, fill: PALETTE.positivo }} />
@@ -717,6 +715,26 @@ function SueldoTab({ sueldos, factor }: { sueldos: Sueldo[]; factor: ((mes: stri
 }
 
 // ── Shared ───────────────────────────────────────────────────────────────────
+
+/** Eje de meses: con pocos meses se ven todas las etiquetas; con muchos, se saltean sin pisarse. */
+function ejeMeses(n: number) {
+  return n <= 6 ? { interval: 0 as const } : { interval: "preserveStartEnd" as const, minTickGap: 12 };
+}
+
+/** Encabezado de un gráfico con su selector de período en la esquina. */
+function ChartHeader({ eyebrow, titulo, rango, onRango }: {
+  eyebrow: string; titulo: string; rango: Rango; onRango: (r: Rango) => void;
+}) {
+  return (
+    <div className="flex items-start justify-between gap-3 mb-6">
+      <div className="min-w-0">
+        <div className="eyebrow mb-1">{eyebrow}</div>
+        <h3 className="display text-2xl text-paper">{titulo}</h3>
+      </div>
+      <RangoMeses value={rango} onChange={onRango} className="mt-0.5" />
+    </div>
+  );
+}
 
 function ChartTooltip({ active, payload, label }: ChartTooltipProps) {
   if (!active || !payload?.length) return null;

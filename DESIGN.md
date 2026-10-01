@@ -116,6 +116,11 @@ Reglas con nombre, para citar en un review:
   con las acciones arriba y cada segmentado a todo el ancho con su rótulo.
 - **Barra de filtros:** búsqueda a todo el ancho arriba (con "Limpiar filtros" a la derecha) y desplegables en una
   grilla de 3 columnas (1 en celular).
+- **Período de un gráfico:** `RangoMeses` (12m · 6m · 3m) en la esquina superior derecha del gráfico, discreto
+  (texto mono chico, lo elegido en la voz de selección). Cada gráfico tiene el suyo; por defecto 12 meses. Con 6 o
+  menos meses se ven todas las etiquetas del eje; con más, se saltean sin pisarse. Barras con ancho máximo.
+- **Series en el tiempo:** terminan en el mes actual (las cuotas por pagar no son historia) y rellenan con 0 los
+  meses sin movimientos. Los acumulados se calculan sobre toda la historia, no desde el inicio de la ventana.
 - **Tablas anchas:** la de Movimientos se muestra desde `xl`; por debajo, tarjetas. Una tabla nunca puede esconder
   su columna de acciones detrás de un scroll horizontal.
 - **Editores de listas** (categorías, sobres): una fila por ítem separada por hairline; el nombre manda y los

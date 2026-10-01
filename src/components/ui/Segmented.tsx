@@ -53,7 +53,7 @@ export function Segmented<T extends string>({
             aria-pressed={selected}
             onClick={() => onChange(o.value)}
             className={cn(
-              "flex-1 px-4 text-sm transition-colors",
+              "flex-1 px-4 text-sm whitespace-nowrap transition-colors",
               size === "md" ? "min-h-11" : "min-h-9 px-3 text-xs uppercase tracking-[0.08em]",
               attached && "font-mono",
               selected
