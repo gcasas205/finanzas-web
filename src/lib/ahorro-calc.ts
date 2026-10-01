@@ -155,9 +155,10 @@ function retirar(usd: number, origen: BucketOrigen, st: Estado): void {
 /**
  * Calcula el estado del ahorro procesando TODAS las operaciones que afectan la
  * tenencia de dólares en orden cronológico:
- *   - compra (Dólares) e ingreso USD (Movimientos)  → entran: piso primero, resto según intención mediano:largo.
+ *   - compra (Dólares) e ingreso USD (Movimientos)  → entran: piso primero; del resto, los montos
+ *     asignados a mediano y largo son exactos y lo no asignado va a mediano.
  *   - venta (Dólares) y gasto USD (Movimientos)      → salen: por origen elegido o por la regla automática.
- * Un ingreso USD sin reparto explícito manda el excedente (tras el piso) a mediano.
+ * Si el piso se lleva parte y lo asignado ya no entra en el resto, se achica en proporción.
  */
 export function computeAhorro(
   dolarOps: DolarOperacion[],
@@ -226,14 +227,9 @@ export function computeAhorro(
         const mi = ev.mediano ?? 0;
         const li = ev.largo ?? 0;
         const total = mi + li;
-        let toMed: number, toLargo: number;
-        if (total > 0) {
-          toMed = rem * (mi / total);
-          toLargo = rem * (li / total);
-        } else {
-          toMed = rem; // sin intención → todo a mediano
-          toLargo = 0;
-        }
+        // Montos exactos; si no entran en el resto (el piso se llevó parte), se achican en proporción.
+        const toLargo = total > rem ? li * (rem / total) : li;
+        const toMed = rem - toLargo; // lo asignado a mediano + lo no asignado
         st.largo += toLargo;
         if (toLargo > 0) {
           largoIn += toLargo;

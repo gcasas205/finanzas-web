@@ -23,7 +23,7 @@ export interface Transaction {
    * bucket de ahorro se descuenta: "regla" (automático) o un sobre puntual.
    */
   origen?: BucketOrigen;
-  /** Solo para ingresos en USD: reparto opcional del excedente tras el piso. */
+  /** Solo para ingresos en USD: montos exactos a mediano/largo tras el piso (lo no asignado va a mediano). */
   asigMediano?: number;
   asigLargo?: number;
 }
@@ -64,7 +64,7 @@ export interface DolarOperacion {
   createdAt: string;
   /** Compra: cuántos de los USD comprados van a mediano plazo (el piso se llena primero). */
   asigMediano?: number;
-  /** Compra: cuántos van a largo plazo (S&P). El resto lo absorbe el piso. */
+  /** Compra: cuántos van a largo plazo (S&P). Lo no asignado va a mediano. */
   asigLargo?: number;
   /** Venta: de qué bucket sale ("regla" = automático, o un sobre puntual). */
   origen?: BucketOrigen;

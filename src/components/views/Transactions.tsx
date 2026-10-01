@@ -623,7 +623,7 @@ function TransactionFormBody({ editing, config, onClose, onSaved }: Omit<FormPro
             </div>
             {montoNum > 0 && sinAsignar > 0.005 && (
               <p className="text-xs text-ink-300">
-                Sin asignar: US$ {sinAsignar.toLocaleString("es-AR")}. Irá al piso si falta, o a mediano.
+                Sin asignar: US$ {sinAsignar.toLocaleString("es-AR")}, va a mediano.
               </p>
             )}
           </fieldset>

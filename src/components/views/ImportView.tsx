@@ -11,6 +11,7 @@ import { importApi, errorMessage } from "@/lib/api";
 import { Button } from "@/components/ui/Button";
 import { CATEGORIES } from "@/lib/categories";
 import { useTransactions } from "@/components/DataProvider";
+import { separarDuplicados } from "@/lib/duplicados";
 
 interface Props { config: AppConfig; }
 
@@ -18,7 +19,7 @@ type DocType = "tarjeta" | "sueldo";
 type ParseResult = VisaParsedResult | SueldoParsedResult;
 
 export default function ImportView({ config }: Props) {
-  const { refresh } = useTransactions();
+  const { transactions, refresh } = useTransactions();
   const [docType, setDocType] = useState<DocType>("tarjeta");
   const [file, setFile] = useState<File | null>(null);
   const [parsing, setParsing] = useState(false);
@@ -26,12 +27,22 @@ export default function ImportView({ config }: Props) {
   const [result, setResult] = useState<ParseResult | null>(null);
   // Lista editable de la vista previa de tarjeta
   const [editedTxs, setEditedTxs] = useState<Transaction[]>([]);
+  // Movimientos del resumen que ya estaban en la planilla: se omiten salvo que los sumes
+  const [duplicados, setDuplicados] = useState<Transaction[]>([]);
   const fileRef = useRef<HTMLInputElement>(null);
   const [dragging, setDragging] = useState(false);
 
+  // Sólo al llegar un resultado nuevo: no se recalcula si cambian los datos de fondo.
   useEffect(() => {
-    if (result?.type === "visa") setEditedTxs(result.transactions ?? []);
-    else setEditedTxs([]);
+    if (result?.type === "visa") {
+      const r = separarDuplicados(result.transactions ?? [], transactions);
+      setEditedTxs(r.nuevos);
+      setDuplicados(r.duplicados);
+    } else {
+      setEditedTxs([]);
+      setDuplicados([]);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [result]);
 
   const handleFileSelect = async (f: File) => {
@@ -156,6 +167,21 @@ export default function ImportView({ config }: Props) {
             transition={{ duration: 0.26, ease: [0.16, 1, 0.3, 1] }}
             className="mt-8"
           >
+            {result.type === "visa" && duplicados.length > 0 && (
+              <div className="surface px-5 py-3 mb-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3" role="status">
+                <p className="text-xs text-ink-200 leading-relaxed">
+                  Omitimos {duplicados.length} movimiento{duplicados.length === 1 ? "" : "s"} que ya
+                  {duplicados.length === 1 ? " estaba cargado" : " estaban cargados"} (misma fecha, monto, cuota y descripción).
+                </p>
+                <Button
+                  variant="secundario"
+                  onClick={() => { setEditedTxs([...editedTxs, ...duplicados]); setDuplicados([]); }}
+                  className="shrink-0"
+                >
+                  Incluirlos igual
+                </Button>
+              </div>
+            )}
             {result.type === "visa" && (
               <VisaPreview
                 result={result}

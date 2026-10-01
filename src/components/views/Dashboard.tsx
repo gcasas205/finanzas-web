@@ -13,8 +13,9 @@ import {
 } from "recharts";
 import type { Transaction, AppConfig } from "@/types";
 import {
-  formatPesos, formatPesosCompact, formatMes, formatFecha, fechaToMes, uniqueMonths,
+  formatPesos, formatPesosCompact, formatMes, formatFecha, fechaToMes, uniqueMonths, hoyLocal, sumarDias,
 } from "@/lib/utils";
+import { UsdAmount } from "@/components/UsdAmount";
 import { getCategoryColor } from "@/lib/categories";
 import { useTransactions } from "@/components/DataProvider";
 import { resumenDolar, impactoPesosDolar } from "@/lib/dolar-calc";
@@ -121,17 +122,13 @@ export default function Dashboard({ config }: Props) {
       .sort((a, b) => b.value - a.value);
   }, [monthTransactionsARS]);
 
-  // Próximos pagos (de tarjeta, en los próximos 30 días desde hoy)
+  // Próximos pagos: egresos con fecha de pago entre hoy y los próximos 45 días.
+  // Se comparan textos AAAA-MM-DD en hora local (new Date("AAAA-MM-DD") es UTC y corre el día).
   const upcomingPayments = useMemo(() => {
-    const today = new Date();
-    const in30 = new Date();
-    in30.setDate(today.getDate() + 45);
+    const hoy = hoyLocal();
+    const hasta = sumarDias(hoy, 45);
     return transactions
-      .filter(t => {
-        if (t.tipo !== "egreso") return false;
-        const fp = new Date(t.fechaPago);
-        return fp >= today && fp <= in30;
-      })
+      .filter(t => t.tipo === "egreso" && t.fechaPago >= hoy && t.fechaPago <= hasta)
       .sort((a, b) => a.fechaPago.localeCompare(b.fechaPago))
       .slice(0, 6);
   }, [transactions]);
@@ -383,7 +380,8 @@ export default function Dashboard({ config }: Props) {
                   </div>
                 </div>
                 <div className="text-sm font-mono tabular text-terra-light ml-4 whitespace-nowrap">
-                  <span aria-hidden="true">−</span>{formatPesos(tx.monto)}
+                  <span aria-hidden="true">−</span>
+                  {tx.moneda === "USD" ? <UsdAmount value={tx.monto} /> : formatPesos(tx.monto)}
                 </div>
               </motion.div>
             ))}

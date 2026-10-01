@@ -263,7 +263,7 @@ Registrás compras y ventas de USD con su precio. La app calcula tu tenencia con
 
 La solapa Ahorro es una **capa de asignación sobre tu tenencia de dólares** — no es plata aparte. Invariante: `piso + mediano + largo = tenencia neta de USD`.
 
-- **Entradas** (compra de USD, o ingreso en USD): el **piso de emergencia se llena primero** de forma automática; el excedente se reparte según la intención mediano/largo que cargás en ese movimiento (variable mes a mes, ideal para el aguinaldo). Sin intención, el excedente va a mediano.
+- **Entradas** (compra de USD, o ingreso en USD): el **piso de emergencia se llena primero** de forma automática; del excedente, los montos que asignás a mediano y largo en ese movimiento son exactos (variable mes a mes, ideal para el aguinaldo) y lo que no asignás va a mediano. Si el piso se lleva parte y lo asignado ya no entra, se achica en proporción.
 - **Mediano plazo**: un pozo que se reparte entre los sobres (auto, mudanza, vacaciones, tecnología) según los **% generales** de la hoja Config. Si un sobre llega a su objetivo, el excedente se redistribuye entre los que faltan.
 - **Salidas** (venta de USD, o gasto en USD): descuentan de un bucket por **origen** — "regla" automática (mediano proporcional → largo → piso) o un sobre puntual (ej. usar solo los de Tecnología).
 - **Largo plazo**: USD apartados para el S&P (no se valúa la posición acá); la proyección a 15/20 años es solo ilustrativa.
@@ -380,7 +380,10 @@ Algunos PDFs usan fuentes con encoding especial. La app soporta Unicode PUA pero
 
 - **Reparto del ahorro en ingresos USD**: al cargar un ingreso en dólares desde Movimientos elegís cuánto va a mediano y cuánto a largo, igual que al comprar USD. El piso se cubre primero; lo no asignado va a mediano.
 - Columnas nuevas al final de la hoja `Transacciones` (asigMediano, asigLargo); migración automática del encabezado al arrancar. Los ingresos USD anteriores quedan sin reparto y se comportan como antes.
-- ESLint configurado (`npm run lint`).
+- ESLint configurado (`npm run lint`) y CI de back y front en GitHub Actions.
+- **Fix — reparto del ahorro**: los montos asignados a mediano/largo ahora son exactos y lo no asignado va a mediano (antes se usaban como proporción y todo el excedente seguía esa proporción). Los saldos de los sobres pueden cambiar respecto de antes.
+- **Fix — "Lo que viene"**: los gastos en USD se muestran en dólares y los pagos del día ya no quedan afuera por la zona horaria.
+- **Importar sin duplicar**: al importar un resumen se omiten los movimientos que ya estaban cargados (con opción de incluirlos igual).
 
 ### v6.0
 

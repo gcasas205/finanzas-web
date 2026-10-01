@@ -95,4 +95,23 @@ describe("computeAhorro", () => {
     expect(r.largo.balance).toBe(400);
     expect(r.mediano.balance).toBe(100);
   });
+  it("los montos asignados son exactos y lo no asignado va a mediano", () => {
+    const r = computeAhorro(
+      [
+        op({ fecha: "2026-01-01", montoUSD: 1000 }),
+        op({ fecha: "2026-02-01", montoUSD: 1000, asigLargo: 100 }),
+      ],
+      [],
+      cfg,
+    );
+    expect(r.largo.balance).toBe(100);
+    expect(r.mediano.balance).toBe(900);
+  });
+  it("si el piso se lleva parte, lo asignado se achica en proporción", () => {
+    // piso vacío (1000): de 1200 quedan 200 para repartir; se pidió 300 mediano + 100 largo
+    const r = computeAhorro([op({ montoUSD: 1200, asigMediano: 300, asigLargo: 100 })], [], cfg);
+    expect(r.emergencia.balance).toBe(1000);
+    expect(r.largo.balance).toBe(50);
+    expect(r.mediano.balance).toBe(150);
+  });
 });
