@@ -233,7 +233,8 @@ async function getSheetsClient(): Promise<{ client: sheets_v4.Sheets; sheetId: s
 const TX_HEADERS = [
   "id", "fechaConsumo", "fechaPago", "tipo", "descripcion", "monto",
   "moneda", "categoria", "subcategoria", "fuente", "cuotaTotal",
-  "cuotaNumero", "notas", "createdAt", "origen"
+  "cuotaNumero", "notas", "createdAt", "origen",
+  "asigMediano", "asigLargo"
 ];
 
 const SUELDO_HEADERS = [
@@ -336,8 +337,8 @@ function optNum(v: SheetCell): number | undefined {
   return v === undefined || v === null || v === "" ? undefined : num(v);
 }
 
-/** Convierte una fila plana a Transaction */
-function rowToTransaction(row: SheetRow): Transaction {
+/** Convierte una fila plana a Transaction (exportada para tests) */
+export function rowToTransaction(row: SheetRow): Transaction {
   return {
     id: str(row[0]),
     fechaConsumo: str(row[1]),
@@ -354,14 +355,18 @@ function rowToTransaction(row: SheetRow): Transaction {
     notas: str(row[12]),
     createdAt: str(row[13], new Date().toISOString()),
     origen: (str(row[14]) || undefined) as Transaction["origen"],
+    asigMediano: optNum(row[15]),
+    asigLargo: optNum(row[16]),
   };
 }
 
-function transactionToRow(t: Transaction): SheetRow {
+/** Convierte una Transaction a fila plana (exportada para tests) */
+export function transactionToRow(t: Transaction): SheetRow {
   return [
     t.id, t.fechaConsumo, t.fechaPago, t.tipo, t.descripcion, t.monto,
     t.moneda, t.categoria, t.subcategoria, t.fuente, t.cuotaTotal,
-    t.cuotaNumero, t.notas, t.createdAt, t.origen ?? ""
+    t.cuotaNumero, t.notas, t.createdAt, t.origen ?? "",
+    t.asigMediano ?? "", t.asigLargo ?? ""
   ];
 }
 

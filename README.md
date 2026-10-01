@@ -13,7 +13,7 @@ Web app de seguimiento financiero personal con importación automática de resú
 | Feature | Descripción |
 |---|---|
 | **Dashboard** | KPIs en tiempo real: ingresos, gastos, ahorro, tasa de ahorro, acumulado histórico y proyección Mercado Pago |
-| **Movimientos** | Carga manual con auto-categorización inteligente. Filtros por mes, tipo y búsqueda libre. Gastos e ingresos en USD con origen de ahorro |
+| **Movimientos** | Carga manual con auto-categorización inteligente. Filtros por mes, tipo y búsqueda libre. Gastos en USD con origen de ahorro e ingresos en USD con reparto entre mediano y largo plazo |
 | **Dólares** | Compra/venta de USD con costo promedio ponderado, cotización oficial en vivo (dolarhoy), tenencia y resultado por tipo de cambio. Reparto de ahorro al comprar y origen al vender |
 | **Ahorro** | Ahorro por objetivos sobre tu tenencia de USD: piso de emergencia (se llena primero), sobres de mediano plazo por % y objetivo, y largo plazo (S&P). Todo configurable desde el Sheets |
 | **Importar PDF** | Parsea automáticamente resúmenes VISA ICBC y recibos de sueldo (incluye PDFs con encoding PUA) |
@@ -375,6 +375,12 @@ Algunos PDFs usan fuentes con encoding especial. La app soporta Unicode PUA pero
 ---
 
 ## Novedades
+
+### Próxima versión
+
+- **Reparto del ahorro en ingresos USD**: al cargar un ingreso en dólares desde Movimientos elegís cuánto va a mediano y cuánto a largo, igual que al comprar USD. El piso se cubre primero; lo no asignado va a mediano.
+- Columnas nuevas al final de la hoja `Transacciones` (asigMediano, asigLargo); migración automática del encabezado al arrancar. Los ingresos USD anteriores quedan sin reparto y se comportan como antes.
+- ESLint configurado (`npm run lint`).
 
 ### v6.0
 

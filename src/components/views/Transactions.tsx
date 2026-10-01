@@ -410,6 +410,8 @@ function TransactionFormBody({ editing, config, onClose, onSaved }: Omit<FormPro
   const [cuotaNumero, setCuotaNumero] = useState(editing?.cuotaNumero?.toString() || "1");
   const [notas, setNotas] = useState(editing?.notas || "");
   const [origen, setOrigen] = useState<BucketOrigen>(editing?.origen ?? "regla");
+  const [asigMediano, setAsigMediano] = useState(editing?.asigMediano ? String(editing.asigMediano) : "");
+  const [asigLargo, setAsigLargo] = useState(editing?.asigLargo ? String(editing.asigLargo) : "");
   const [saving, setSaving] = useState(false);
   const [errors, setErrors] = useState<Errors>({});
 
@@ -436,6 +438,12 @@ function TransactionFormBody({ editing, config, onClose, onSaved }: Omit<FormPro
     }
   }, [fechaConsumo, fuente, tipo, fechaPagoAuto, config.cardCutoffDay, config.cardDueDay]);
 
+  // Reparto del ahorro: sólo para ingresos en USD
+  const esIngresoUSD = moneda === "USD" && tipo === "ingreso";
+  const montoNum = parseFloat(monto) || 0;
+  const asignado = (parseFloat(asigMediano) || 0) + (parseFloat(asigLargo) || 0);
+  const sinAsignar = Math.round((montoNum - asignado) * 100) / 100;
+
   /** Obligatorios y formato, antes de ir al servidor (que valida lo mismo). */
   const validate = (): Errors => {
     const e: Errors = {};
@@ -450,6 +458,9 @@ function TransactionFormBody({ editing, config, onClose, onSaved }: Omit<FormPro
       if (!(tot >= 1)) e.cuotaTotal = "Mínimo 1 cuota";
       if (!(num >= 1)) e.cuotaNumero = "La cuota empieza en 1";
       else if (tot >= 1 && num > tot) e.cuotaNumero = "No puede superar el total de cuotas";
+    }
+    if (esIngresoUSD && montoNum > 0 && sinAsignar < -0.005) {
+      e.asigMediano = `Asignaste US$ ${Math.abs(sinAsignar).toLocaleString("es-AR")} de más respecto del monto del ingreso`;
     }
     return e;
   };
@@ -480,6 +491,7 @@ function TransactionFormBody({ editing, config, onClose, onSaved }: Omit<FormPro
       cuotaNumero: esTarjeta ? parseInt(cuotaNumero, 10) : 1,
       notas,
       origen,
+      ...(esIngresoUSD ? { asigMediano: parseFloat(asigMediano) || 0, asigLargo: parseFloat(asigLargo) || 0 } : {}),
     };
 
     try {
@@ -539,7 +551,7 @@ function TransactionFormBody({ editing, config, onClose, onSaved }: Omit<FormPro
                 step="0.01"
                 min="0"
                 value={monto}
-                onChange={(e) => { setMonto(e.target.value); clear("monto"); }}
+                onChange={(e) => { setMonto(e.target.value); clear("monto"); clear("asigMediano"); }}
                 placeholder="0,00"
                 inputMode="decimal"
                 className="form-input flex-1 tabular font-mono text-lg sm:text-base"
@@ -584,6 +596,37 @@ function TransactionFormBody({ editing, config, onClose, onSaved }: Omit<FormPro
               </select>
             )}
           </Field>
+        )}
+
+        {esIngresoUSD && (
+          <fieldset className="surface p-4 space-y-3">
+            <legend className="eyebrow px-1">Destino del ahorro</legend>
+            <p className="text-xs text-ink-300 leading-relaxed">
+              El piso de emergencia se completa primero de forma automática. Repartí el resto de este ingreso
+              entre mediano y largo plazo.
+            </p>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <Field label="→ Mediano (USD)" error={errors.asigMediano}>
+                {(c) => (
+                  <input {...c} type="number" step="0.01" min="0" inputMode="decimal" value={asigMediano}
+                    onChange={(e) => { setAsigMediano(e.target.value); clear("asigMediano"); }}
+                    placeholder="0,00" className="form-input tabular font-mono" />
+                )}
+              </Field>
+              <Field label="→ Largo · S&P (USD)" error={errors.asigLargo}>
+                {(c) => (
+                  <input {...c} type="number" step="0.01" min="0" inputMode="decimal" value={asigLargo}
+                    onChange={(e) => { setAsigLargo(e.target.value); clear("asigLargo"); clear("asigMediano"); }}
+                    placeholder="0,00" className="form-input tabular font-mono" />
+                )}
+              </Field>
+            </div>
+            {montoNum > 0 && sinAsignar > 0.005 && (
+              <p className="text-xs text-ink-300">
+                Sin asignar: US$ {sinAsignar.toLocaleString("es-AR")}. Irá al piso si falta, o a mediano.
+              </p>
+            )}
+          </fieldset>
         )}
 
         {/* Fechas */}
