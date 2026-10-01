@@ -1,5 +1,8 @@
 import { NextResponse } from "next/server";
-import { listTransactions, listSueldos, listDolarOps, loadConfig, getAhorroConfig } from "@/lib/sheets";
+import {
+  listTransactions, listSueldos, listDolarOps, loadConfig, getAhorroConfig,
+  listMovAhorro, getPresupuestos, listCategorias, listReglas, listRecurrentes,
+} from "@/lib/sheets";
 import { withErrors } from "@/lib/errors";
 
 export const dynamic = "force-dynamic";
@@ -9,15 +12,22 @@ export const dynamic = "force-dynamic";
  * (sin caché). No incluye datos de conexión (Sheet ID ni credenciales).
  */
 export const GET = withErrors(async () => {
-  const [transacciones, sueldos, dolares, config, ahorro] = await Promise.all([
-    listTransactions(), listSueldos(), listDolarOps(), loadConfig(), getAhorroConfig(),
-  ]);
+  const [transacciones, sueldos, dolares, config, ahorro, pasesAhorro, presupuestos, categorias, reglas, gastosFijos] =
+    await Promise.all([
+      listTransactions(), listSueldos(), listDolarOps(), loadConfig(), getAhorroConfig(),
+      listMovAhorro(), getPresupuestos(), listCategorias(), listReglas(), listRecurrentes(),
+    ]);
   const { googleSheetId: _id, googleCredsPath: _creds, ...ajustes } = config;
   return NextResponse.json({
-    version: 1,
+    version: 2,
     generado: new Date().toISOString(),
     ajustes,
     ahorro,
+    pasesAhorro,
+    presupuestos,
+    categorias,
+    reglas,
+    gastosFijos,
     transacciones,
     sueldos,
     dolares,

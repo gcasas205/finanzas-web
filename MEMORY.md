@@ -6,7 +6,7 @@ Memoria del proyecto entre sesiones. Máximo ~50 líneas: resumí o borrá lo qu
 - Los 33 hallazgos de `docs/auditoria-skills.md` (backend, frontend y diseño) están implementados y mergeados en `main`.
 - Últimos cambios: barras móviles sólidas para iOS y vuelta del verde/rojo en montos y confirmaciones.
 - Ingresos USD de Movimientos permiten repartir mediano/largo (columnas P y Q de `Transacciones`), igual que la compra de USD. Filas viejas sin reparto: el excedente va a mediano, como antes.
-- `typecheck` y `lint` limpios, y 80 tests de Vitest en verde (cálculos, validaciones, seguridad).
+- `typecheck` y `lint` limpios, y 86 tests de Vitest en verde (cálculos, validaciones, seguridad).
 - CI en GitHub Actions: `CI Back` (typecheck + Vitest) y `CI Front` (typecheck + lint + build), cada uno se saltea si el PR no toca sus archivos. Pensado para proteger `main` (Vercel despliega producción desde ahí).
 - ESLint configurado con `next/core-web-vitals` en `.eslintrc.js` (sin hallazgos al activarlo).
 
@@ -34,7 +34,10 @@ Memoria del proyecto entre sesiones. Máximo ~50 líneas: resumí o borrá lo qu
 - Sobres dinámicos: `SobreKey` es string; la lista vive en Config `sobres_lista` (sin ella, los 4 originales). `lib/ahorro-config.ts` parsea/serializa. Pases entre destinos en la pestaña `MovAhorro`.
 - Presupuestos en Config como `presupuesto:<Categoría>` (0 = sin presupuesto).
 
+- Categorías en la pestaña `Categorias` (cliente: `useCategorias()`, no la constante `CATEGORIES`, que es sólo el valor por defecto). Reglas aprendidas en `Reglas`; gastos fijos en `Recurrentes`.
+
 ## Aprendizajes y errores a evitar
+- Los `route.ts` de Next sólo pueden exportar handlers y config (`dynamic`): otra constante exportada rompe el build.
 - `new Date("AAAA-MM-DD")` es UTC: para comparar días usar textos `AAAA-MM-DD` con `hoyLocal()`/`sumarDias()`.
 - `outline-none` de Tailwind pisaba el anillo de foco: usar `.form-input` y `:focus-visible`.
 - `toISOString()` corre el día a la noche en Argentina: usar `hoyLocal()`.

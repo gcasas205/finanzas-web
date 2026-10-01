@@ -1,5 +1,6 @@
 import type { Transaction } from "@/types";
 import { fechaToMes } from "@/lib/utils";
+import { claveComercio } from "@/lib/categories";
 
 export interface GastoRecurrente {
   /** Nombre representativo (la descripción más reciente del grupo) */
@@ -18,16 +19,7 @@ export interface GastoRecurrente {
 }
 
 /** Agrupa descripciones parecidas: sin números ni signos, primeras 3 palabras. */
-export function claveComercio(descripcion: string): string {
-  return descripcion
-    .toLowerCase()
-    .normalize("NFD").replace(/[̀-ͯ]/g, "")
-    .replace(/[^a-z ]+/g, " ")
-    .split(/\s+/)
-    .filter((w) => w.length > 1)
-    .slice(0, 3)
-    .join(" ");
-}
+export { claveComercio } from "@/lib/categories";
 
 /** Meses "AAAA-MM" de la ventana que termina en `hasta` (incluido). */
 function ventana(hasta: string, n: number): string[] {

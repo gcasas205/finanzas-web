@@ -17,8 +17,7 @@ import { request, errorMessage, sueldosApi } from "@/lib/api";
 import { factoresPesosDeHoy, type InflacionMes } from "@/lib/inflacion";
 import { detectarSuscripciones, detectarHormiga, type GastoRecurrente } from "@/lib/habitos";
 import { Segmented } from "@/components/ui/Segmented";
-import { getCategoryColor, CATEGORIES } from "@/lib/categories";
-import { useTransactions } from "@/components/DataProvider";
+import { useTransactions, useCategorias } from "@/components/DataProvider";
 import { impactoPesosDolar } from "@/lib/dolar-calc";
 import { PALETTE } from "@/lib/palette";
 import { EmptyState } from "@/components/ui/States";
@@ -281,13 +280,14 @@ function TendenciasTab({ evolution }: { evolution: EvolucionMes[] }) {
 // ── Categorías ───────────────────────────────────────────────────────────────
 
 function CategoriasTab({ transactions, selectedMonth }: { transactions: Transaction[]; selectedMonth: string }) {
+  const { colorDe } = useCategorias();
   const [abierta, setAbierta] = useState<string | null>(null);
   const monthTxs = transactions.filter(t => t.tipo === "egreso" && fechaToMes(t.fechaPago) === selectedMonth);
   const catMap = new Map<string, number>();
   for (const t of monthTxs) catMap.set(t.categoria, (catMap.get(t.categoria) ?? 0) + t.monto);
   const total = Array.from(catMap.values()).reduce((a, b) => a + b, 0);
   const cats = Array.from(catMap.entries())
-    .map(([name, value]) => ({ name, value, pct: total > 0 ? value / total * 100 : 0, color: getCategoryColor(name) }))
+    .map(([name, value]) => ({ name, value, pct: total > 0 ? value / total * 100 : 0, color: colorDe(name) }))
     .sort((a, b) => b.value - a.value);
 
   if (!cats.length) return <Empty />;
@@ -470,6 +470,7 @@ function mesMas(mes: string, n: number): string {
 type BaseComparacion = "anterior" | "anio" | "promedio3";
 
 function ComparativaTab({ transactions, selectedMonth }: { transactions: Transaction[]; selectedMonth: string }) {
+  const { colorDe } = useCategorias();
   const [base, setBase] = useState<BaseComparacion>("anterior");
   const baseMeses = base === "anterior" ? [mesMas(selectedMonth, -1)]
     : base === "anio" ? [mesMas(selectedMonth, -12)]
@@ -499,7 +500,7 @@ function ComparativaTab({ transactions, selectedMonth }: { transactions: Transac
       const prev = prevMap.get(cat) ?? 0;
       const curr = currMap.get(cat) ?? 0;
       const variation = prev > 0 ? ((curr - prev) / prev) * 100 : (curr > 0 ? 100 : 0);
-      return { name: cat, prev, curr, variation, color: getCategoryColor(cat) };
+      return { name: cat, prev, curr, variation, color: colorDe(cat) };
     })
     .sort((a, b) => b.curr - a.curr);
 

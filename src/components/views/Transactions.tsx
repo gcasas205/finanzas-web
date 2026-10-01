@@ -6,8 +6,8 @@ import { toast } from "sonner";
 import type { Transaction, AppConfig, BucketOrigen, TransactionSource } from "@/types";
 import { formatPesos, formatFecha, fechaToMes, formatMes, uniqueMonths, calcularFechaPagoTarjeta, hoyLocal } from "@/lib/utils";
 import { origenesDisponibles } from "@/lib/ahorro-calc";
-import { CATEGORIES, autoCategorizar, getCategoryColor } from "@/lib/categories";
-import { useTransactions } from "@/components/DataProvider";
+import { autoCategorizar } from "@/lib/categories";
+import { useTransactions, useCategorias } from "@/components/DataProvider";
 import { UsdAmount } from "@/components/UsdAmount";
 import LogoLoader from "@/components/LogoLoader";
 import { ErrorState, StaleDataBanner } from "@/components/ui/States";
@@ -21,6 +21,7 @@ import { Segmented } from "@/components/ui/Segmented";
 import { EmptyState } from "@/components/ui/States";
 import { useSearchParams, useRouter } from "next/navigation";
 import { transactionsToCsv, descargarArchivo } from "@/lib/csv";
+import { RecurrentesPendientes } from "@/components/views/RecurrentesPendientes";
 import { esSueldo, type DatosRecibo } from "@/lib/sueldos";
 import { sueldosApi } from "@/lib/api";
 import useSWR from "swr";
@@ -29,6 +30,7 @@ interface Props { config: AppConfig; }
 
 export default function Transactions({ config }: Props) {
   const { transactions, isLoading: loading, error, refresh } = useTransactions();
+  const { categorias, colorDe } = useCategorias();
   const [filterMonth, setFilterMonth] = useState("");
   const [filterType, setFilterType] = useState<"todos" | "ingreso" | "egreso">("todos");
   const [filterCategoria, setFilterCategoria] = useState("");
@@ -172,6 +174,8 @@ export default function Transactions({ config }: Props) {
         </div>
       </header>
 
+      <RecurrentesPendientes onCargados={refresh} />
+
       {/* Filters */}
       <div className="surface p-3 sm:p-5 mb-4 sm:mb-6 flex flex-wrap gap-3 sm:gap-4 items-center">
         <div className="flex items-center gap-2 flex-1 min-w-[200px]">
@@ -216,7 +220,7 @@ export default function Transactions({ config }: Props) {
           className="select-native min-h-11 bg-ink-900/60 border border-control text-paper pl-3 pr-9 py-2 text-sm focus:border-amber cursor-pointer"
         >
           <option value="">Todas las categorías</option>
-          {CATEGORIES.map(c => <option key={c.name} value={c.name}>{c.name}</option>)}
+          {categorias.map(c => <option key={c.name} value={c.name}>{c.name}</option>)}
         </select>
 
         <select
@@ -348,7 +352,7 @@ export default function Transactions({ config }: Props) {
                 </td>
                 <td className="px-2 py-4">
                   <div className="inline-flex items-center gap-2">
-                    <div className="w-1.5 h-1.5 rounded-full" style={{ background: getCategoryColor(tx.categoria) }} />
+                    <div className="w-1.5 h-1.5 rounded-full" style={{ background: colorDe(tx.categoria) }} />
                     <span className="text-xs text-ink-200">{tx.categoria}</span>
                   </div>
                 </td>
@@ -419,7 +423,7 @@ export default function Transactions({ config }: Props) {
               </div>
               <div className="flex items-center justify-between">
                 <div className="inline-flex items-center gap-1.5">
-                  <div className="w-2 h-2 rounded-full" style={{ background: getCategoryColor(tx.categoria) }} />
+                  <div className="w-2 h-2 rounded-full" style={{ background: colorDe(tx.categoria) }} />
                   <span className="text-xs text-ink-300">{tx.categoria}</span>
                 </div>
                 <div className="flex gap-2 -mr-3.5">
@@ -484,8 +488,9 @@ export default function Transactions({ config }: Props) {
 
 /** Barra de selección múltiple: cambia la categoría de todos los elegidos. */
 function RecategorizarBar({ ids, onDone }: { ids: string[]; onDone: () => void }) {
-  const [categoria, setCategoria] = useState(CATEGORIES[0].name);
-  const subs = CATEGORIES.find(c => c.name === categoria)?.subcategories ?? ["Sin categoría"];
+  const { categorias, subcategoriasDe } = useCategorias();
+  const [categoria, setCategoria] = useState(categorias[0]?.name ?? "Otros");
+  const subs = subcategoriasDe(categoria);
   const [subcategoria, setSubcategoria] = useState(subs[0]);
   const [saving, setSaving] = useState(false);
 
@@ -511,12 +516,12 @@ function RecategorizarBar({ ids, onDone }: { ids: string[]; onDone: () => void }
         value={categoria}
         onChange={(e) => {
           setCategoria(e.target.value);
-          setSubcategoria(CATEGORIES.find(c => c.name === e.target.value)?.subcategories[0] ?? "Sin categoría");
+          setSubcategoria(subcategoriasDe(e.target.value)[0]);
         }}
         aria-label="Nueva categoría"
         className="select-native min-h-11 bg-ink-900/60 border border-control text-paper pl-3 pr-9 py-2 text-sm focus:border-amber cursor-pointer"
       >
-        {CATEGORIES.map(c => <option key={c.name} value={c.name}>{c.name}</option>)}
+        {categorias.map(c => <option key={c.name} value={c.name}>{c.name}</option>)}
       </select>
       <select
         value={subcategoria}
@@ -588,6 +593,7 @@ function TransactionForm({ open, editing, prefill, config, onClose, onSaved }: F
 
 function TransactionFormBody({ editing, prefill, config, onClose, onSaved }: Omit<FormProps, "open">) {
   const { ahorroConfig } = useTransactions();
+  const { categorias, reglas, subcategoriasDe } = useCategorias();
   const today = hoyLocal();
   // Valores iniciales: el registro que se edita, o el que se duplica (con fecha de hoy)
   const base = editing ?? (prefill ? { ...prefill, fechaConsumo: today, fechaPago: today } : null);
@@ -636,7 +642,7 @@ function TransactionFormBody({ editing, prefill, config, onClose, onSaved }: Omi
   const [saving, setSaving] = useState(false);
   const [errors, setErrors] = useState<Errors>({});
 
-  const subcategories = CATEGORIES.find(c => c.name === categoria)?.subcategories || ["Sin categoría"];
+  const subcategories = subcategoriasDe(categoria);
 
   /** Editar un campo limpia su error. */
   const clear = (field: string) => setErrors(prev => (prev[field] ? { ...prev, [field]: undefined } : prev));
@@ -645,10 +651,12 @@ function TransactionFormBody({ editing, prefill, config, onClose, onSaved }: Omi
   useEffect(() => {
     // Al duplicar no se pisa la categoría elegida mientras no cambie la descripción
     if (!editing && descripcion.length > 3 && descripcion !== prefill?.descripcion) {
-      const auto = autoCategorizar(descripcion);
+      const auto = autoCategorizar(descripcion, reglas);
       setCategoria(auto.categoria);
       setSubcategoria(auto.subcategoria);
     }
+    // reglas fuera de las deps: no se re-sugiere al llegar reglas nuevas mientras escribís
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [descripcion, editing, prefill?.descripcion]);
 
   // Auto-calculate fechaPago when tarjeta + fechaConsumo
@@ -910,10 +918,10 @@ function TransactionFormBody({ editing, prefill, config, onClose, onSaved }: Omi
             {(c) => (
               <select {...c} value={categoria} onChange={(e) => {
                 setCategoria(e.target.value);
-                setSubcategoria(CATEGORIES.find(cat => cat.name === e.target.value)?.subcategories[0] ?? "Sin categoría");
+                setSubcategoria(subcategoriasDe(e.target.value)[0]);
                 clear("categoria");
               }} className="form-input">
-                {CATEGORIES.map(cat => <option key={cat.name} value={cat.name}>{cat.name}</option>)}
+                {categorias.map(cat => <option key={cat.name} value={cat.name}>{cat.name}</option>)}
               </select>
             )}
           </Field>

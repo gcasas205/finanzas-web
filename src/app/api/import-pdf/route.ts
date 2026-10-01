@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { parseVisaPDF, parseSueldoPDF } from "@/lib/pdf-parser";
-import { loadConfig, addTransactionsBulk, addSueldo, listTransactions } from "@/lib/sheets";
+import { loadConfig, addTransactionsBulk, addSueldo, listTransactions, listReglas } from "@/lib/sheets";
+import { aprenderDe } from "@/lib/reglas-sync";
 import { expandirCuotas } from "@/lib/cuotas";
 import { separarDuplicados } from "@/lib/duplicados";
 import { SUELDOS_CACHE_KEY } from "@/lib/sueldos-sync";
@@ -75,7 +76,8 @@ export const POST = withErrors(async (req) => {
   const config = await loadConfig();
 
   if (tipo === "tarjeta") {
-    const result = await parsePdf(() => parseVisaPDF(buffer, config.cardCutoffDay, config.cardDueDay));
+    const reglas = await listReglas();
+    const result = await parsePdf(() => parseVisaPDF(buffer, config.cardCutoffDay, config.cardDueDay, reglas));
     if (action !== "import") return NextResponse.json({ ok: true, result });
 
     // Si el cliente mandó la lista revisada (editada/filtrada), se usa esa;
@@ -85,6 +87,7 @@ export const POST = withErrors(async (req) => {
     const futuras = await cuotasFuturas(toImport); // también agrupa las de toImport
     const imported = await addTransactionsBulk([...toImport, ...futuras]);
     cacheInvalidate("transactions");
+    await aprenderDe(toImport); // las categorías corregidas en la vista previa
     return NextResponse.json({ ok: true, imported, result });
   }
 

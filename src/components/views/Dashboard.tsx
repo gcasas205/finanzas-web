@@ -21,8 +21,7 @@ import useSWR from "swr";
 import Link from "next/link";
 import { presupuestosApi } from "@/lib/api";
 import { CreditCard } from "lucide-react";
-import { getCategoryColor } from "@/lib/categories";
-import { useTransactions } from "@/components/DataProvider";
+import { useTransactions, useCategorias } from "@/components/DataProvider";
 import { resumenDolar, impactoPesosDolar } from "@/lib/dolar-calc";
 import LogoLoader from "@/components/LogoLoader";
 import { ErrorState, StaleDataBanner } from "@/components/ui/States";
@@ -35,6 +34,7 @@ interface Props { config: AppConfig; }
 
 export default function Dashboard({ config }: Props) {
   const { transactions, dolarOps, cotizacion, isLoading: loading, error, refresh } = useTransactions();
+  const { colorDe } = useCategorias();
   const [selectedMonth, setSelectedMonth] = useState(() => {
     const d = new Date();
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
@@ -130,10 +130,10 @@ export default function Dashboard({ config }: Props) {
         name: cat,
         value: val,
         pct: total > 0 ? (val / total) * 100 : 0,
-        color: getCategoryColor(cat),
+        color: colorDe(cat),
       }))
       .sort((a, b) => b.value - a.value);
-  }, [monthTransactionsARS]);
+  }, [monthTransactionsARS, colorDe]);
 
   // Próximos pagos: egresos con fecha de pago entre hoy y los próximos 45 días.
   // Se comparan textos AAAA-MM-DD en hora local (new Date("AAAA-MM-DD") es UTC y corre el día).

@@ -397,6 +397,10 @@ Algunos PDFs usan fuentes con encoding especial. La app soporta Unicode PUA pero
 - **Plan de ahorro desde Ajustes**: piso, rendimiento supuesto y sobres editables (crear, renombrar, quitar), cada uno con fecha objetivo opcional y cuánto juntar por mes para llegar. Se sigue guardando en la hoja `Config` (claves nuevas `sobres_lista`, `sobre_<clave>_nombre`, `sobre_<clave>_fecha`; las planillas viejas siguen funcionando).
 - **Mover entre destinos**: pases de plata entre piso, sobres y largo plazo sin tocar la tenencia (pestaña nueva `MovAhorro`).
 - **Presupuesto mensual por categoría**: se define en Ajustes (claves `presupuesto:<Categoría>` en `Config`) y el Resumen muestra cuánto llevás gastado de cada uno.
+- **Categorías editables** desde Ajustes (pestaña nueva `Categorias`, sembrada con las de siempre). Renombrar una actualiza movimientos, presupuesto y reglas.
+- **Autocategorización que aprende**: cuando corregís la categoría de un comercio (al cargar, editar, recategorizar o en la vista previa del resumen), se guarda una regla en la pestaña nueva `Reglas` y la próxima vez se sugiere sola.
+- **Gastos fijos**: alquiler, prepaga, suscripciones… se definen en Ajustes (pestaña nueva `Recurrentes`) y cada mes Movimientos avisa cuáles faltan y los carga con un toque.
+- El backup incluye también pases de ahorro, presupuestos, categorías, reglas y gastos fijos.
 
 ### v6.0
 

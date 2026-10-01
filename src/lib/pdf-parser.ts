@@ -1,4 +1,4 @@
-import type { Transaction, Sueldo } from "@/types";
+import type { Transaction, Sueldo, ReglaCategoria } from "@/types";
 import { autoCategorizar } from "./categories";
 import { calcularFechaPagoTarjeta, calcularFechaPagoSueldo, generateId } from "./utils";
 
@@ -78,8 +78,10 @@ export interface VisaParsedResult {
   transactions: Transaction[];
 }
 
-export async function parseVisaPDF(buffer: Buffer, cardCutoff = 23, cardDue = 5): Promise<VisaParsedResult> {
-  return parseVisaText(await parsePdfBuffer(buffer), cardCutoff, cardDue);
+export async function parseVisaPDF(
+  buffer: Buffer, cardCutoff = 23, cardDue = 5, reglas: ReglaCategoria[] = [],
+): Promise<VisaParsedResult> {
+  return parseVisaText(await parsePdfBuffer(buffer), cardCutoff, cardDue, reglas);
 }
 
 /** Impuestos, percepciones y comisiones del resumen: se importan como Finanzas. */
@@ -87,7 +89,9 @@ const IMPUESTO_RE = /\b(DB\.?\s?IVA|IVA\s?RG|DB\.RG|IIBB|PERCEP|IMP\.|IMPUESTO|R
 const COMISION_RE = /\bCOMISION/i;
 
 /** Parser del texto extraído del resumen (separado del PDF para poder testearlo). */
-export function parseVisaText(text: string, cardCutoff = 23, cardDue = 5): VisaParsedResult {
+export function parseVisaText(
+  text: string, cardCutoff = 23, cardDue = 5, reglas: ReglaCategoria[] = [],
+): VisaParsedResult {
   const lines = text.split("\n").map(l => l.trim()).filter(Boolean);
 
   let titular = "";
@@ -235,7 +239,7 @@ export function parseVisaText(text: string, cardCutoff = 23, cardDue = 5): VisaP
         ? { categoria: "Finanzas", subcategoria: "Comisión" }
         : IMPUESTO_RE.test(descripcion)
           ? { categoria: "Finanzas", subcategoria: "Impuesto" }
-          : autoCategorizar(descripcion);
+          : autoCategorizar(descripcion, reglas);
 
     // Fecha de pago: TODAS las transacciones del resumen se pagan en VENCIMIENTO ACTUAL
     const fechaPago = fechaPagoResumen

@@ -9,8 +9,7 @@ import { formatPesos, formatFecha, formatMes, cn } from "@/lib/utils";
 import type { VisaParsedResult, SueldoParsedResult } from "@/lib/pdf-parser";
 import { importApi, errorMessage } from "@/lib/api";
 import { Button } from "@/components/ui/Button";
-import { CATEGORIES } from "@/lib/categories";
-import { useTransactions } from "@/components/DataProvider";
+import { useTransactions, useCategorias } from "@/components/DataProvider";
 import { separarDuplicados } from "@/lib/duplicados";
 import { UsdAmount } from "@/components/UsdAmount";
 
@@ -243,6 +242,7 @@ function VisaPreview({ result, txs, onChange }: {
   // Total a pagar: consumos − créditos, separado por moneda
   const neto = (moneda: Transaction["moneda"]) =>
     txs.filter(t => t.moneda === moneda).reduce((s, t) => s + (t.tipo === "ingreso" ? -t.monto : t.monto), 0);
+  const { categorias, subcategoriasDe } = useCategorias();
   const total = neto("ARS");
   const totalUSD = neto("USD");
   const hayUSD = txs.some(t => t.moneda === "USD");
@@ -317,11 +317,11 @@ function VisaPreview({ result, txs, onChange }: {
                 <td className="px-2 py-2">
                   <select
                     value={tx.categoria}
-                    onChange={(e) => update(i, { categoria: e.target.value, subcategoria: CATEGORIES.find(c => c.name === e.target.value)?.subcategories[0] ?? "Sin categoría" })}
+                    onChange={(e) => update(i, { categoria: e.target.value, subcategoria: subcategoriasDe(e.target.value)[0] })}
                     aria-label={`Categoría de ${tx.descripcion}`}
                     className="select-native bg-ink-800 border border-control text-xs text-ink-100 pl-2 pr-8 py-1.5 focus:border-amber cursor-pointer max-w-[150px]"
                   >
-                    {CATEGORIES.map(c => <option key={c.name} value={c.name}>{c.name}</option>)}
+                    {categorias.map(c => <option key={c.name} value={c.name}>{c.name}</option>)}
                   </select>
                 </td>
                 <td className="px-2 py-2 text-right">

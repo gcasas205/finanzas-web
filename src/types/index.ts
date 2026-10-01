@@ -104,6 +104,32 @@ export interface CategoryConfig {
   color: string;
 }
 
+/** Regla aprendida: si la descripción contiene `palabra`, sugerir esa categoría. */
+export interface ReglaCategoria {
+  /** Palabras normalizadas (minúsculas, sin acentos ni signos), ej. "coto palermo" */
+  palabra: string;
+  categoria: string;
+  subcategoria: string;
+}
+
+/** Gasto (o ingreso) fijo mensual que se carga con un toque. */
+export interface Recurrente {
+  id: string;
+  descripcion: string;
+  monto: number;
+  moneda: "ARS" | "USD";
+  tipo: "ingreso" | "egreso";
+  categoria: string;
+  subcategoria: string;
+  fuente: "manual" | "tarjeta" | "recibo";
+  /** Día del mes en que se carga (1–31; si el mes es más corto, el último día) */
+  dia: number;
+  activo: boolean;
+  /** Último mes "AAAA-MM" en que se cargó */
+  ultimoMes: string;
+  createdAt: string;
+}
+
 export interface MonthlySummary {
   mes: string;
   ingresos: number;

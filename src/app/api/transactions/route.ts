@@ -6,6 +6,7 @@ import {
 import { buildTransaction } from "@/lib/transactions";
 import { expandirCuotas } from "@/lib/cuotas";
 import { sincronizarSueldos, borrarSueldosDe } from "@/lib/sueldos-sync";
+import { aprenderDe } from "@/lib/reglas-sync";
 import { generateId } from "@/lib/utils";
 import { cacheOrFetch, cacheInvalidate } from "@/lib/cache";
 import { TransactionSchema, DeleteTransactionSchema, RecategorizarSchema } from "@/lib/validations";
@@ -33,6 +34,7 @@ export const POST = withErrors(async (req) => {
   if (txs.length > 1) await addTransactionsBulk(txs); else await addTransaction(tx);
   cacheInvalidate(CACHE_KEY);
   await sincronizarSueldos([txs[0]], config.salaryPaymentOffsetMonths, body.recibo);
+  await aprenderDe([tx]);
   return NextResponse.json({ ok: true, transaction: txs[0], creados: txs.length }, { status: 201 });
 });
 
@@ -66,6 +68,7 @@ export const PUT = withErrors(async (req) => {
   }
   cacheInvalidate(CACHE_KEY);
   await sincronizarSueldos([tx], config.salaryPaymentOffsetMonths, body.recibo);
+  await aprenderDe([tx]);
   return NextResponse.json({ ok: true, transaction: tx, actualizados: 1 + siguientes.length });
 });
 
@@ -79,6 +82,7 @@ export const PATCH = withErrors(async (req) => {
   await updateTransactionsBulk(cambiados);
   cacheInvalidate(CACHE_KEY);
   await sincronizarSueldos(cambiados, (await loadConfig()).salaryPaymentOffsetMonths);
+  await aprenderDe(cambiados);
   return NextResponse.json({ ok: true, updated: txs.length });
 });
 

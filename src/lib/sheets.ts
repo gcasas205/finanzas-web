@@ -2,7 +2,11 @@ import { google, sheets_v4 } from "googleapis";
 import fs from "fs/promises";
 import path from "path";
 import os from "os";
-import type { Transaction, Sueldo, AppConfig, DolarOperacion, AhorroConfig, MovAhorro } from "@/types";
+import type {
+  Transaction, Sueldo, AppConfig, DolarOperacion, AhorroConfig, MovAhorro,
+  CategoryConfig, ReglaCategoria, Recurrente,
+} from "@/types";
+import { CATEGORIES } from "@/lib/categories";
 import { parseAhorroConfig, ahorroConfigToEntries, parsePresupuestos, presupuestosToEntries } from "@/lib/ahorro-config";
 import { AppError, SheetsError } from "@/lib/errors";
 
@@ -253,6 +257,16 @@ const CONFIG_HEADERS = ["parametro", "valor"];
 
 const MOV_AHORRO_HEADERS = ["id", "fecha", "desde", "hacia", "montoUSD", "notas", "createdAt"];
 
+const CATEGORIAS_HEADERS = ["nombre", "subcategorias", "color"];
+const REGLAS_HEADERS = ["palabra", "categoria", "subcategoria"];
+const RECURRENTES_HEADERS = [
+  "id", "descripcion", "monto", "moneda", "tipo", "categoria", "subcategoria",
+  "fuente", "dia", "activo", "ultimoMes", "createdAt",
+];
+
+/** Las subcategorías se guardan en una celda separadas por " | ". */
+const SEP_SUB = " | ";
+
 /** Parámetros por defecto del plan de ahorro (se siembran al crear la hoja Config) */
 const AHORRO_DEFAULTS: Array<[string, number]> = [
   ["emergencia_objetivo", 3000],
@@ -279,6 +293,9 @@ async function ensureSheets(client: sheets_v4.Sheets, sheetId: string) {
     { name: "Dolares", headers: DOLAR_HEADERS },
     { name: "Config", headers: CONFIG_HEADERS, seedRows: AHORRO_DEFAULTS.map(([k, v]) => [k, v]) },
     { name: "MovAhorro", headers: MOV_AHORRO_HEADERS },
+    { name: "Categorias", headers: CATEGORIAS_HEADERS, seedRows: CATEGORIES.map(categoriaToRow) as Array<Array<string | number>> },
+    { name: "Reglas", headers: REGLAS_HEADERS },
+    { name: "Recurrentes", headers: RECURRENTES_HEADERS },
   ];
 
   for (const { name, headers, seedRows } of required) {
@@ -554,6 +571,22 @@ async function deleteRowsByIds(tab: string, ids: string[]): Promise<number> {
   });
 }
 
+/** Reemplaza todas las filas de datos de una pestaña (para listas chicas como categorías). */
+async function replaceAllRows(tab: string, lastCol: string, rows: SheetRow[]): Promise<void> {
+  await sheetsCall(`reescribir ${tab}`, async (ctx) => {
+    await ensureSheetsOnce(ctx);
+    await ctx.client.spreadsheets.values.clear({ spreadsheetId: ctx.sheetId, range: `${tab}!A2:${lastCol}` });
+    if (rows.length) {
+      await ctx.client.spreadsheets.values.update({
+        spreadsheetId: ctx.sheetId,
+        range: `${tab}!A2`,
+        valueInputOption: "RAW",
+        requestBody: { values: rows },
+      });
+    }
+  });
+}
+
 async function appendRows(tab: string, lastCol: string, rows: SheetRow[]): Promise<void> {
   if (!rows.length) return;
   await sheetsCall(`agregar filas en ${tab}`, async (ctx) => {
@@ -740,4 +773,83 @@ export async function testConnection(): Promise<{ ok: boolean; error?: string }>
     console.error("[sheets] testConnection:", e);
     return { ok: false, error: "No se pudo abrir la planilla. Revisá el Sheet ID y que esté compartida con la cuenta de servicio." };
   }
+}
+
+// ─── Categorías, reglas aprendidas y gastos fijos ───────────────────────────
+
+function categoriaToRow(c: CategoryConfig): SheetRow {
+  return [c.name, c.subcategories.join(SEP_SUB), c.color];
+}
+
+function rowToCategoria(row: SheetRow): CategoryConfig {
+  const subs = str(row[1]).split("|").map((x) => x.trim()).filter(Boolean);
+  return {
+    name: str(row[0]),
+    subcategories: subs.length ? subs : ["Sin categoría"],
+    color: str(row[2]) || CATEGORIES[CATEGORIES.length - 1].color,
+  };
+}
+
+/** Categorías de la planilla; si la pestaña está vacía, las de por defecto. */
+export async function listCategorias(): Promise<CategoryConfig[]> {
+  const cats = (await readRows("Categorias", "A2:C")).map(rowToCategoria);
+  return cats.length ? cats : CATEGORIES;
+}
+
+export async function saveCategorias(cats: CategoryConfig[]): Promise<void> {
+  await replaceAllRows("Categorias", "C", cats.map(categoriaToRow));
+}
+
+export async function listReglas(): Promise<ReglaCategoria[]> {
+  return (await readRows("Reglas", "A2:C")).map((r) => ({
+    palabra: str(r[0]),
+    categoria: str(r[1]),
+    subcategoria: str(r[2]),
+  }));
+}
+
+export async function saveReglas(reglas: ReglaCategoria[]): Promise<void> {
+  await replaceAllRows("Reglas", "C", reglas.map((r) => [r.palabra, r.categoria, r.subcategoria]));
+}
+
+function rowToRecurrente(row: SheetRow): Recurrente {
+  return {
+    id: str(row[0]),
+    descripcion: str(row[1]),
+    monto: num(row[2]),
+    moneda: str(row[3], "ARS") as Recurrente["moneda"],
+    tipo: str(row[4], "egreso") as Recurrente["tipo"],
+    categoria: str(row[5], "Otros"),
+    subcategoria: str(row[6], "Sin categoría"),
+    fuente: str(row[7], "manual") as Recurrente["fuente"],
+    dia: Math.min(31, Math.max(1, Math.trunc(num(row[8])) || 1)),
+    activo: str(row[9], "1") !== "0",
+    ultimoMes: str(row[10]),
+    createdAt: str(row[11], new Date().toISOString()),
+  };
+}
+
+function recurrenteToRow(r: Recurrente): SheetRow {
+  return [
+    r.id, r.descripcion, r.monto, r.moneda, r.tipo, r.categoria, r.subcategoria,
+    r.fuente, r.dia, r.activo ? "1" : "0", r.ultimoMes, r.createdAt,
+  ];
+}
+
+export async function listRecurrentes(): Promise<Recurrente[]> {
+  return (await readRows("Recurrentes", "A2:L")).map(rowToRecurrente);
+}
+
+export async function addRecurrente(r: Recurrente): Promise<void> {
+  await appendRows("Recurrentes", "L", [recurrenteToRow(r)]);
+}
+
+/** Devuelve los ids que no existían. */
+export async function updateRecurrentes(rs: Recurrente[]): Promise<string[]> {
+  return updateRowsByIds("Recurrentes", "L", rs.map((r) => ({ id: r.id, row: recurrenteToRow(r) })));
+}
+
+/** false si el id no existe. */
+export async function deleteRecurrente(id: string): Promise<boolean> {
+  return deleteRowById("Recurrentes", id);
 }

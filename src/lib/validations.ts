@@ -139,6 +139,46 @@ export const PresupuestosSchema = z.object({
   ),
 });
 
+/** Categorías editables (Ajustes). `renombres`: nombre viejo → nuevo, para migrar movimientos. */
+export const CategoriasSchema = z
+  .object({
+    categorias: z
+      .array(z.object({
+        name: z.string().trim().min(1, "Poné un nombre").max(40, "Máximo 40 caracteres"),
+        subcategories: z.array(z.string().trim().min(1).max(40)).min(1, "Poné al menos una subcategoría").max(30),
+        color: z.string().regex(/^#[0-9A-Fa-f]{6}$/, "Color inválido"),
+      }))
+      .min(1)
+      .max(40, "Máximo 40 categorías"),
+    renombres: z.record(z.string().trim().min(1).max(40), z.string().trim().min(1).max(40)).default({}),
+  })
+  .refine((b) => new Set(b.categorias.map((c) => c.name.toLowerCase())).size === b.categorias.length, {
+    message: "Hay dos categorías con el mismo nombre", path: ["categorias"],
+  })
+  .refine((b) => b.categorias.some((c) => c.name === "Ingresos") && b.categorias.some((c) => c.name === "Otros"), {
+    message: "Las categorías Ingresos y Otros no se pueden quitar ni renombrar", path: ["categorias"],
+  });
+
+/** Gasto fijo mensual. */
+export const RecurrenteSchema = z.object({
+  id: z.string().trim().min(1).max(64).optional(),
+  descripcion: z.string().trim().min(2, "La descripción tiene que tener al menos 2 caracteres").max(100),
+  monto: montoPositivo("Poné un monto mayor a 0"),
+  moneda: z.enum(["ARS", "USD"]).default("ARS"),
+  tipo: z.enum(["ingreso", "egreso"]).default("egreso"),
+  categoria: z.string().trim().min(1, "Elegí una categoría").max(60),
+  subcategoria: z.string().trim().min(1, "Elegí una subcategoría").max(60),
+  fuente: z.enum(["manual", "tarjeta", "recibo"]).default("manual"),
+  dia: z.number({ invalid_type_error: "Tiene que ser un número" }).int("Tiene que ser un número entero").min(1, "Del 1 al 31").max(31, "Del 1 al 31"),
+  activo: z.boolean().default(true),
+});
+
+/** Cargar los gastos fijos elegidos en un mes. */
+export const CargarRecurrentesSchema = z.object({
+  ids: z.array(z.string().trim().min(1).max(64)).min(1, "Elegí al menos uno").max(100),
+  mes: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/, "Mes inválido"),
+});
+
 /** Cambio de categoría de varios movimientos a la vez. */
 export const RecategorizarSchema = z.object({
   ids: z.array(z.string().trim().min(1).max(64)).min(1, "Elegí al menos un movimiento").max(500, "Máximo 500 movimientos a la vez"),

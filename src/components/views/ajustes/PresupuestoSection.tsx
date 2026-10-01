@@ -5,10 +5,10 @@ import useSWR from "swr";
 import { Check } from "lucide-react";
 import { toast } from "sonner";
 import { presupuestosApi, errorMessage } from "@/lib/api";
-import { CATEGORIES } from "@/lib/categories";
 import { formatPesos } from "@/lib/utils";
 import { Field } from "@/components/ui/Field";
 import { Button } from "@/components/ui/Button";
+import { useCategorias } from "@/components/DataProvider";
 
 /** Presupuesto mensual por categoría de gasto (en pesos). Vacío = sin presupuesto. */
 export function PresupuestoSection() {
@@ -16,7 +16,7 @@ export function PresupuestoSection() {
   const [valores, setValores] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
   const cargado = useRef(false);
-  const categorias = CATEGORIES.filter((c) => c.name !== "Ingresos");
+  const categorias = useCategorias().categorias.filter((c) => c.name !== "Ingresos");
 
   useEffect(() => {
     if (!data || cargado.current) return;

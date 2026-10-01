@@ -11,6 +11,8 @@ import { descargarArchivo } from "@/lib/csv";
 import { hoyLocal } from "@/lib/utils";
 import { PlanAhorroSection } from "@/components/views/ajustes/PlanAhorroSection";
 import { PresupuestoSection } from "@/components/views/ajustes/PresupuestoSection";
+import { CategoriasSection } from "@/components/views/ajustes/CategoriasSection";
+import { GastosFijosSection } from "@/components/views/ajustes/GastosFijosSection";
 import { Field, focusFirstInvalid } from "@/components/ui/Field";
 import { Button } from "@/components/ui/Button";
 
@@ -209,6 +211,8 @@ export default function SettingsView({ config }: Props) {
 
       <PlanAhorroSection />
       <PresupuestoSection />
+      <GastosFijosSection />
+      <CategoriasSection />
 
       <section className="surface p-5 sm:p-8 mt-8">
         <div className="eyebrow mb-1">Tus datos</div>

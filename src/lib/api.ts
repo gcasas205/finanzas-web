@@ -10,7 +10,9 @@ import type {
   AppConfig,
   Cotizacion,
   DolarOperacion,
+  CategoryConfig,
   MovAhorro,
+  Recurrente,
   Sueldo,
   Transaction,
 } from "@/types";
@@ -125,6 +127,23 @@ export const presupuestosApi = {
   list: () => request<{ presupuestos: Record<string, number> }>("/api/presupuestos"),
   guardar: (presupuestos: Record<string, number>) =>
     sendJson<{ ok: true; presupuestos: Record<string, number> }>("/api/presupuestos", "PUT", { presupuestos }),
+};
+
+export const categoriasApi = {
+  guardar: (categorias: CategoryConfig[], renombres: Record<string, string>) =>
+    sendJson<{ ok: true; categorias: CategoryConfig[]; migrados: number }>("/api/categorias", "PUT", { categorias, renombres }),
+};
+
+export type RecurrentePayload = Omit<Recurrente, "id" | "ultimoMes" | "createdAt"> & { id?: string };
+
+export const recurrentesApi = {
+  list: () => request<{ recurrentes: Recurrente[] }>("/api/recurrentes"),
+  crear: (r: RecurrentePayload) => sendJson<{ ok: true; recurrente: Recurrente }>("/api/recurrentes", "POST", r),
+  actualizar: (r: RecurrentePayload & { id: string }) =>
+    sendJson<{ ok: true; recurrente: Recurrente }>("/api/recurrentes", "PUT", r),
+  borrar: (id: string) => sendJson<{ ok: true }>("/api/recurrentes", "DELETE", { id }),
+  cargar: (ids: string[], mes: string) =>
+    sendJson<{ ok: true; cargados: number }>("/api/recurrentes/cargar", "POST", { ids, mes }),
 };
 
 export const sueldosApi = {
