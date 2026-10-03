@@ -358,7 +358,7 @@ src/
 ## Troubleshooting
 
 ### "Quota exceeded" / Error 429
-La API de Google Sheets tiene un límite de 60 lecturas por minuto. El caché de 3 minutos debería evitar esto. Si aparece, esperá un par de minutos e intentá de nuevo.
+La API de Google Sheets tiene un límite de 60 lecturas por minuto. La app lee todas las pestañas juntas en una sola lectura (`values.batchGet`), compartida entre los pedidos simultáneos y reutilizada 30 segundos, y no reintenta automáticamente ante un 429. Abrir la app cuesta como mucho 3 lecturas por instancia del servidor. Si igual aparece, esperá un minuto: la app muestra un aviso para reintentar.
 
 ### "The OAuth client was not found" / Error 401
 El `GOOGLE_CLIENT_ID` no es correcto. Verificá que sea un OAuth 2.0 Client ID (no una cuenta de servicio). Empieza con números, no con letras.
