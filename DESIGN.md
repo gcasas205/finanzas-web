@@ -139,6 +139,12 @@ Reglas con nombre, para citar en un review:
 | `Segmented` | elegir una de pocas opciones (voz de selección) |
 | `ErrorState` · `StaleDataBanner` · `EmptyState` | estados de vista |
 
+## Ícono de la app
+
+El mismo mark del loader: "F." (Fraunces, punto ámbar) dentro de su cuadro con borde `ink-600`, sobre `ink-900`, con
+el arco ámbar arriba (30% de la vuelta, puntas redondeadas). Tamaños: 192 y 512 (`any`), 512 `maskable` (dibujo al
+80% para la zona segura) y 180 para iPhone. Si cambia el logo, se regeneran todos juntos.
+
 ## Do / Don't
 
 - ✅ `bg-seleccion text-seleccion-tinta` para lo elegido · ❌ `bg-amber` en un filtro.

@@ -20,6 +20,12 @@ const jetbrains = JetBrains_Mono({
 export const metadata: Metadata = {
   title: "Finanzas — Casas",
   description: "Seguimiento financiero personal",
+  applicationName: "Finanzas",
+  // iPhone: "Agregar a inicio" abre la app a pantalla completa con este ícono.
+  // black-translucent: el contenido va detrás de la barra de estado (la barra
+  // superior ya reserva env(safe-area-inset-top)).
+  // Los íconos salen de los archivos de app/: icon.svg y apple-icon.png.
+  appleWebApp: { capable: true, title: "Finanzas", statusBarStyle: "black-translucent" },
 };
 
 // viewport-fit=cover: la barra inferior móvil respeta env(safe-area-inset-bottom).

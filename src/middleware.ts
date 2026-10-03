@@ -35,7 +35,9 @@ export const config = {
      * - /api/auth (endpoints de NextAuth)
      * - /_next/static, /_next/image (archivos estáticos)
      * - /favicon.ico, /icon.svg
+     * - /manifest.webmanifest, /icons/*, /apple-touch-icon.png, /apple-icon (web app instalable:
+     *   el celular los pide sin sesión al agregarla a la pantalla de inicio)
      */
-    "/((?!login|api/auth|_next/static|_next/image|favicon\\.ico|icon\\.svg).*)",
+    "/((?!login|api/auth|_next/static|_next/image|favicon\\.ico|icon\\.svg|manifest\\.webmanifest|icons/|apple-touch-icon\\.png|apple-icon).*)",
   ],
 };
