@@ -20,7 +20,6 @@ Memoria del proyecto entre sesiones. Máximo ~50 líneas: resumí o borrá lo qu
 - No se migra el stack (Next 14 / React 18 / Tailwind 3) aunque las skills apunten a versiones nuevas.
 
 - `.gitignore` ignora todo `*.json` salvo excepciones explícitas, para no subir credenciales. Sumar un JSON necesario se pregunta antes (regla en `AGENTS.md`). Por eso ESLint va en `.eslintrc.js`.
-- `*.tsbuildinfo` fuera del repo: es caché de compilación.
 
 - Reparto del ahorro: montos exactos a mediano/largo, lo no asignado va a mediano; si el piso se lleva parte, se achica en proporción (decidido por el usuario, oct 2026).
 - Duplicados al importar: se detectan en el cliente por fecha de consumo + monto + cuota + descripción normalizada (`lib/duplicados.ts`).
@@ -37,6 +36,7 @@ Memoria del proyecto entre sesiones. Máximo ~50 líneas: resumí o borrá lo qu
 - Categorías en la pestaña `Categorias` (cliente: `useCategorias()`, no la constante `CATEGORIES`, que es sólo el valor por defecto). Reglas aprendidas en `Reglas`; gastos fijos en `Recurrentes`.
 
 ## Aprendizajes y errores a evitar
+- Archivos que el navegador pide sin sesión (manifiesto, íconos) tienen que estar excluidos en el `matcher` del middleware, o redirigen al login. Con `app/icon.svg`, Next ignora `metadata.icons`: el ícono de iPhone va como `app/apple-icon.png`.
 - Con cuotas futuras hay movimientos con `fechaPago` en meses que no pasaron: toda serie "de evolución" debe cortar en el mes actual (`lib/series.ts`).
 - Responsive: verificar con capturas reales (Playwright) a 320/360/390/768/1024/1280 y medir `scrollWidth - innerWidth`. Culpables típicos: leyendas de gráficos sin `flex-wrap`, segmentados anchos, rótulos `whitespace-nowrap` largos.
 - Los `route.ts` de Next sólo pueden exportar handlers y config (`dynamic`): otra constante exportada rompe el build.

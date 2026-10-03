@@ -355,6 +355,15 @@ src/
 
 ---
 
+## Instalar en el celular
+
+La app se puede agregar a la pantalla de inicio y se abre a pantalla completa, con el ícono del loader ("F." con el arco ámbar):
+
+- **iPhone (Safari):** abrí la app → botón Compartir → **Agregar a inicio**.
+- **Android (Chrome):** abrí la app → menú ⋮ → **Instalar app** (o **Agregar a la pantalla principal**).
+
+El manifiesto (`src/app/manifest.ts`) y los íconos (`public/icons/`, `src/app/apple-icon.png`) quedan fuera del login en el middleware, porque el celular los pide antes de que inicies sesión. La app no funciona sin conexión: los datos viven en Google Sheets.
+
 ## Troubleshooting
 
 ### "Quota exceeded" / Error 429
