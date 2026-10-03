@@ -6,7 +6,7 @@ Memoria del proyecto entre sesiones. Máximo ~50 líneas: resumí o borrá lo qu
 - Los 33 hallazgos de `docs/auditoria-skills.md` (backend, frontend y diseño) están implementados y mergeados en `main`.
 - Últimos cambios: barras móviles sólidas para iOS y vuelta del verde/rojo en montos y confirmaciones.
 - Ingresos USD de Movimientos permiten repartir mediano/largo (columnas P y Q de `Transacciones`), igual que la compra de USD. Filas viejas sin reparto: el excedente va a mediano, como antes.
-- `typecheck` y `lint` limpios, y 89 tests de Vitest en verde (cálculos, validaciones, seguridad).
+- `typecheck` y `lint` limpios, y 93 tests de Vitest en verde (cálculos, validaciones, seguridad).
 - CI en GitHub Actions: `CI Back` (typecheck + Vitest) y `CI Front` (typecheck + lint + build), cada uno se saltea si el PR no toca sus archivos. Pensado para proteger `main` (Vercel despliega producción desde ahí).
 - ESLint configurado con `next/core-web-vitals` en `.eslintrc.js` (sin hallazgos al activarlo).
 
@@ -14,7 +14,7 @@ Memoria del proyecto entre sesiones. Máximo ~50 líneas: resumí o borrá lo qu
 - Google Sheets como base de datos: es uso personal, gratis y editable a mano.
 - Los ajustes (nombre, TNA de Mercado Pago, días de tarjeta) viven sólo en la hoja `Config`: Vercel resetea el filesystem y las env vars equivalentes se ignoran a propósito.
 - `ALLOWED_EMAILS` es obligatoria y se rechequea en cada request: sacar un email corta el acceso al instante.
-- Caché en memoria por instancia (3 min datos, 2 min config): alcanza para un solo usuario. No se migró a `revalidateTag`.
+- Lecturas a Sheets: todas las pestañas en UN `values.batchGet` compartido (`leerPlanilla`, 30 s, se invalida en cada escritura) + caché por ruta (3 min). En Vercel cada ruta es otra instancia: abrir la app costaba ~20 lecturas por instancia y superaba la cuota de 60/min (oct 2026). Sin reintentos automáticos ante 429. Test: `sheets-lecturas.test.ts`.
 - Montos como float redondeados con `roundMoney`, no como enteros en centavos.
 - Montos en verde (entra) y rojo (sale), siempre con signo o flecha. Se probó en neutro y se revirtió a pedido.
 - No se migra el stack (Next 14 / React 18 / Tailwind 3) aunque las skills apunten a versiones nuevas.

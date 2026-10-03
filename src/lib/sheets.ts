@@ -76,12 +76,9 @@ async function readAppSettingsFromSheet(): Promise<Partial<AppConfig>> {
   const ctx = await getSheetsClient();
   if (!ctx) return {};
   try {
-    const r = await ctx.client.spreadsheets.values.get({
-      spreadsheetId: ctx.sheetId,
-      range: "Config!A2:B",
-    });
+    const filas = (await leerPlanilla(ctx)).Config ?? [];
     const map: Record<string, string> = {};
-    for (const row of r.data.values ?? []) {
+    for (const row of filas) {
       const k = String(row[0] ?? "").trim();
       if (k) map[k] = String(row[1] ?? "");
     }
@@ -154,6 +151,7 @@ async function upsertConfigRows(
       requestBody: { values: appends },
     });
   }
+  invalidarLectura();
 }
 
 /** Persiste los ajustes editables (los presentes en `partial`) en la hoja Config. */
@@ -170,7 +168,7 @@ async function saveAppSettingsToSheet(partial: Partial<AppConfig>): Promise<void
     if (v !== undefined) entries.push([key, String(v)]);
   }
   if (!entries.length) return;
-  await ensureSheets(ctx.client, ctx.sheetId);
+  await ensureSheetsOnce(ctx);
   await upsertConfigRows(ctx.client, ctx.sheetId, entries);
 }
 
@@ -201,9 +199,14 @@ export async function saveConfig(config: Partial<AppConfig>): Promise<AppConfig>
  * 1. GOOGLE_SHEETS_CREDS_JSON env var (JSON completo como string, ideal para Vercel)
  * 2. Archivo .json local (ruta en config.googleCredsPath)
  */
+/** Un cliente por instancia: crear GoogleAuth en cada request pedía un token nuevo cada vez. */
+let clienteCache: { clave: string; ctx: { client: sheets_v4.Sheets; sheetId: string } } | null = null;
+
 async function getSheetsClient(): Promise<{ client: sheets_v4.Sheets; sheetId: string } | null> {
   const config = await loadBootstrapConfig();
   if (!config.googleSheetId) return null;
+  const clave = `${config.googleSheetId}|${process.env.GOOGLE_SHEETS_CREDS_JSON ? "env" : config.googleCredsPath}`;
+  if (clienteCache?.clave === clave) return clienteCache.ctx;
 
   try {
     // Forma mínima de un JSON de cuenta de servicio (GoogleAuth valida el resto).
@@ -226,8 +229,15 @@ async function getSheetsClient(): Promise<{ client: sheets_v4.Sheets; sheetId: s
       credentials: creds,
       scopes: ["https://www.googleapis.com/auth/spreadsheets"],
     });
-    const client = google.sheets({ version: "v4", auth });
-    return { client, sheetId: config.googleSheetId };
+    // Sin reintentos automáticos ante 429 (cuota por minuto): reintentar al toque
+    // gasta más cuota. Sólo se reintentan errores del servidor de Google (5xx).
+    const client = google.sheets({
+      version: "v4",
+      auth,
+      retryConfig: { retry: 2, statusCodesToRetry: [[500, 599]] },
+    });
+    clienteCache = { clave, ctx: { client, sheetId: config.googleSheetId } };
+    return clienteCache.ctx;
   } catch (e) {
     console.error("Error inicializando Google Sheets:", e);
     return null;
@@ -283,7 +293,9 @@ const AHORRO_DEFAULTS: Array<[string, number]> = [
 
 
 async function ensureSheets(client: sheets_v4.Sheets, sheetId: string) {
-  const meta = await client.spreadsheets.get({ spreadsheetId: sheetId });
+  // Lecturas: 1 para saber qué pestañas hay y 1 para todos los encabezados juntos
+  // (antes era 1 por pestaña: con 8 pestañas se iba casi toda la cuota por minuto).
+  const meta = await client.spreadsheets.get({ spreadsheetId: sheetId, fields: "sheets.properties.title" });
   const existing = meta.data.sheets?.map(s => s.properties?.title) ?? [];
 
   // seedRows: filas de datos a sembrar al crear la hoja (además del header)
@@ -297,6 +309,16 @@ async function ensureSheets(client: sheets_v4.Sheets, sheetId: string) {
     { name: "Reglas", headers: REGLAS_HEADERS },
     { name: "Recurrentes", headers: RECURRENTES_HEADERS },
   ];
+
+  const presentes = required.filter(({ name }) => existing.includes(name));
+  const encabezados = new Map<string, unknown[]>();
+  if (presentes.length) {
+    const r = await client.spreadsheets.values.batchGet({
+      spreadsheetId: sheetId,
+      ranges: presentes.map(({ name }) => `${name}!A1:Z1`),
+    });
+    (r.data.valueRanges ?? []).forEach((vr, i) => encabezados.set(presentes[i].name, vr.values?.[0] ?? []));
+  }
 
   for (const { name, headers, seedRows } of required) {
     if (!existing.includes(name)) {
@@ -315,11 +337,7 @@ async function ensureSheets(client: sheets_v4.Sheets, sheetId: string) {
       // La hoja ya existe: garantizar que el header exista y esté completo.
       // Si el header viejo tiene menos columnas de las esperadas (migración por
       // columnas nuevas), lo reescribimos sin tocar los datos de abajo.
-      const r = await client.spreadsheets.values.get({
-        spreadsheetId: sheetId,
-        range: `${name}!A1:Z1`,
-      });
-      const current = r.data.values?.[0] ?? [];
+      const current = encabezados.get(name) ?? [];
       if (current.length < headers.length) {
         await client.spreadsheets.values.update({
           spreadsheetId: sheetId,
@@ -464,17 +482,29 @@ async function sheetsCall<T>(what: string, fn: (ctx: SheetsCtx) => Promise<T>): 
   } catch (e) {
     if (e instanceof AppError) throw e;
     console.error(`[sheets] ${what}:`, e);
+    if (esLimiteDeCuota(e)) {
+      throw new SheetsError("Google está limitando las lecturas de tu planilla por un momento. Probá de nuevo en un minuto.");
+    }
     throw new SheetsError();
   }
 }
 
+function esLimiteDeCuota(e: unknown): boolean {
+  const o = (e ?? {}) as { code?: unknown; status?: unknown };
+  return o.code === 429 || o.status === 429;
+}
+
 /** Las pestañas se verifican una vez por instancia del servidor, no en cada request
  *  (ensureSheets hace 1 + N llamadas a la API y Sheets tiene cuota por minuto). */
-const ensured = new Set<string>();
-async function ensureSheetsOnce(ctx: SheetsCtx): Promise<void> {
-  if (ensured.has(ctx.sheetId)) return;
-  await ensureSheets(ctx.client, ctx.sheetId);
-  ensured.add(ctx.sheetId);
+const ensuring = new Map<string, Promise<void>>();
+function ensureSheetsOnce(ctx: SheetsCtx): Promise<void> {
+  let p = ensuring.get(ctx.sheetId);
+  if (!p) {
+    p = ensureSheets(ctx.client, ctx.sheetId);
+    ensuring.set(ctx.sheetId, p);
+    p.catch(() => ensuring.delete(ctx.sheetId)); // si falla, el próximo pedido reintenta
+  }
+  return p;
 }
 
 /** Número de fila (1-based) donde está el id en la columna A de la pestaña, o null. */
@@ -488,7 +518,7 @@ async function findRowNumber(ctx: SheetsCtx, tab: string, id: string): Promise<n
 }
 
 async function updateRowById(tab: string, lastCol: string, id: string, row: SheetRow): Promise<boolean> {
-  return sheetsCall(`actualizar fila en ${tab}`, async (ctx) => {
+  const resultado = await sheetsCall(`actualizar fila en ${tab}`, async (ctx) => {
     const rowNumber = await findRowNumber(ctx, tab, id);
     if (rowNumber === null) return false;
     await ctx.client.spreadsheets.values.update({
@@ -499,12 +529,14 @@ async function updateRowById(tab: string, lastCol: string, id: string, row: Shee
     });
     return true;
   });
+  invalidarLectura();
+  return resultado;
 }
 
 /** Actualiza varias filas en una sola escritura. Devuelve los ids que no existían. */
 async function updateRowsByIds(tab: string, lastCol: string, rows: Array<{ id: string; row: SheetRow }>): Promise<string[]> {
   if (!rows.length) return [];
-  return sheetsCall(`actualizar filas en ${tab}`, async (ctx) => {
+  const resultado = await sheetsCall(`actualizar filas en ${tab}`, async (ctx) => {
     const r = await ctx.client.spreadsheets.values.get({ spreadsheetId: ctx.sheetId, range: `${tab}!A2:A` });
     const index = new Map<string, number>();
     (r.data.values ?? []).forEach((v, i) => { if (v[0]) index.set(String(v[0]), i + 2); });
@@ -522,10 +554,12 @@ async function updateRowsByIds(tab: string, lastCol: string, rows: Array<{ id: s
     }
     return faltan;
   });
+  invalidarLectura();
+  return resultado;
 }
 
 async function deleteRowById(tab: string, id: string): Promise<boolean> {
-  return sheetsCall(`borrar fila en ${tab}`, async (ctx) => {
+  const resultado = await sheetsCall(`borrar fila en ${tab}`, async (ctx) => {
     const rowNumber = await findRowNumber(ctx, tab, id);
     if (rowNumber === null) return false;
 
@@ -546,12 +580,14 @@ async function deleteRowById(tab: string, id: string): Promise<boolean> {
     });
     return true;
   });
+  invalidarLectura();
+  return resultado;
 }
 
 /** Borra varias filas en una sola llamada. Devuelve cuántas encontró y borró. */
 async function deleteRowsByIds(tab: string, ids: string[]): Promise<number> {
   if (!ids.length) return 0;
-  return sheetsCall(`borrar filas en ${tab}`, async (ctx) => {
+  const resultado = await sheetsCall(`borrar filas en ${tab}`, async (ctx) => {
     const r = await ctx.client.spreadsheets.values.get({ spreadsheetId: ctx.sheetId, range: `${tab}!A2:A` });
     const buscados = new Set(ids);
     const indices: number[] = [];
@@ -569,6 +605,8 @@ async function deleteRowsByIds(tab: string, ids: string[]): Promise<number> {
     await ctx.client.spreadsheets.batchUpdate({ spreadsheetId: ctx.sheetId, requestBody: { requests } });
     return indices.length;
   });
+  invalidarLectura();
+  return resultado;
 }
 
 /** Reemplaza todas las filas de datos de una pestaña (para listas chicas como categorías). */
@@ -585,6 +623,7 @@ async function replaceAllRows(tab: string, lastCol: string, rows: SheetRow[]): P
       });
     }
   });
+  invalidarLectura();
 }
 
 async function appendRows(tab: string, lastCol: string, rows: SheetRow[]): Promise<void> {
@@ -598,20 +637,64 @@ async function appendRows(tab: string, lastCol: string, rows: SheetRow[]): Promi
       requestBody: { values: rows },
     });
   });
+  invalidarLectura();
 }
 
-async function readRows(tab: string, range: string): Promise<SheetRow[]> {
-  return sheetsCall(`leer ${tab}`, async (ctx) => {
+/** Rango de datos de cada pestaña. Se leen TODAS juntas en una sola lectura. */
+const RANGOS_DATOS: Record<string, string> = {
+  Transacciones: "A2:R",
+  Sueldos: "A2:N",
+  Dolares: "A2:K",
+  Config: "A2:B",
+  MovAhorro: "A2:G",
+  Categorias: "A2:C",
+  Reglas: "A2:C",
+  Recurrentes: "A2:L",
+};
+/** Cuánto vale una lectura compartida: cubre la ráfaga de pedidos al abrir la app. */
+const LECTURA_TTL_MS = 30_000;
+
+let lectura: { at: number; datos: Promise<Record<string, SheetRow[]>> } | null = null;
+
+/** Tras cualquier escritura, la próxima lectura vuelve a la planilla. */
+function invalidarLectura(): void {
+  lectura = null;
+}
+
+/**
+ * Todas las pestañas en una sola llamada (values.batchGet = 1 lectura de la cuota),
+ * compartida entre los pedidos simultáneos y reutilizada unos segundos. Antes cada
+ * listado hacía su propia lectura y abrir la app superaba las 60 lecturas/minuto.
+ */
+function leerPlanilla(ctx: SheetsCtx): Promise<Record<string, SheetRow[]>> {
+  if (lectura && Date.now() - lectura.at < LECTURA_TTL_MS) return lectura.datos;
+  const tabs = Object.keys(RANGOS_DATOS);
+  const datos = (async () => {
     await ensureSheetsOnce(ctx);
-    const r = await ctx.client.spreadsheets.values.get({ spreadsheetId: ctx.sheetId, range: `${tab}!${range}` });
-    return ((r.data.values ?? []) as SheetRow[]).filter((row) => row[0]);
-  });
+    const r = await ctx.client.spreadsheets.values.batchGet({
+      spreadsheetId: ctx.sheetId,
+      ranges: tabs.map((t) => `${t}!${RANGOS_DATOS[t]}`),
+    });
+    const out: Record<string, SheetRow[]> = {};
+    (r.data.valueRanges ?? []).forEach((vr, i) => {
+      out[tabs[i]] = ((vr.values ?? []) as SheetRow[]).filter((row) => row[0]);
+    });
+    return out;
+  })();
+  const actual = { at: Date.now(), datos };
+  lectura = actual;
+  datos.catch(() => { if (lectura === actual) lectura = null; }); // los errores no se cachean
+  return datos;
+}
+
+async function readRows(tab: string): Promise<SheetRow[]> {
+  return sheetsCall(`leer ${tab}`, async (ctx) => (await leerPlanilla(ctx))[tab] ?? []);
 }
 
 // ─── API pública ────────────────────────────────────────────────────────────
 
 export async function listTransactions(): Promise<Transaction[]> {
-  return (await readRows("Transacciones", "A2:R")).map(rowToTransaction);
+  return (await readRows("Transacciones")).map(rowToTransaction);
 }
 
 export async function addTransaction(tx: Transaction): Promise<void> {
@@ -644,7 +727,7 @@ export async function deleteTransaction(id: string): Promise<boolean> {
 }
 
 export async function listSueldos(): Promise<Sueldo[]> {
-  return (await readRows("Sueldos", "A2:N")).map(rowToSueldo);
+  return (await readRows("Sueldos")).map(rowToSueldo);
 }
 
 export async function addSueldo(s: Sueldo): Promise<void> {
@@ -664,7 +747,7 @@ export async function deleteSueldo(id: string): Promise<boolean> {
 // ─── Operaciones de dólar ────────────────────────────────────────────────────
 
 export async function listDolarOps(): Promise<DolarOperacion[]> {
-  return (await readRows("Dolares", "A2:K")).map(rowToDolar);
+  return (await readRows("Dolares")).map(rowToDolar);
 }
 
 export async function addDolarOp(op: DolarOperacion): Promise<void> {
@@ -686,7 +769,7 @@ export async function deleteDolarOp(id: string): Promise<boolean> {
 /** Hoja Config como mapa clave → valor (texto). */
 async function readConfigRaw(): Promise<Record<string, string>> {
   const raw: Record<string, string> = {};
-  for (const row of await readRows("Config", "A2:B")) {
+  for (const row of await readRows("Config")) {
     const key = String(row[0] ?? "").trim();
     if (key) raw[key] = String(row[1] ?? "");
   }
@@ -743,7 +826,7 @@ function movAhorroToRow(m: MovAhorro): SheetRow {
 }
 
 export async function listMovAhorro(): Promise<MovAhorro[]> {
-  return (await readRows("MovAhorro", "A2:G")).map(rowToMovAhorro);
+  return (await readRows("MovAhorro")).map(rowToMovAhorro);
 }
 
 export async function addMovAhorro(m: MovAhorro): Promise<void> {
@@ -767,10 +850,13 @@ export async function testConnection(): Promise<{ ok: boolean; error?: string }>
   if (!ctx) return { ok: false, error: "No se pudo autenticar con Google (revisá las credenciales)" };
 
   try {
-    await ctx.client.spreadsheets.get({ spreadsheetId: ctx.sheetId, fields: "spreadsheetId" });
+    await leerPlanilla(ctx); // la misma lectura que usan los listados: no gasta cuota extra
     return { ok: true };
   } catch (e) {
     console.error("[sheets] testConnection:", e);
+    if (esLimiteDeCuota(e)) {
+      return { ok: false, error: "Google está limitando las lecturas por un momento. Probá de nuevo en un minuto." };
+    }
     return { ok: false, error: "No se pudo abrir la planilla. Revisá el Sheet ID y que esté compartida con la cuenta de servicio." };
   }
 }
@@ -792,7 +878,7 @@ function rowToCategoria(row: SheetRow): CategoryConfig {
 
 /** Categorías de la planilla; si la pestaña está vacía, las de por defecto. */
 export async function listCategorias(): Promise<CategoryConfig[]> {
-  const cats = (await readRows("Categorias", "A2:C")).map(rowToCategoria);
+  const cats = (await readRows("Categorias")).map(rowToCategoria);
   return cats.length ? cats : CATEGORIES;
 }
 
@@ -801,7 +887,7 @@ export async function saveCategorias(cats: CategoryConfig[]): Promise<void> {
 }
 
 export async function listReglas(): Promise<ReglaCategoria[]> {
-  return (await readRows("Reglas", "A2:C")).map((r) => ({
+  return (await readRows("Reglas")).map((r) => ({
     palabra: str(r[0]),
     categoria: str(r[1]),
     subcategoria: str(r[2]),
@@ -837,7 +923,7 @@ function recurrenteToRow(r: Recurrente): SheetRow {
 }
 
 export async function listRecurrentes(): Promise<Recurrente[]> {
-  return (await readRows("Recurrentes", "A2:L")).map(rowToRecurrente);
+  return (await readRows("Recurrentes")).map(rowToRecurrente);
 }
 
 export async function addRecurrente(r: Recurrente): Promise<void> {
