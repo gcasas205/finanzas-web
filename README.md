@@ -1,10 +1,12 @@
 # Finanzas — Casas
 
-Web app de seguimiento financiero personal con importación automática de resúmenes de tarjeta VISA ICBC y recibos de sueldo argentinos, seguimiento de dólares y ahorro por objetivos.
+Web app de seguimiento financiero personal (ARS/USD) con importación automática de resúmenes de tarjeta VISA ICBC y recibos de sueldo argentinos, seguimiento de dólares y ahorro por objetivos.
 
-**Stack:** Next.js 14 · React 18 · TypeScript · Tailwind CSS · Recharts · Google Sheets (base de datos) · NextAuth (autenticación Google OAuth)
+**Stack:** Next.js 14 · React 18 · TypeScript · Tailwind CSS · SWR · Zod · Recharts · Google Sheets (base de datos) · NextAuth (autenticación Google OAuth)
 
-**Demo:** [finanzas-web-five.vercel.app](https://finanzas-web-five.vercel.app)
+**Demo:** [finanzas-web-five.vercel.app](https://finanzas-web-five.vercel.app) (es la instancia personal del autor: pide login y sólo entran los emails autorizados)
+
+Cada persona que la usa tiene **su propia copia**: su repo, su planilla de Google Sheets, sus credenciales y su deploy en Vercel. Nadie comparte datos con nadie. La guía de abajo está pensada para que la instales vos desde cero.
 
 ---
 
@@ -12,32 +14,45 @@ Web app de seguimiento financiero personal con importación automática de resú
 
 | Feature | Descripción |
 |---|---|
-| **Dashboard** | KPIs en tiempo real: ingresos, gastos, ahorro, tasa de ahorro, acumulado histórico y proyección Mercado Pago |
-| **Movimientos** | Carga manual con auto-categorización inteligente. Filtros por mes, tipo y búsqueda libre. Gastos en USD con origen de ahorro e ingresos en USD con reparto entre mediano y largo plazo |
-| **Dólares** | Compra/venta de USD con costo promedio ponderado, cotización oficial en vivo (dolarhoy), tenencia y resultado por tipo de cambio. Reparto de ahorro al comprar y origen al vender |
-| **Ahorro** | Ahorro por objetivos sobre tu tenencia de USD: piso de emergencia (se llena primero), sobres de mediano plazo por % y objetivo (editables desde Ajustes, con fecha objetivo), pases entre destinos y largo plazo (S&P) |
-| **Importar PDF** | Parsea automáticamente resúmenes VISA ICBC y recibos de sueldo (incluye PDFs con encoding PUA) |
-| **Análisis BI** | 4 tabs: Tendencias, Categorías (con filtro por mes), Proyección Mercado Pago, Comparativa mensual |
+| **Resumen** | KPIs del mes: ingresos, gastos, ahorro, tasa de ahorro, acumulado histórico, próximo resumen de tarjeta a pagar y presupuesto por categoría |
+| **Movimientos** | Carga manual con auto-categorización que aprende de tus correcciones. Filtros por mes, tipo, categoría, fuente, moneda y búsqueda libre. Compras en cuotas (crea las cuotas futuras), duplicar, recategorizar varios a la vez y exportar a CSV. Gastos en USD con origen de ahorro e ingresos en USD con reparto entre mediano y largo plazo |
+| **Gastos fijos** | Alquiler, prepaga, suscripciones… se definen en Ajustes y cada mes Movimientos avisa cuáles faltan y los carga con un toque |
+| **Dólares** | Compra/venta de USD con costo promedio ponderado, cotización oficial en vivo (dolarapi.com, con dolarhoy de respaldo), tenencia, resultado por tipo de cambio y ganancia realizada en ventas |
+| **Ahorro** | Ahorro por objetivos sobre tu tenencia de USD: piso de emergencia (se llena primero), sobres de mediano plazo por % y objetivo (editables desde Ajustes, con fecha objetivo), pases entre destinos, historial y largo plazo (S&P) |
+| **Importar PDF** | Parsea resúmenes VISA ICBC y recibos de sueldo (incluye PDFs con encoding PUA). Omite los movimientos que ya estaban cargados |
+| **Análisis** | 6 pestañas: Tendencias, Categorías, Comparativa (mes anterior, hace un año o promedio de 3 meses), Hábitos (suscripciones y gastos hormiga), Sueldo y Mercado Pago. Vista "pesos de hoy" ajustada por inflación (IPC INDEC vía argentinadatos.com) |
+| **Ajustes** | Nombre, días de tarjeta, TNA de Mercado Pago, plan de ahorro, presupuestos, categorías editables, gastos fijos y copia de seguridad de toda la planilla |
 | **Fechas duales** | Cada gasto tiene fecha de consumo + fecha de pago real. Sueldos se asignan al mes de cobro |
-| **Autenticación** | Google OAuth con whitelist de emails (`ALLOWED_EMAILS`, obligatoria: vacía = nadie entra). Solo vos podés acceder |
-| **Responsive** | Funciona en desktop, tablet y celular: barra lateral en escritorio, barra inferior de 5 pestañas en el celular |
+| **Autenticación** | Google OAuth con whitelist de emails (`ALLOWED_EMAILS`, obligatoria: vacía = nadie entra). Sólo vos podés acceder |
+| **Responsive** | Funciona en desktop, tablet y celular: barra lateral en escritorio, barra inferior de 5 pestañas en el celular. Se puede instalar en la pantalla de inicio |
 | **Accesible** | Contraste WCAG AA medido, foco visible, formularios que anuncian sus errores, diálogos con foco controlado |
-| **Caché** | Caché en memoria de 3 minutos para no exceder los límites de la API de Google Sheets |
+| **Caché** | Caché en memoria para no exceder los límites de la API de Google Sheets |
+
+> **Antes de instalarla, tené en cuenta:** la importación de PDFs está hecha para el **resumen VISA de ICBC** y para recibos de sueldo con el formato que usa el autor. Si tu banco o tu empleador son otros, lo más probable es que la importación no funcione y tengas que cargar los movimientos a mano (todo lo demás funciona igual).
 
 ---
 
 ## Requisitos previos
 
-- [Node.js](https://nodejs.org/) 18 o superior
-- Una cuenta de [Google Cloud](https://console.cloud.google.com)
+- [Node.js](https://nodejs.org/) 20 o 22 (la CI corre con 22; Next 14 necesita como mínimo 18.17)
+- [Git](https://git-scm.com/)
+- Una cuenta de Google (para la planilla, el login y [Google Cloud](https://console.cloud.google.com))
 - Una cuenta de [GitHub](https://github.com)
 - Una cuenta de [Vercel](https://vercel.com) (gratis)
+
+Todo lo que se usa tiene plan gratuito suficiente para uso personal.
 
 ---
 
 ## Deploy completo paso a paso
 
-### 1. Clonar el repositorio
+### 1. Hacer tu copia del repositorio (fork)
+
+Vercel despliega desde un repo de **tu** cuenta de GitHub, así que primero hacé tu propia copia:
+
+1. Entrá a [github.com/gcasas205/finanzas-web](https://github.com/gcasas205/finanzas-web)
+2. Click en **Fork** (arriba a la derecha) → **Create fork**
+3. Cloná **tu** fork e instalá las dependencias:
 
 ```bash
 git clone https://github.com/TU_USUARIO/finanzas-web.git
@@ -45,18 +60,17 @@ cd finanzas-web
 npm install
 ```
 
+Para traer novedades más adelante, en tu fork en GitHub usá **Sync fork** → **Update branch** (Vercel redeploya solo).
+
 ### 2. Crear un proyecto en Google Cloud
 
 1. Ir a [console.cloud.google.com](https://console.cloud.google.com)
 2. Click **"Select a project"** → **"New Project"** → ponerle un nombre (ej: `finanzas-web`) → **Create**
 3. Asegurate de tener seleccionado el proyecto nuevo
 
-### 3. Habilitar APIs
+### 3. Habilitar la API de Google Sheets
 
-En Google Cloud Console → **APIs & Services** → **Library**, buscar y habilitar:
-
-- **Google Sheets API**
-- **Google Drive API**
+En Google Cloud Console → **APIs & Services** → **Library**, buscar **Google Sheets API** y habilitarla. (La app no usa Google Drive API: no hace falta.)
 
 ### 4. Crear cuenta de servicio (para Google Sheets)
 
@@ -67,15 +81,17 @@ Esto es lo que la app usa para leer/escribir en tu planilla.
 3. Nombre: `sheets-connector` → **Create and Continue** → **Done**
 4. Click en la cuenta de servicio que se creó
 5. Ir a la pestaña **"Keys"** → **"Add Key"** → **"Create new key"** → **JSON** → **Create**
-6. Se descarga un archivo `.json`. **Guardalo en un lugar seguro** — lo vas a necesitar después
+6. Se descarga un archivo `.json`. **Guardalo fuera de la carpeta del proyecto** y no lo subas a ningún lado: es la llave de tu planilla
 
 ### 5. Crear la planilla de Google Sheets
 
 1. Ir a [sheets.google.com](https://sheets.google.com) → crear una nueva hoja en blanco
 2. Copiar el **ID** de la URL: `docs.google.com/spreadsheets/d/`**`ESTE_ES_EL_ID`**`/edit`
-3. Click **"Compartir"** → agregar el email de la cuenta de servicio (está en el `.json` que descargaste, campo `client_email`, algo como `sheets-connector@finanzas-web-XXXXX.iam.gserviceaccount.com`) → darle permisor de **Editor**
+3. Click **"Compartir"** → agregar el email de la cuenta de servicio (está en el `.json` que descargaste, campo `client_email`, algo como `sheets-connector@finanzas-web-XXXXX.iam.gserviceaccount.com`) → darle permiso de **Editor**
 
-La app crea automáticamente las pestañas "Transacciones", "Sueldos", "Dolares" y "Config" la primera vez que se conecta. La hoja **Config** se siembra con los parámetros del plan de ahorro (piso, %, objetivos, rendimiento), que podés editar a mano cuando quieras.
+No hace falta crear pestañas: la app crea sola las que faltan la primera vez que se conecta (**Transacciones**, **Sueldos**, **Dolares**, **Config**, **MovAhorro**, **Categorias**, **Reglas** y **Recurrentes**). **Config** se siembra con los parámetros del plan de ahorro (piso, %, objetivos, rendimiento) y **Categorias** con las categorías por defecto; las dos se editan desde **Ajustes** dentro de la app.
+
+> No cambies el orden de las columnas ni renombres pestañas a mano: la app lee la planilla por posición.
 
 ### 6. Crear credenciales OAuth (para el login con Google)
 
@@ -90,6 +106,8 @@ Esto es lo que permite que inicies sesión con tu cuenta de Google.
 4. **Save and Continue** en todos los pasos → **Back to Dashboard**
 5. En **"Test users"** → **"+ Add Users"** → agregar tu email de Gmail (y cualquier otro que quieras que acceda)
 
+La app queda en modo "Testing": no hace falta publicarla ni verificarla, alcanza con que tu email esté en **Test users**.
+
 Ahora crear el Client ID:
 
 1. Ir a **Credentials** → **"+ CREATE CREDENTIALS"** → **"OAuth client ID"**
@@ -97,7 +115,7 @@ Ahora crear el Client ID:
 3. Name: `Finanzas Web`
 4. En **"Authorized redirect URIs"** agregar:
    - `http://localhost:3000/api/auth/callback/google` (para desarrollo local)
-   - `https://TU-APP.vercel.app/api/auth/callback/google` (para producción — la URL exacta te la da Vercel después del primer deploy, podés agregarla después)
+   - La de producción la agregás en el paso 11, cuando Vercel te dé la URL
 5. Click **Create**
 6. Copiar el **Client ID** y **Client Secret**
 
@@ -113,7 +131,13 @@ Guardá el string que se imprime.
 
 ### 8. Configurar variables de entorno para desarrollo local
 
-Crear el archivo `.env.local` en la raíz del proyecto (este archivo NO se sube a GitHub):
+Copiá el ejemplo y completalo:
+
+```bash
+cp .env.example .env.local
+```
+
+`.env.local` ya está en `.gitignore`: no se sube a GitHub. Tiene que quedar así:
 
 ```env
 # Autenticación (Google OAuth)
@@ -128,12 +152,14 @@ GOOGLE_SHEET_ID=el-id-de-tu-planilla
 GOOGLE_SHEETS_CREDS_JSON={"type":"service_account","project_id":"..."}
 ```
 
-Nombre, TNA de Mercado Pago y días de tarjeta **no van en variables de entorno**: se configuran desde **Ajustes** dentro de la app y quedan guardados en la hoja `Config` del Sheets (no en Vercel, que resetea el filesystem en cada deploy).
+> **Ojo:** en `.env.example`, `NEXTAUTH_URL` trae la URL de Vercel. Para local cambiala a `http://localhost:3000`.
 
 > **Importante:** `GOOGLE_SHEETS_CREDS_JSON` debe ser el contenido completo del `.json` de la cuenta de servicio **en una sola línea**. Para convertirlo ejecutá:
 > ```bash
 > node -e "console.log(JSON.stringify(JSON.parse(require('fs').readFileSync('ruta/al/archivo.json','utf8'))))"
 > ```
+
+Nombre, TNA de Mercado Pago y días de tarjeta **no van en variables de entorno**: se configuran desde **Ajustes** dentro de la app y quedan guardados en la hoja `Config` del Sheets (no en Vercel, que resetea el filesystem en cada deploy).
 
 ### 9. Probar en local
 
@@ -141,33 +167,17 @@ Nombre, TNA de Mercado Pago y días de tarjeta **no van en variables de entorno*
 npm run dev
 ```
 
-Abrir `http://localhost:3000`. Debería pedirte login con Google y después mostrar el dashboard.
+Abrir `http://localhost:3000`. Debería pedirte login con Google y después mostrar el resumen (vacío al principio). Si en vez del resumen aparece el asistente de configuración, revisá `GOOGLE_SHEET_ID` y `GOOGLE_SHEETS_CREDS_JSON` en `.env.local` y reiniciá `npm run dev`.
 
-### 10. Subir a GitHub
+Una vez adentro, andá a **Ajustes** y poné tu nombre (aparece en la barra lateral), los días de cierre y vencimiento de tu tarjeta y la TNA de Mercado Pago.
 
-Asegurate de que `.gitignore` tenga:
+### 10. Deploy en Vercel
 
-```
-node_modules
-.next
-.env.local
-.env
-credentials.json
-```
-
-```bash
-git add .
-git commit -m "initial commit"
-git remote add origin https://github.com/TU_USUARIO/finanzas-web.git
-git branch -M main
-git push -u origin main
-```
-
-### 11. Deploy en Vercel
+Tu fork ya está en GitHub, así que no hay que subir nada.
 
 1. Ir a [vercel.com](https://vercel.com) → **Sign up with GitHub**
 2. Click **"Add New Project"**
-3. Importar tu repositorio `finanzas-web`
+3. Importar tu repositorio `finanzas-web` (tu fork)
 4. Vercel autodetecta Next.js → dejá todo por defecto
 5. **Antes de hacer deploy**, ir a **Environment Variables** y agregar:
 
@@ -186,32 +196,36 @@ No hay variables para nombre, TNA ni días de tarjeta — eso se configura despu
 6. Click **Deploy**
 7. Esperar ~1-2 minutos
 
-### 12. Configurar la URL de redirect en Google
+### 11. Configurar la URL de redirect en Google
 
-Una vez que Vercel te dé la URL (ej: `finanzas-web-five.vercel.app`):
+Una vez que Vercel te dé la URL (ej: `tu-app.vercel.app`):
 
 1. Ir a [Google Cloud Console → Credentials](https://console.cloud.google.com/apis/credentials)
 2. Click en tu OAuth Client ID
 3. En **"Authorized redirect URIs"** agregar:
    ```
-   https://finanzas-web-five.vercel.app/api/auth/callback/google
+   https://tu-app.vercel.app/api/auth/callback/google
    ```
 4. Guardar
 
-### 13. Actualizar NEXTAUTH_URL
+### 12. Actualizar NEXTAUTH_URL
 
 En Vercel → Settings → Environment Variables → editar `NEXTAUTH_URL` con la URL real:
 ```
-https://finanzas-web-five.vercel.app
+https://tu-app.vercel.app
 ```
 
 Hacer **Redeploy** desde Deployments → último deploy → Redeploy.
+
+### 13. (Opcional) Personalizar el título
+
+El título de la pestaña del navegador ("Finanzas — Casas") está fijo en `src/app/layout.tsx`. Si querés el tuyo, cambialo ahí, commiteá y pusheá a tu fork: Vercel redeploya solo. El nombre que se ve dentro de la app se cambia desde **Ajustes**, sin tocar código.
 
 ---
 
 ## Agregar otros usuarios
 
-Para dar acceso a otra persona:
+Para dar acceso a otra persona **a tu misma app y tus mismos datos**:
 
 1. En Vercel → **Environment Variables** → editar `ALLOWED_EMAILS` agregando el email separado por coma:
    ```
@@ -219,6 +233,8 @@ Para dar acceso a otra persona:
    ```
 2. En Google Cloud Console → **OAuth consent screen** → **Test users** → agregar el email
 3. Redeploy en Vercel
+
+Si la otra persona quiere llevar **sus propias** finanzas, que siga esta guía desde el paso 1 con su fork y su planilla.
 
 ---
 
@@ -230,7 +246,7 @@ Cada transacción tiene dos fechas:
 - **Fecha de consumo**: cuándo se realizó la compra
 - **Fecha de pago**: cuándo sale realmente el dinero de tu cuenta
 
-Para gastos con **tarjeta de crédito**: todas las transacciones de un resumen se pagan el día del **vencimiento actual** del resumen (ej: 05/05/2026). Esta fecha se extrae automáticamente del PDF.
+Para gastos con **tarjeta de crédito**: todas las transacciones de un resumen se pagan el día del **vencimiento actual** del resumen (ej: 05/05/2026). Esta fecha se extrae automáticamente del PDF; en la carga manual se calcula con los días de cierre y vencimiento que pusiste en Ajustes.
 
 Para **sueldos**: el período trabajado (ej: abril 2026) se registra como ingreso en el mes siguiente (mayo 2026), que es cuando efectivamente se cobra.
 
@@ -238,12 +254,15 @@ Los KPIs y gráficos agrupan siempre por **fecha de pago real** para reflejar el
 
 ### Importación de PDFs
 
-- **Resumen VISA ICBC**: detecta titular, cierre, vencimiento, y extrae todas las transacciones con auto-categorización por palabras clave
+- **Resumen VISA ICBC**: detecta titular, cierre, vencimiento, y extrae todas las transacciones con auto-categorización. Los consumos en USD entran en dólares, impuestos y comisiones en Finanzas y los créditos como reintegro. Se omiten los movimientos que ya estaban cargados
 - **Recibo de sueldo**: soporta PDFs con fuentes estándar y con encoding PUA (Unicode Private Use Area, como los de Swissjust). Detecta empresa, cargo, bruto, neto, jubilación, obra social, ley 19032
 
 ### Categorización automática
 
-Al escribir una descripción o importar un PDF, la categoría se detecta por palabras clave:
+Al escribir una descripción o importar un PDF, la categoría se sugiere en este orden:
+
+1. **Tus reglas**: cada vez que corregís la categoría de un comercio, se guarda una regla en la pestaña `Reglas` y la próxima vez se sugiere sola.
+2. **Palabras clave de fábrica**, por ejemplo:
 
 | Palabra clave | Categoría |
 |---|---|
@@ -255,24 +274,27 @@ Al escribir una descripción o importar un PDF, la categoría se detecta por pal
 | Rappi, PedidosYa | Alimentación → Delivery |
 | Sueldo, Haberes | Ingresos → Sueldo |
 
+Las categorías y subcategorías se editan desde **Ajustes** (pestaña `Categorias`); renombrar una actualiza movimientos, presupuestos y reglas.
+
 ### Dólares
 
-Registrás compras y ventas de USD con su precio. La app calcula tu tenencia con **costo promedio ponderado**: las compras suben el promedio, las ventas y los gastos en USD reducen la tenencia sin alterar el precio promedio de lo que queda. La cotización oficial se scrapea de dolarhoy (con valor de respaldo si falla) y se usa para valuar la posición y mostrar el resultado por tipo de cambio. Los gastos/ingresos en USD se cargan en Movimientos (eligiendo USD) y aparecen también acá porque afectan la tenencia.
+Registrás compras y ventas de USD con su precio. La app calcula tu tenencia con **costo promedio ponderado**: las compras suben el promedio, las ventas y los gastos en USD reducen la tenencia sin alterar el precio promedio de lo que queda. La cotización oficial sale de dolarapi.com (con dolarhoy y un valor fijo de respaldo si fallan) y se usa para valuar la posición y mostrar el resultado por tipo de cambio. Los gastos/ingresos en USD se cargan en Movimientos (eligiendo USD) y aparecen también acá porque afectan la tenencia.
 
 ### Ahorro por objetivos
 
 La solapa Ahorro es una **capa de asignación sobre tu tenencia de dólares** — no es plata aparte. Invariante: `piso + mediano + largo = tenencia neta de USD`.
 
 - **Entradas** (compra de USD, o ingreso en USD): el **piso de emergencia se llena primero** de forma automática; del excedente, los montos que asignás a mediano y largo en ese movimiento son exactos (variable mes a mes, ideal para el aguinaldo) y lo que no asignás va a mediano. Si el piso se lleva parte y lo asignado ya no entra, se achica en proporción.
-- **Mediano plazo**: un pozo que se reparte entre los sobres (auto, mudanza, vacaciones, tecnología) según los **% generales** de la hoja Config. Si un sobre llega a su objetivo, el excedente se redistribuye entre los que faltan.
-- **Salidas** (venta de USD, o gasto en USD): descuentan de un bucket por **origen** — "regla" automática (mediano proporcional → largo → piso) o un sobre puntual (ej. usar solo los de Tecnología).
-- **Largo plazo**: USD apartados para el S&P (no se valúa la posición acá); la proyección a 15/20 años es solo ilustrativa.
+- **Mediano plazo**: un pozo que se reparte entre los sobres según sus **%**. Los sobres (crear, renombrar, quitar, objetivo y fecha) se editan desde **Ajustes**. Si un sobre llega a su objetivo, el excedente se redistribuye entre los que faltan.
+- **Salidas** (venta de USD, o gasto en USD): descuentan de un bucket por **origen** — "regla" automática (mediano proporcional → largo → piso) o un sobre puntual (ej. usar sólo los de Tecnología).
+- **Pases**: mover plata entre piso, sobres y largo plazo sin tocar la tenencia (pestaña `MovAhorro`).
+- **Largo plazo**: USD apartados para el S&P (no se valúa la posición acá); la proyección a 15/20 años es sólo ilustrativa.
 
 Todas las operaciones que afectan USD se procesan en orden cronológico para calcular el saldo vivo de cada bucket. Los objetivos, % y el piso viven en la hoja **Config** del Sheets, no en el código.
 
 ### Caché
 
-Para no exceder los límites de la API de Google Sheets (60 requests/minuto), la app cachea en memoria del servidor: transacciones y operaciones de dólar **3 minutos**, y la config del ahorro **2 minutos**. Al crear, editar o eliminar, el caché correspondiente se invalida. La cotización del dólar se cachea aparte (10 min) y se refresca cada 15 min en el cliente. Si editás un parámetro en la hoja Config, puede tardar hasta 2 minutos en reflejarse.
+Para no exceder los límites de la API de Google Sheets (60 lecturas por minuto), la app lee todas las pestañas en una sola llamada y cachea en memoria del servidor. Al crear, editar o eliminar, el caché correspondiente se invalida. La cotización del dólar se cachea aparte y se refresca periódicamente en el cliente. Si editás algo a mano en la planilla, puede tardar un par de minutos en reflejarse.
 
 ---
 
@@ -283,73 +305,86 @@ npm install
 npm run dev        # http://localhost:3000
 npm run build      # Build de producción
 npm start          # Servir build de producción
-npm test           # Tests (Vitest): cálculos, validaciones, errores de la API
+npm test           # Tests (Vitest): cálculos, validaciones, parsers, errores de la API
 npm run typecheck  # TypeScript en modo estricto
+npm run lint       # ESLint (next/core-web-vitals)
 ```
 
-Sistema de diseño y reglas de color/tipografía: ver [`DESIGN.md`](DESIGN.md).
+La CI (GitHub Actions) corre typecheck + tests (`ci-back.yml`) y typecheck + lint + build (`ci-front.yml`) en cada PR y push a `main`.
+
+Sistema de diseño y reglas de color/tipografía: ver [`DESIGN.md`](DESIGN.md). Convenciones para trabajar con agentes de código: ver [`AGENTS.md`](AGENTS.md).
 
 ### Estructura del proyecto
 
 ```
 src/
 ├── app/
+│   ├── (app)/                             # Secciones con sesión (comparten AppShell)
+│   │   ├── dashboard/                     # Resumen
+│   │   ├── transactions/                  # Movimientos
+│   │   ├── dolares/  ahorro/  analytics/  import/  settings/
+│   │   ├── layout.tsx                     # Layout de las secciones
+│   │   └── loading.tsx                    # Skeleton de carga
 │   ├── api/
 │   │   ├── auth/[...nextauth]/route.ts   # Autenticación
 │   │   ├── config/route.ts               # Ajustes (hoja Config) + prueba de conexión
-│   │   ├── ahorro/config/route.ts        # Config del plan de ahorro (hoja Config)
+│   │   ├── ahorro/config/route.ts        # Plan de ahorro (hoja Config)
+│   │   ├── ahorro/movimientos/route.ts   # Pases entre destinos (hoja MovAhorro)
+│   │   ├── backup/route.ts               # Copia de seguridad de la planilla
+│   │   ├── categorias/route.ts           # Categorías editables y reglas
 │   │   ├── dolar/route.ts                # CRUD operaciones de dólar
-│   │   ├── dolar/cotizacion/route.ts     # Cotización oficial (dolarhoy)
-│   │   ├── health/route.ts               # Health check
+│   │   ├── dolar/cotizacion/route.ts     # Cotización oficial
+│   │   ├── health/route.ts               # Health check (¿están las env vars?)
 │   │   ├── import-pdf/route.ts           # Importación de PDFs
+│   │   ├── inflacion/route.ts            # IPC para "pesos de hoy"
+│   │   ├── presupuestos/route.ts         # Presupuesto mensual por categoría
+│   │   ├── recurrentes/route.ts          # Gastos fijos (+ cargar/ para cargarlos)
+│   │   ├── sueldos/route.ts              # Hoja Sueldos
 │   │   └── transactions/route.ts         # CRUD transacciones
 │   ├── login/page.tsx                     # Página de login
-│   ├── main-client.tsx                    # Router principal
+│   ├── main-client.tsx                    # Wizard de primera vez o redirección al resumen
 │   ├── page.tsx                           # Entry point
-│   ├── layout.tsx                         # Root layout
+│   ├── manifest.ts                        # Web app instalable
+│   ├── layout.tsx                         # Root layout (título de la pestaña)
 │   └── globals.css                        # Estilos globales
 ├── components/
-│   ├── views/
-│   │   ├── Dashboard.tsx                  # Dashboard con KPIs
-│   │   ├── Transactions.tsx               # Gestión de movimientos
-│   │   ├── Dolares.tsx                    # Compra/venta y tenencia de USD
-│   │   ├── Ahorro.tsx                     # Ahorro por objetivos (piso/mediano/largo)
-│   │   ├── Analytics.tsx                  # Gráficos BI
-│   │   ├── ImportView.tsx                 # Importación de PDFs
-│   │   └── SettingsView.tsx               # Configuración
-│   ├── ui/                                # Design system: Button, Field, Dialog, useConfirm,
-│   │                                      #   Segmented, ErrorState/EmptyState
+│   ├── views/                             # Pantallas: Dashboard, Transactions, Dolares, Ahorro,
+│   │   │                                  #   Analytics, ImportView, SettingsView, RecurrentesPendientes
+│   │   └── ajustes/                       # Secciones de Ajustes: plan de ahorro, presupuesto,
+│   │                                      #   categorías, gastos fijos
+│   ├── ui/                                # Design system: Button, Field, Dialog, ConfirmDialog,
+│   │                                      #   Segmented, RangoMeses, States, chart
 │   ├── AppShell.tsx                       # Layout principal + navegación
 │   ├── AuthProvider.tsx                   # Wrapper de sesión
+│   ├── ConfigProvider.tsx                 # Ajustes sincronizados en toda la app
 │   ├── DataProvider.tsx                   # Estado compartido (SWR) + hooks
-│   ├── UsdAmount.tsx                      # Formato de montos en USD
+│   ├── AnimatedNumber.tsx / LogoLoader.tsx / UsdAmount.tsx
 │   └── SetupWizard.tsx                    # Wizard de primera vez
 ├── lib/
 │   ├── __tests__/                         # Tests (Vitest)
 │   ├── api.ts                             # Cliente tipado de la API (fetch + errores)
 │   ├── errors.ts                          # Contrato de errores {detail, code, field}
 │   ├── validations.ts                     # Schemas Zod de entrada de la API
-│   ├── transactions.ts                    # Normalización de movimientos (server)
+│   ├── sheets.ts                          # Google Sheets API (formato posicional de la planilla)
 │   ├── allowlist.ts                       # Emails permitidos + redirecciones seguras
-│   ├── palette.ts                         # Colores para gráficos (espejo de los tokens)
 │   ├── cache.ts                           # Caché en memoria
-│   ├── categories.ts                      # Categorías y auto-categorización
-│   ├── ahorro-calc.ts                     # Motor del ahorro (cascada de buckets)
-│   ├── dolar-calc.ts                      # Tenencia y costo promedio de USD
-│   ├── dolar.ts                           # Scraping de cotización
-│   ├── pdf-parser.ts                      # Parser de VISA ICBC
-│   ├── pdf-parser-sueldo.ts              # Parser de recibos de sueldo
-│   ├── sheets.ts                          # Google Sheets API + getAhorroConfig
+│   ├── *-calc.ts                          # Cálculos puros: ahorro (cascada de buckets), dólar
+│   ├── pdf-parser.ts / pdf-parser-sueldo.ts  # Parsers de VISA ICBC y recibos de sueldo
+│   ├── categories.ts / reglas*.ts         # Categorías por defecto y autocategorización
+│   ├── cuotas.ts / tarjeta.ts             # Cuotas futuras y fechas de pago de tarjeta
+│   ├── recurrentes.ts / habitos.ts / duplicados.ts / series.ts / inflacion.ts
+│   ├── dolar.ts                           # Cotización (dolarapi + dolarhoy)
+│   ├── palette.ts                         # Colores para gráficos (espejo de los tokens)
 │   └── utils.ts                           # Utilidades (fechas, formato)
 ├── types/index.ts                         # TypeScript types
-└── middleware.ts                           # Auth middleware
+└── middleware.ts                          # Auth middleware
 ```
 
 ### Dónde viven los datos
 
-- **Transacciones, sueldos y operaciones de dólar**: en tu Google Sheets personal (pestañas Transacciones, Sueldos, Dolares)
-- **Parámetros del plan de ahorro** (piso, %, objetivos, rendimiento): en la pestaña **Config** del mismo Sheets, editables a mano
-- **Configuración de la app**: variables de entorno en Vercel (producción) o `~/.finanzas-web/config.json` (desarrollo local)
+- **Movimientos, sueldos, operaciones de dólar, pases de ahorro, categorías, reglas y gastos fijos**: en tu Google Sheets (una pestaña cada uno)
+- **Ajustes y plan de ahorro** (nombre, TNA, días de tarjeta, piso, sobres, presupuestos): en la pestaña **Config** del mismo Sheets
+- **Secretos y conexión** (OAuth, Sheet ID, credenciales, emails permitidos): variables de entorno en Vercel (producción) o `.env.local` (desarrollo local)
 - **Sesión de usuario**: JWT encriptado en cookie del navegador (30 días)
 - **Caché**: memoria del servidor (se resetea en cada deploy)
 
@@ -375,8 +410,14 @@ El `GOOGLE_CLIENT_ID` no es correcto. Verificá que sea un OAuth 2.0 Client ID (
 ### "redirect_uri_mismatch" / Error 400
 La URL de redirect no está registrada en Google Cloud. Agregá la URL exacta de tu app en Credentials → tu OAuth Client → Authorized redirect URIs.
 
-### El wizard aparece en Vercel
-Las variables `GOOGLE_SHEET_ID` y `GOOGLE_SHEETS_CREDS_JSON` no están llegando. Verificá que estén configuradas en Vercel y que el JSON esté en una sola línea. Redeploy después de cambiarlas.
+### Aparece el asistente de configuración (en Vercel o en local)
+Las variables `GOOGLE_SHEET_ID` y `GOOGLE_SHEETS_CREDS_JSON` no están llegando. Verificá que estén configuradas (en Vercel o en `.env.local`) y que el JSON esté en una sola línea. En Vercel, redeploy después de cambiarlas; en local, reiniciá `npm run dev`.
+
+### "No se pudo abrir la planilla"
+Revisá el `GOOGLE_SHEET_ID` y que la planilla esté compartida como **Editor** con el `client_email` de la cuenta de servicio (paso 5).
+
+### Entro con Google pero vuelvo al login ("AccessDenied")
+Tu email no está en `ALLOWED_EMAILS` o no está en **Test users** de la pantalla de consentimiento OAuth. Agregalo en los dos lugares (y redeploy si es en Vercel).
 
 ### El recibo de sueldo no parsea
 Algunos PDFs usan fuentes con encoding especial. La app soporta Unicode PUA pero puede fallar con otros encodings. En ese caso, cargá el ingreso manualmente desde Movimientos → Nueva.
