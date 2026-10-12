@@ -9,6 +9,7 @@ Memoria del proyecto entre sesiones. Máximo ~50 líneas: resumí o borrá lo qu
 - `typecheck` y `lint` limpios, y 93 tests de Vitest en verde (cálculos, validaciones, seguridad).
 - CI en GitHub Actions: `CI Back` (typecheck + Vitest) y `CI Front` (typecheck + lint + build), cada uno se saltea si el PR no toca sus archivos. Pensado para proteger `main` (Vercel despliega producción desde ahí).
 - ESLint configurado con `next/core-web-vitals` en `.eslintrc.js` (sin hallazgos al activarlo).
+- README pensado para que un tercero instale su propia copia: fork + su planilla + su Vercel (oct 2026). Al sumar pestañas, rutas o env vars, actualizar también el README.
 
 ## Decisiones (y por qué)
 - Google Sheets como base de datos: es uso personal, gratis y editable a mano.
